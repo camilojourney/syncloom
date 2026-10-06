@@ -3,7 +3,7 @@
 **Status:** Implemented (schema `1.0`)
 **Owner:** Holus. Consumers, including Holusight, are read-only.
 
-Holus records privacy-safe provenance for its persisted Thought Studio artifacts. This is a local, append-only JSONL artifact—not a tracing platform, a shared database, or a runtime dependency on Holusight or Graphify.
+Holus records privacy-safe provenance for its persisted Thought Studio artifacts. This is a local, append-only JSONL artifact—not a tracing platform, a shared database, or a runtime dependency on Holusight.
 
 ## Implemented flow
 
@@ -105,4 +105,4 @@ Retain lineage for at least 365 days (the configured policy). Before pruning, ex
 
 ## Explicit non-goals and future work
 
-Graphify may later consume this manifest or enrich it with a source-code graph. Holus runtime does not import or invoke Graphify, and generated Graphify output is not lineage data. Distributed tracing, a message broker, Holusight database access, full historical backfill, and direct social-platform outcome ingestion are not implemented by this slice.
+Distributed tracing, a message broker, Holusight database access, full historical backfill, and direct social-platform outcome ingestion are not implemented by this slice.
