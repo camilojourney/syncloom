@@ -85,7 +85,9 @@ def _check_text_limits(record: dict[str, Any], failures: list[str]) -> None:
             failures.append(f"{piece}: thread has fewer than 2 segments")
         for index, segment in enumerate(segments, start=1):
             if len(segment) > limit:
-                failures.append(f"{piece}: thread segment {index} has {len(segment)} > {limit} characters")
+                failures.append(
+                    f"{piece}: thread segment {index} has {len(segment)} > {limit} characters"
+                )
     elif len(text) > limit:
         failures.append(f"{piece}: text has {len(text)} > {limit} characters")
 
@@ -93,7 +95,7 @@ def _check_text_limits(record: dict[str, Any], failures: list[str]) -> None:
 def _check_thesis(record: dict[str, Any], thought: str, failures: list[str]) -> None:
     piece = str(record.get("piece_id"))
     essence = record.get("thought_essence") or {}
-    thesis = _clean(record.get("topic"))
+    thesis = _clean(str(record.get("topic") or ""))
     if not thesis:
         failures.append(f"{piece}: empty thesis")
         return
@@ -120,18 +122,29 @@ def _check_visual(record: dict[str, Any], failures: list[str]) -> None:
     if job_plan.get("needs_visual") is False:
         # The content-job classifier declined a visual for this draft; the reviewer sees
         # the reason in the job plan, so no asset is required.
-        if not _clean(job_plan.get("reason")):
+        if not _clean(str(job_plan.get("reason") or "")):
             failures.append(f"{piece}: no-visual job plan lacks a reason")
         return
     spec = record.get("visual_spec") or {}
-    path_key = "rendered_pdf_path" if record.get("content_type") == "carousel_outline" else "rendered_image_path"
+    path_key = (
+        "rendered_pdf_path"
+        if record.get("content_type") == "carousel_outline"
+        else "rendered_image_path"
+    )
     path = record.get(path_key)
     if not path or not Path(str(path)).is_file() or Path(str(path)).stat().st_size == 0:
         failures.append(f"{piece}: {path_key} missing or empty")
-    hook = spec.get("cover_hook") if record.get("content_type") == "carousel_outline" else spec.get("hook")
-    if not _clean(hook):
+    hook = (
+        spec.get("cover_hook")
+        if record.get("content_type") == "carousel_outline"
+        else spec.get("hook")
+    )
+    if not _clean(str(hook or "")):
         failures.append(f"{piece}: visual hook missing")
-    if record.get("content_type") == "carousel_outline" and len(spec.get("carousel_slides") or []) != 5:
+    if (
+        record.get("content_type") == "carousel_outline"
+        and len(spec.get("carousel_slides") or []) != 5
+    ):
         failures.append(f"{piece}: carousel does not have 5 slides")
     if record.get("judge_verdict") not in {"PASS", "REDO"}:
         failures.append(f"{piece}: visual judge verdict missing")
@@ -162,7 +175,10 @@ def _check_case(case: dict[str, Any], content_set: Any, failures: list[str]) -> 
     for record in records:
         piece = str(record.get("piece_id"))
         destination = record.get("posting_destination") or {}
-        if destination.get("language") != case["language"] or destination.get("handle") != case["handle"]:
+        if (
+            destination.get("language") != case["language"]
+            or destination.get("handle") != case["handle"]
+        ):
             failures.append(
                 f"{piece}: destination {destination.get('language')}/{destination.get('handle')} "
                 f"!= {case['language']}/{case['handle']}"
@@ -193,7 +209,7 @@ async def _run(cases: list[dict[str, Any]]) -> dict[str, Any]:
                 content_set = await pipeline.create_content_set(
                     thought=case["thought"], channels=list(CHANNELS), write_records=False
                 )
-            except Exception as exc:  # noqa: BLE001 - any crash is a whole-flow failure
+            except Exception as exc:  # any crash is a whole-flow failure
                 errors.append(f"{case['id']}: {type(exc).__name__}: {exc}")
                 continue
             _check_case(case, content_set, failures)
@@ -210,7 +226,9 @@ async def _run(cases: list[dict[str, Any]]) -> dict[str, Any]:
 def main() -> int:
     cases = [
         json.loads(line)
-        for line in (Path(__file__).resolve().parent / "cases.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (Path(__file__).resolve().parent / "cases.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
         if line.strip()
     ]
     report = asyncio.run(_run(cases))

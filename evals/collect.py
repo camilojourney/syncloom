@@ -170,7 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("component")
     parser.add_argument("variant")
-    parser.add_argument("--oracle", action="store_true", help="write declared expectations (dev only)")
+    parser.add_argument(
+        "--oracle", action="store_true", help="write declared expectations (dev only)"
+    )
     args = parser.parse_args(argv)
 
     component_dir = REPO / "evals" / "parts" / args.component
@@ -206,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 try:
                     actual = collector(case["inputs"])
-                except Exception as exc:  # noqa: BLE001 - an errored case is recorded, not hidden
+                except Exception as exc:  # an errored case is recorded, not hidden
                     errors[split] = errors.get(split, 0) + 1
                     actual = {"error": type(exc).__name__}
             record = {
