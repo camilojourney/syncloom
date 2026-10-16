@@ -1,0 +1,16 @@
+# Baseline: the deterministic Thought Studio code at the epoch base commit.
+[variant]
+name = "baseline"
+intent = "baseline"
+description = "Syncloom deterministic pipeline at base 3efcd35; observations recorded by evals/collect.py."
+
+[variant.generator]
+kind = "manual"
+version = "3efcd35"
+
+[config]
+source = "repository code at the epoch base commit"
+
+[artifact]
+path = "baseline/observations"
+git_sha = ""

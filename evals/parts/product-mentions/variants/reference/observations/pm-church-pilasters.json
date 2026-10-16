@@ -1,0 +1,9 @@
+{
+  "actual": {
+    "mentioned_products": []
+  },
+  "case_id": "pm-church-pilasters",
+  "collector_sha256": "1da2efe5a3a5464ed9a3c4bfe4731684cbf8ec6c5170b90417ab9ae535ff81d3",
+  "evidence_kind": "declared-oracle",
+  "source_revision": "3efcd35370242a37985fbacb272dacf80b2d42dd"
+}

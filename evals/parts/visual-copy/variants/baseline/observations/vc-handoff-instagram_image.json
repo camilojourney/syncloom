@@ -1,0 +1,14 @@
+{
+  "actual": {
+    "hook": "The strongest AI teams are not the ones with the most tools",
+    "hook_has_label_prefix": false,
+    "hook_repeats_raw_opening": true,
+    "judge_score": 8,
+    "judge_verdict": "REDO",
+    "redo_count": 1
+  },
+  "case_id": "vc-handoff-instagram_image",
+  "collector_sha256": "1da2efe5a3a5464ed9a3c4bfe4731684cbf8ec6c5170b90417ab9ae535ff81d3",
+  "evidence_kind": "replayed-pure-function",
+  "source_revision": "3efcd35370242a37985fbacb272dacf80b2d42dd"
+}

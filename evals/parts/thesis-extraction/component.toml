@@ -1,0 +1,86 @@
+# Evaluation contract for thesis-extraction (part thought-essence). Frozen by evals/policy.toml.
+# Rule (what "expected" means):
+#   expected.thesis = the thought's first sentence after removing a leading intake label of one to three words ending in a colon (e.g. 'Research note:'), where '.', '!' or '?' followed by a space or the end closes a sentence unless the '.' belongs to an abbreviation (e.g., i.e., vs., etc., Dr., Mr., Mrs., Ms., No., St.) or a single-letter initial; trailing ' .!?' are stripped, the first character is upper-cased, and a sentence longer than 200 characters is cut at the last space inside the first 200 characters (never inside a word) and stripped of trailing punctuation. The special AI-workflow family keeps its hand-written thesis and is not in the cases.
+
+[component]
+id = "thesis-extraction"
+part = "thought-essence"
+title = "Thesis extraction from a raw thought"
+schema_version = 1
+smoke_only = false
+
+[evaluator]
+id = "structured_replay"
+version = "1"
+
+[evaluator.config]
+
+[contract]
+inputs = ["thought"]
+outputs = ["thought_essence.thesis"]
+optimizable = ["_extract_thought_essence", "_first_sentence"]
+protected = ["evaluator", "cases", "collector", "policy", "e2e hook", "sealed cases"]
+downstream = ["platform-variants", "visual-copy"]
+
+[[metrics]]
+id = "match_fraction"
+tier = "quality"
+direction = "higher"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+min_improvement = 0.05
+on_error = 0.0
+regression_tolerance = 0.0
+
+[[metrics]]
+id = "case_error"
+tier = "reliability"
+direction = "lower"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+
+[[invariants]]
+id = "schema_valid"
+description = "The observation names the case and carries a finite JSON object."
+
+[[invariants]]
+id = "required_match"
+description = "Every `required` field of the case matches the observation (hard, frozen-collector projections)."
+
+[[planted_problems]]
+id = "long_sentence_cut"
+description = "A first sentence longer than 72 characters is cut at 72 characters, usually inside a word."
+targets = ["match_fraction"]
+min_sealed_cases = 3
+
+[[planted_problems]]
+id = "label_prefix_leak"
+description = "An intake label such as 'Research note:' or 'Idea:' stays in the thesis."
+targets = ["match_fraction"]
+min_sealed_cases = 3
+
+[[planted_problems]]
+id = "abbreviation_split"
+description = "An abbreviation like 'e.g.' or 'vs.' is treated as the end of the sentence."
+targets = ["match_fraction"]
+min_sealed_cases = 3
+
+[anti_gaming]
+retention = 0.5
+
+[cases]
+group_keys = ["scenario"]
+
+[cases.dev]
+path = "cases/dev.jsonl"
+sha256 = "7b0fb5406c6854e1d3e1b0db24c09f984497905cc1e93a13f88534bcd6191e78"
+reviewer = "haiku-split-reviewer"
+
+[baseline]
+variant = "variants/baseline.toml"
+run = ""
+
+[reference]
+variant = "variants/reference.toml"

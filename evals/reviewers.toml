@@ -1,0 +1,9 @@
+# Reviewer registry. Membership is a declaration, not authentication.
+# Dev cases are authored by claude-fable-5-1 (the variant proposer); sealed cases are
+# authored by openai-codex/gpt-6.1-sol in a separate Pi session that never sees candidate
+# code; the split reviewer is a Claude Haiku subagent that authored no case.
+
+[[reviewer]]
+id = "haiku-split-reviewer"
+role = "independent split assignment and case format review"
+model_family = "anthropic"

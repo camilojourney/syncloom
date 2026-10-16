@@ -1,0 +1,18 @@
+# Reference (oracle): each dev case's declared expected values restated as observations by
+# `evals/collect.py <component> reference --oracle`. It proves only that a case is not vacuous
+# (the baseline fails it and a correct answer passes it). It is NOT an implementation and never
+# runs over sealed cases.
+[variant]
+name = "reference"
+intent = "baseline"
+description = "Declared-oracle observations of the dev expectations (prove-cases only)."
+
+[variant.generator]
+kind = "manual"
+version = "oracle"
+
+[config]
+source = "declared expectations"
+
+[artifact]
+path = "reference/observations"

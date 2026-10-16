@@ -1,0 +1,110 @@
+# Syncloom (Holus) Thought Studio workflow map for evalloop.
+# Written by hand on 2026-10-16 after `evalloop discover` proposed a speech-app map
+# (its archetypes cover speech and research only). Every part below is traced to
+# ThoughtContentPipeline in src/holus/agents/marketing/thought_pipeline.py.
+#
+# Review status: proposed. Component acceptance is declared per component in
+# [[accepted_components]] (hash-bound), so parts without a component stay planned.
+
+[workflow]
+name = "syncloom"
+status = "proposed"
+generated_by = "hand-written from ThoughtContentPipeline; discover output rejected"
+reviewed_by = ""
+reviewed_on = ""
+notes = "Deterministic local Thought Studio path only (no model keys, no network, no publishing). Parts are the stages a reviewer sees in the queue record: source understanding, thought essence, platform variants, visual copy, review package. Capture routing and research radar are mapped but not evaluated in this epoch."
+end_to_end = "evals/e2e/check.py runs ThoughtContentPipeline.create_content_set on frozen thoughts over text, carousel and image channels and judges the whole content set a reviewer would open: approval gate present, every checklist item PASS, one account destination per set, platform limits, distinct texts, thesis not cut inside a word, visual assets rendered with a hook. Absolute criteria the baseline satisfies; a candidate that breaks any is not kept."
+
+[discovery]
+entry_points = ["POST /api/v1/content/from-thought (src/holus/api/routes/content.py)", "scripts/simulate_content_intake_cases.py", "ThoughtContentPipeline.create_content_set"]
+not_evaluated = ["URL extraction (network)", "agent-backed generation (model keys)", "Playwright rendering quality", "Holus Social API delivery (contained)", "learning loop"]
+
+[[part]]
+id = "source-understanding"
+title = "Source understanding: intent, products, language route"
+confidence = "high-confidence"
+summary = "Reads the raw thought and decides what it is (intent), which products it mentions, and which language account it routes to. The language decides the posting destination shown in review."
+files = ["src/holus/agents/marketing/thought_pipeline.py"]
+signals = ["_infer_source_intent", "_source_context", "detect_language_for_destination", "build_posting_destination"]
+inputs = ["thought text", "source_type"]
+outputs = ["source_context.source_intent", "source_context.mentioned_products", "posting_destination.language"]
+starts_at = "A cleaned thought text exists."
+ends_at = "Intent, mentioned products and the account language are recorded on the queue record and package."
+upstream = []
+evaluation_status = "replay"
+evaluation_plan = "Components language-route, source-intent and product-mentions replay the pure functions on frozen thoughts."
+
+[[part]]
+id = "thought-essence"
+title = "Thought essence: thesis extraction"
+confidence = "high-confidence"
+summary = "Extracts the thesis (and, for one special family, roles and evidence) that every platform draft and visual must preserve. The thesis is the record topic and appears verbatim in drafts."
+files = ["src/holus/agents/marketing/thought_pipeline.py"]
+signals = ["_extract_thought_essence", "_first_sentence"]
+inputs = ["cleaned thought text"]
+outputs = ["thought_essence.thesis", "thought_essence.mode", "thought_essence.visual_prompt"]
+starts_at = "A cleaned thought text exists."
+ends_at = "A ThoughtEssence is attached to each queue record."
+upstream = ["source-understanding"]
+evaluation_status = "replay"
+evaluation_plan = "Component thesis-extraction replays _extract_thought_essence on frozen thoughts against the declared thesis rule."
+
+[[part]]
+id = "platform-variants"
+title = "Platform variants: drafts and platform fit"
+confidence = "high-confidence"
+summary = "Writes one platform-native draft per requested channel from the essence, checks voice, and evaluates platform fit (length bounds and job presence) that gates ready_for_human_review."
+files = ["src/holus/agents/marketing/thought_pipeline.py", "src/holus/agents/marketing/platform_config.py"]
+signals = ["_build_platform_text", "_local_voice_check", "_platform_fit", "_platform_fit_summary"]
+inputs = ["cleaned thought text", "channel", "thought_essence"]
+outputs = ["record.text", "quality.voice_check", "quality.platform_fit"]
+starts_at = "An essence exists for the thought."
+ends_at = "Each queue record carries text and a platform-fit verdict."
+upstream = ["thought-essence"]
+evaluation_status = "replay"
+evaluation_plan = "Components platform-fit (verdict on frozen texts per platform) and copy-relevance (products named in drafts versus products named in the thought)."
+
+[[part]]
+id = "visual-copy"
+title = "Visual copy: carousel outline, image copy and the local visual judge"
+confidence = "high-confidence"
+summary = "Builds the visible copy of carousel covers and image cards from the essence and judges it locally (redo once). The verdict and reasons surface as judge_verdict and quality.violations in review."
+files = ["src/holus/agents/marketing/thought_pipeline.py", "src/holus/agents/marketing/creative_strategy.py"]
+signals = ["_prepare_judged_carousel_outline", "_prepare_judged_visual_spec", "_judge_visual_output", "editorial_card_copy"]
+inputs = ["cleaned thought text", "thought_essence", "channel", "visual brief"]
+outputs = ["visual_spec.cover_hook or hook", "visual_judge.verdict", "visual_judge.reasons"]
+starts_at = "An essence and a visual brief exist."
+ends_at = "A judged outline or spec is ready for rendering."
+upstream = ["thought-essence"]
+evaluation_status = "replay"
+evaluation_plan = "Component visual-copy replays the judged outline/spec builders with a fixed brief nonce; the frozen collector records independent hook checks beside the app's verdict."
+
+[[part]]
+id = "review-package"
+title = "Review package: checklist, approval gate, destination"
+confidence = "high-confidence"
+summary = "Assembles the package a reviewer opens: source evidence, source context, channel plan, platform-fit summary, approval checklist and the explicit publish gate."
+files = ["src/holus/agents/marketing/thought_pipeline.py"]
+signals = ["_build_package", "review_checklist", "approval_workflow"]
+inputs = ["records", "source"]
+outputs = ["package.approval_workflow", "package.quality_evaluation"]
+starts_at = "All records for the content set exist."
+ends_at = "The content set is persisted with an approval checklist."
+upstream = ["platform-variants", "visual-copy"]
+evaluation_status = "planned"
+evaluation_plan = "Judged only by the end-to-end hook in this epoch (whole content set); no isolated component."
+
+[[part]]
+id = "capture-routing"
+title = "Personal capture routing"
+confidence = "inferred"
+summary = "Suggests destination channels for a captured text/attachment in the Observatory capture loop."
+files = ["src/holus/capture/suggest.py", "src/holus/api/routes/capture.py"]
+signals = ["suggest_routes", "detect_attachment_kind"]
+inputs = ["capture text", "attachment kind"]
+outputs = ["ordered route suggestions"]
+starts_at = "A capture is shared."
+ends_at = "Route suggestions are returned."
+upstream = []
+evaluation_status = "planned"
+evaluation_plan = "Replay suggest_routes on frozen captures; not built in this epoch because no user-felt defect was observed in probing."

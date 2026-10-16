@@ -1,0 +1,80 @@
+# Evaluation contract for visual-copy (part visual-copy). Frozen by evals/policy.toml.
+# Rule (what "expected" means):
+#   expected.judge_verdict is PASS: after at most one redo, the carousel cover or image card copy built from the thought preserves the extracted thesis, exposes a hook for review and is not flagged by the local visual judge. required.hook_has_label_prefix is a frozen-collector check that the hook does not start with an intake label such as 'Research note:'. The visual brief nonce is fixed to 'evalloop' so the replay is deterministic.
+
+[component]
+id = "visual-copy"
+part = "visual-copy"
+title = "Visual copy passes the local visual judge"
+schema_version = 1
+smoke_only = false
+
+[evaluator]
+id = "structured_replay"
+version = "1"
+
+[evaluator.config]
+
+[contract]
+inputs = ["thought", "channel", "nonce"]
+outputs = ["visual_judge.verdict", "visual_spec.hook or cover_hook"]
+optimizable = ["_judge_visual_output", "editorial_card_copy", "_prepare_judged_*"]
+protected = ["evaluator", "cases", "collector", "policy", "e2e hook", "sealed cases"]
+downstream = ["review-package"]
+
+[[metrics]]
+id = "match_fraction"
+tier = "quality"
+direction = "higher"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+min_improvement = 0.05
+on_error = 0.0
+regression_tolerance = 0.0
+
+[[metrics]]
+id = "case_error"
+tier = "reliability"
+direction = "lower"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+
+[[invariants]]
+id = "schema_valid"
+description = "The observation names the case and carries a finite JSON object."
+
+[[invariants]]
+id = "required_match"
+description = "Every `required` field of the case matches the observation (hard, frozen-collector projections)."
+
+[[planted_problems]]
+id = "generic_hook_judged_redo"
+description = "For an ordinary thought the hook is its first sentence, which the judge flags as repeating the raw opening, so every generic visual is REDO with violations in review."
+targets = ["match_fraction"]
+min_sealed_cases = 3
+
+[[planted_problems]]
+id = "label_prefix_in_hook"
+description = "An intake label such as 'Research note:' is carried into the visible hook."
+targets = ["match_fraction"]
+min_sealed_cases = 2
+
+[anti_gaming]
+retention = 0.5
+
+[cases]
+group_keys = ["scenario"]
+
+[cases.dev]
+path = "cases/dev.jsonl"
+sha256 = "aa2693e5cc4520216129a21d6b184ae1ea4e5efdd091597b4b710b51549b0cb3"
+reviewer = "haiku-split-reviewer"
+
+[baseline]
+variant = "variants/baseline.toml"
+run = ""
+
+[reference]
+variant = "variants/reference.toml"

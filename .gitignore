@@ -122,3 +122,6 @@ graphify-out/wiki/
 graphify-out/GRAPH_REPORT.md
 graphify-out/cypher.txt
 !graphify-out/graph.json
+
+# evalloop sealed cases never live in the tree
+.evalloop-local/

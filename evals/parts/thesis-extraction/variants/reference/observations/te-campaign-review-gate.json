@@ -1,0 +1,9 @@
+{
+  "actual": {
+    "thesis": "Show the same raw thought becoming a LinkedIn post, a carousel, and a Threads note, with the review gate visible in every step"
+  },
+  "case_id": "te-campaign-review-gate",
+  "collector_sha256": "1da2efe5a3a5464ed9a3c4bfe4731684cbf8ec6c5170b90417ab9ae535ff81d3",
+  "evidence_kind": "declared-oracle",
+  "source_revision": "3efcd35370242a37985fbacb272dacf80b2d42dd"
+}

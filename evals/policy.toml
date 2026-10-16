@@ -1,0 +1,36 @@
+[policy]
+version = 1
+
+[statistics]
+confidence = 0.95
+resamples = 2000
+seed = 20261016
+min_cases = 10
+
+[sealed]
+max_queries = 6
+
+[e2e]
+command = ["uv", "run", "--project", ".", "python", "evals/e2e/check.py"]
+timeout_s = 240
+
+[protected]
+frozen = [
+  "evals/policy.toml",
+  "evals/workflow.toml",
+  "evals/reviewers.toml",
+  "evals/collect.py",
+  "evals/parts/*/component.toml",
+  "evals/parts/*/cases/**",
+  "evals/parts/*/checks/**",
+  "evals/e2e/**",
+  ".evalloop-local/**",
+]
+append_only = [
+  "evals/runs/**",
+  "evals/check-runs/**",
+  "evals/e2e-runs/**",
+  "evals/decisions/**",
+  "evals/exports/**",
+  "evals/parts/*/variants/**",
+]

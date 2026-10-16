@@ -1,0 +1,80 @@
+# Evaluation contract for product-mentions (part source-understanding). Frozen by evals/policy.toml.
+# Rule (what "expected" means):
+#   expected.mentioned_products = the sorted canonical names of configured portfolio products (Pilaster, Genpeli, Invoz) that appear in the thought as whole words, case-insensitive; words that merely contain a product name do not count.
+
+[component]
+id = "product-mentions"
+part = "source-understanding"
+title = "Portfolio products named by the thought"
+schema_version = 1
+smoke_only = false
+
+[evaluator]
+id = "structured_replay"
+version = "1"
+
+[evaluator.config]
+
+[contract]
+inputs = ["thought", "source_type"]
+outputs = ["source_context.mentioned_products"]
+optimizable = ["_source_context"]
+protected = ["evaluator", "cases", "collector", "policy", "e2e hook", "sealed cases"]
+downstream = ["platform-variants", "review-package"]
+
+[[metrics]]
+id = "match_fraction"
+tier = "quality"
+direction = "higher"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+min_improvement = 0.05
+on_error = 0.0
+regression_tolerance = 0.0
+
+[[metrics]]
+id = "case_error"
+tier = "reliability"
+direction = "lower"
+unit = "ratio"
+primary = true
+non_inferiority_margin = 0.0
+
+[[invariants]]
+id = "schema_valid"
+description = "The observation names the case and carries a finite JSON object."
+
+[[invariants]]
+id = "required_match"
+description = "Every `required` field of the case matches the observation (hard, frozen-collector projections)."
+
+[[planted_problems]]
+id = "product_mention_undetected"
+description = "Genpeli or Invoz in the thought is not listed as a mentioned product."
+targets = ["match_fraction"]
+min_sealed_cases = 3
+
+[[planted_problems]]
+id = "product_substring_false_positive"
+description = "A word that merely contains a product name (pilasters) is listed as a mentioned product."
+targets = ["match_fraction"]
+min_sealed_cases = 2
+
+[anti_gaming]
+retention = 0.5
+
+[cases]
+group_keys = ["scenario"]
+
+[cases.dev]
+path = "cases/dev.jsonl"
+sha256 = "fe7bbed12bc196bc1eaefe42216068ff84717c10a96ed6f48cace57e1c701820"
+reviewer = "haiku-split-reviewer"
+
+[baseline]
+variant = "variants/baseline.toml"
+run = ""
+
+[reference]
+variant = "variants/reference.toml"
