@@ -3,7 +3,7 @@
 **Date:** 2026-10-30
 **Status:** Accepted
 **Supersedes:** none
-**OpenSpec changes:** [add-studio-slice-1](../../openspec/changes/archive/2026-10-30-add-studio-slice-1/) (slice 1, archived into `openspec/specs/`; D4, D6 and D7 shape it). D2's first integration is [add-linkedin-integration-slice-2](../../openspec/changes/add-linkedin-integration-slice-2/) (slice 2, whose own choices are decision 0002); D1 lands in the review-screen change when it is proposed
+**OpenSpec changes:** [add-studio-slice-1](../../openspec/changes/archive/2026-10-30-add-studio-slice-1/) (slice 1, archived into `openspec/specs/`; D4, D6 and D7 shape it). D2's first integration is [add-linkedin-integration-slice-2](../../openspec/changes/archive/2026-10-30-add-linkedin-integration-slice-2/) (slice 2, archived into `openspec/specs/`, whose own choices are decision 0002); D1 lands in the review-screen change when it is proposed
 **Agreed:** yes - the captain, 2026-10-30, in [the captain's words](sources/captain-words.md): "yes to all. start building it." after "Let's work on this decision give you you recommendation and I'll accept it"
 **Recommended:** none outstanding
 **Built:** partly: the repository foundation and slice 1 (one text thought, one model-drafted LinkedIn text, revision-bound approval, contained publish intent, loopback API and CLI over one core) are built and their seven specs archived into `openspec/specs/`; slice 2 (LinkedIn sign-in and truthful dispatch, decision 0002) is built against a fake of LinkedIn; slices 3-5 are not built

@@ -3,10 +3,10 @@
 **Date:** 2026-10-30
 **Status:** Proposed
 **Supersedes:** none
-**OpenSpec changes:** [add-linkedin-integration-slice-2](../../openspec/changes/add-linkedin-integration-slice-2/) (slice 2: LinkedIn sign-in, the platform trait, the LinkedIn adapter, truthful dispatch outcomes)
+**OpenSpec changes:** [add-linkedin-integration-slice-2](../../openspec/changes/archive/2026-10-30-add-linkedin-integration-slice-2/) (slice 2: LinkedIn sign-in, the platform trait, the LinkedIn adapter, truthful dispatch outcomes; archived into `openspec/specs/`)
 **Agreed:** partly - the captain agreed on 2026-10-30 that the integrations are rebuilt in Rust after deep research (decision 0001, D2, [the captain's words](sources/captain-words.md)) and accepted the build order that makes LinkedIn the first (vision 6.2). The specific choices below (product, scope, token store, sign-in flow, API version) are not yet put to the captain
 **Recommended:** the choices in the Decision section, by the slice 2 worker from the Q2 and Q8 research; the one-time developer-app steps and the first live post wait for the captain's word
-**Built:** built on branch `fm/syncloom-v2-slice2-linkedin-20261030` (the commit is recorded at the merge); proven only against a local fake of LinkedIn's endpoints
+**Built:** built on branch `fm/syncloom-v2-slice2-linkedin-20261030` (the commit is recorded at the merge); proven against a local fake of LinkedIn's endpoints and the real macOS Keychain under a test-only service name
 **Live-proven:** no - no LinkedIn developer app exists, no real sign-in and no real post has been made; both need the captain's word (vision 3.4)
 
 The last four fields are different claims and stay apart: a recommendation is not agreed, an agreed decision is not built, a landed change is not proven against the real service.
@@ -42,7 +42,8 @@ Behavior belongs to the OpenSpec specs (`dispatch-outbox`, `platform-credentials
 | Community Management API for the company page | Page posting, analytics | Vetted: registered legal entity, business email, dedicated app; approval at LinkedIn's discretion | Rejected for now; revisit if the captain registers an entity |
 | Partner tier with 365-day refresh tokens | Unattended refresh | "Limited set of partners"; no self-serve route found | Rejected: not available |
 | Manual paste, no API | Nothing to maintain | Defeats the studio's publish step | Rejected |
-| Keychain (chosen) over an encrypted file or the environment | OS-protected, survives restarts, per-item ACL | Unsigned builds may prompt; tests need a test-only service | Chosen (Q8); a file would be a second secret store to protect; environment variables cannot persist rotated tokens |
+| Keychain (chosen) over an encrypted file or the environment | OS-protected, survives restarts, per-item ACL | The ACL binds the item to the storing binary's code hash: each binary and each rebuild asks once in a GUI session and fails headless; tests need a test-only service | Chosen (Q8); a file would be a second secret store to protect; environment variables cannot persist rotated tokens |
+| Keychain item open to every application (`-A` style ACL) | No prompt after a rebuild, one consent for the CLI and the server | Any process of the user reads the token without a prompt; gives up the only per-process guard | Rejected; the optional remedy is signing the binaries with a stable identity (a captain step, not built) |
 | Standard authorization-code flow by default, native PKCE as an option (chosen) | Works for a self-serve app; PKCE ready if LinkedIn enables it | Client secret handled by the app on the laptop; two code paths differing in three fields | Chosen; PKCE-only would leave the captain unable to sign in until LinkedIn enables it; sending PKCE on the standard endpoint is reported rejected (`invalid_client`) |
 | Automatic retry on 5xx or timeout | Fewer manual retries | No idempotency key: a retry can post twice | Rejected: one request per attempt, `unknown` needs the founder's check |
 | Signed-in means delivery enabled | One less setting | Sign-in alone would turn the first publish into a real post | Rejected: vision 3.4 asks for an explicit grant |
@@ -67,7 +68,7 @@ OpenSpec CLI 1.15.0 with the Fleet baseline 1.0.0 (see decision 0001); Code skil
 - [q8-local-first-auth-and-scheduling](../research/2026-10-30-q8-local-first-auth-and-scheduling/README.md): Keychain and the `keyring-core` crates, loopback redirects, no idempotency keys, the intent-record pattern, scheduling hybrid for later.
 - [social-api-research-questions](../research/2026-10-30-social-api-research-questions/README.md): what the old adapter did and the questions as sent.
 
-Gaps: whether LinkedIn accepts an `http://127.0.0.1` (or `http://localhost`) redirect URL on the standard flow is "not found" in the research; the first live sign-in settles it. The Posts API `commentary` text rules (reserved characters, escaping) were not asked and are unverified; the first live post settles them. The ChatGPT challenger for Q8 was never sent, so Q8 rests on one provider. Nothing here has run against api.linkedin.com.
+Gaps: whether LinkedIn accepts an `http://127.0.0.1` (or `http://localhost`) redirect URL on the standard flow is "not found" in the research; the first live sign-in settles it. The Keychain prompt for a rebuilt binary was inferred from a probe in a shell without a GUI session (`-128 User canceled`, no dialog); that a GUI terminal shows the standard dialog and that "Always Allow" settles it is Apple's documented behavior, not observed here. The Posts API `commentary` text rules (reserved characters, escaping) were not asked and are unverified; the first live post settles them. The ChatGPT challenger for Q8 was never sent, so Q8 rests on one provider. Nothing here has run against api.linkedin.com.
 
 ---
 
@@ -81,10 +82,11 @@ Gaps: whether LinkedIn accepts an `http://127.0.0.1` (or `http://localhost`) red
 - A browser re-consent every 60 days with no unattended refresh.
 - An `unknown` outcome (timeout, 5xx, crash mid-call) needs the founder to look at the feed; LinkedIn's self-serve tier cannot list the member's posts.
 - The client secret passes through the environment on the laptop at sign-in time.
+- `syncloom` and `syncloom-server` are two binaries, so each gets its own Keychain consent, and every rebuild asks again (once, in a GUI terminal); headless runs of a rebuilt binary fail with `internal_error` until that consent is given.
 
 ---
 
 ## References
 
 - [Vision](../vision.md) sections 3 and 6.2, [migration ledger](../migration.md), [README](../../README.md)
-- Specs: `openspec/specs/` after archive; the change: [add-linkedin-integration-slice-2](../../openspec/changes/add-linkedin-integration-slice-2/)
+- Specs: `openspec/specs/` (`platform-credentials`, `linkedin-integration`, and the modified `dispatch-outbox`, `studio-api`, `studio-cli`, `provenance-log`); the archived change: [add-linkedin-integration-slice-2](../../openspec/changes/archive/2026-10-30-add-linkedin-integration-slice-2/)
