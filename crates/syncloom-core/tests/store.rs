@@ -75,10 +75,23 @@ fn a_piece_survives_reopening_the_store() {
 // draft-review: Durable pieces, a second write replaces the first whole
 #[test]
 fn saving_again_replaces_the_record_and_leaves_no_temporary_file() {
+    use std::os::unix::fs::MetadataExt;
     let dir = TempDir::new().unwrap();
     let store = Store::open(dir.path()).unwrap();
+    let record = dir
+        .path()
+        .join("pieces")
+        .join("thought-0123456789ab-linkedin_text.json");
     store.lock().unwrap().save_piece(&piece("first")).unwrap();
+    let first_inode = std::fs::metadata(&record).unwrap().ino();
     store.lock().unwrap().save_piece(&piece("second")).unwrap();
+    // A replaced record is a new file moved over the old one, never the old file rewritten
+    // in place: that is what keeps a reader from seeing a torn record.
+    assert_ne!(
+        std::fs::metadata(&record).unwrap().ino(),
+        first_inode,
+        "the record was rewritten in place instead of replaced by rename"
+    );
     let loaded = store
         .lock()
         .unwrap()

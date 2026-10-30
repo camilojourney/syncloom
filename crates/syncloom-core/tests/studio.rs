@@ -219,8 +219,14 @@ async fn show_returns_the_created_piece_and_not_found_for_unknown_or_unsafe_ids(
             .unwrap_err(),
         StudioError::PieceNotFound
     );
+    // A well-formed piece record outside the pieces directory, plus the one inside it: an id
+    // that escaped the directory would load one of these instead of being refused.
+    let planted = serde_json::to_string(&piece).unwrap();
+    std::fs::write(dir.path().join("evil.json"), &planted).unwrap();
+    std::fs::write(dir.path().join("outbox").join("evil.json"), &planted).unwrap();
     for unsafe_id in [
-        "../x",
+        "../evil",
+        "../outbox/evil",
         "a/b",
         "thought-..-x",
         "",
