@@ -43,6 +43,7 @@ async fn approved_with(dir: &TempDir, platform: Option<Arc<ScriptedPlatform>>) -
                 status: Some(Status::Approved),
                 text: None,
                 expected_revision: piece.revision.clone(),
+                expected_assets: None,
             },
         )
         .unwrap();
@@ -371,6 +372,7 @@ async fn a_grant_does_not_bypass_approval_or_revision_checks() {
                 status: None,
                 text: Some("Edited after approval, still about zebrafish.".to_owned()),
                 expected_revision: piece.revision.clone(),
+                expected_assets: None,
             },
         )
         .unwrap();

@@ -40,6 +40,15 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         .route("/v1/thoughts", post(create_thought))
         .route("/v1/pieces/{piece_id}", get(show_piece).patch(review_piece))
         .route("/v1/pieces/{piece_id}/publish", post(publish_piece))
+        .route("/v1/pieces/{piece_id}/render", post(render_piece))
+        .route(
+            "/v1/pieces/{piece_id}/assets/image",
+            get(asset_handler(syncloom_core::AssetKind::Image)),
+        )
+        .route(
+            "/v1/pieces/{piece_id}/assets/carousel",
+            get(asset_handler(syncloom_core::AssetKind::Carousel)),
+        )
         .route(
             "/v1/linkedin/sign-in",
             post(linkedin_sign_in_begin).get(linkedin_sign_in_wait),
@@ -150,6 +159,45 @@ async fn publish_piece(
 ) -> Result<Response, Failure> {
     let response = state.studio.publish(&piece_id(path)?, request).await?;
     Ok(axum::Json(response).into_response())
+}
+
+async fn render_piece(
+    State(state): State<Arc<AppState>>,
+    path: Result<Path<String>, PathRejection>,
+    Strict(request): Strict<syncloom_core::RenderRequest>,
+) -> Result<Response, Failure> {
+    let piece = state.studio.render(&piece_id(path)?, request).await?;
+    Ok(axum::Json(piece).into_response())
+}
+
+fn asset_response(
+    state: &AppState,
+    id: &str,
+    kind: syncloom_core::AssetKind,
+) -> Result<Response, Failure> {
+    let (bytes, hash) = state.studio.view_asset(id, kind)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, kind.mime().to_owned()),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+            (header::ETAG, format!("\"{hash}\"")),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+/// Both fixed routes share the byte-response policy; only the asset kind differs.
+type PiecePath = Result<Path<String>, PathRejection>;
+type AssetResponse = std::future::Ready<Result<Response, Failure>>;
+
+fn asset_handler(
+    kind: syncloom_core::AssetKind,
+) -> impl Fn(State<Arc<AppState>>, PiecePath) -> AssetResponse + Clone {
+    move |State(state), path| {
+        std::future::ready(piece_id(path).and_then(|id| asset_response(&state, &id, kind)))
+    }
 }
 
 async fn linkedin_sign_in_begin(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {

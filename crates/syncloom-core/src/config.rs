@@ -79,6 +79,7 @@ pub struct StudioConfig {
     pub delivery: BTreeSet<String>,
     pub keychain_service: String,
     pub linkedin: LinkedinConfig,
+    pub renderer: crate::visual::RendererConfig,
 }
 
 /// `SYNCLOOM_DATA_DIR` when set and not blank, else `<home>/.syncloom`.
@@ -145,6 +146,7 @@ pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfi
         delivery: delivery_grant(get(DELIVERY_ENV).as_deref())?,
         keychain_service: keychain_service(get(KEYCHAIN_SERVICE_ENV).as_deref()),
         linkedin: linkedin_config(&get)?,
+        renderer: crate::visual::renderer_config(&get),
     })
 }
 
@@ -160,8 +162,9 @@ pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Stud
         clock.clone(),
         settings.sign_in_deadline,
     ));
-    let mut studio =
-        Studio::new(store, Arc::new(provider), clock, settings).with_linkedin(linkedin.clone());
+    let mut studio = Studio::new(store, Arc::new(provider), clock, settings)
+        .with_linkedin(linkedin.clone())
+        .with_renderer(config.renderer);
     if config.delivery.contains(crate::linkedin::PLATFORM) {
         studio = studio.with_delivery(crate::linkedin::PLATFORM, linkedin);
     }

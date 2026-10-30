@@ -18,6 +18,10 @@ pub mod provenance;
 pub mod provider;
 pub mod store;
 pub mod studio;
+pub mod visual;
+pub use visual::{
+    AssetHashes, AssetKind, Assets, RenderRequest, RendererConfig, VisualContent, renderer_config,
+};
 
 pub use channel::{Bounds, Channel, Fit, Verdict, fit};
 pub use clock::{Clock, FixedClock, SystemClock};

@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "assets_required",
+      "message": "Current rendered assets and their exact hashes are required for this operation.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

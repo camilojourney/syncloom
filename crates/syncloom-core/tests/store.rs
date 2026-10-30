@@ -20,6 +20,8 @@ fn piece(text: &str) -> Piece {
         status: Status::PendingReview,
         review_decision_id: None,
         publish_status: None,
+        visual: None,
+        assets: None,
         fit: Fit {
             verdict: Verdict::Review,
             char_count: 11,
@@ -50,6 +52,8 @@ fn event(kind: EventKind) -> Event {
         request_id: None,
         outcome: None,
         post_id: None,
+        image_sha256: None,
+        carousel_sha256: None,
     }
 }
 

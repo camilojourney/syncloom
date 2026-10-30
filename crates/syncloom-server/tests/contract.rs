@@ -8,7 +8,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 21] = [
+const ERROR_TABLE: [(u16, &str); 29] = [
     (400, "invalid_request"),
     (403, "host_not_allowed"),
     (404, "not_found"),
@@ -30,6 +30,14 @@ const ERROR_TABLE: [(u16, &str); 21] = [
     (503, "linkedin_not_configured"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
+    (503, "renderer_missing"),
+    (503, "renderer_version_mismatch"),
+    (503, "renderer_font_mismatch"),
+    (504, "renderer_timeout"),
+    (502, "renderer_failed"),
+    (409, "assets_required"),
+    (409, "asset_integrity"),
+    (409, "asset_conflict"),
 ];
 
 async fn with_id(request: reqwest::RequestBuilder) -> Answer {
@@ -213,6 +221,62 @@ async fn produce(code: &str) -> Answer {
                     .unwrap();
             }
             with_id(client().get(server.url("/v1/linkedin/sign-in"))).await
+        }
+        "renderer_missing"
+        | "renderer_version_mismatch"
+        | "renderer_font_mismatch"
+        | "renderer_timeout"
+        | "renderer_failed"
+        | "assets_required"
+        | "asset_integrity"
+        | "asset_conflict" => {
+            #[path = "../../syncloom-core/tests/support/rendering.rs"]
+            mod rendering;
+            let process = tempfile::tempdir().unwrap();
+            let mut config = rendering::config();
+            match code {
+                "renderer_missing" => config.binary = process.path().join("missing"),
+                "renderer_version_mismatch" => config.version = "0.0.0.0".into(),
+                "renderer_font_mismatch" => config.font_sha256 = "0".repeat(64),
+                "renderer_failed" => {
+                    config.binary = rendering::executable(process.path(), "exit 12")
+                }
+                "renderer_timeout" => {
+                    config.binary = rendering::executable(process.path(), "exec /bin/sleep 30");
+                    config.deadline = std::time::Duration::from_millis(200);
+                }
+                _ => {}
+            }
+            let server = start_studio(
+                Scripted::new(text("Build with evidence.")),
+                syncloom_core::Settings::default(),
+                |s| s.with_renderer(config),
+            )
+            .await;
+            let piece = piece_of(&create(&server, THOUGHT).await);
+            let id = id_of(&piece);
+            if code == "assets_required" {
+                return with_id(client().get(server.url(&format!("/v1/pieces/{id}/assets/image"))))
+                    .await;
+            }
+            let rendered = with_id(client().post(server.url(&format!("/v1/pieces/{id}/render"))).json(&json!({
+                "expected_revision":revision_of(&piece), "template":"midnight", "slides":["One slide"]
+            }))).await;
+            if code == "asset_conflict" {
+                assert_eq!(rendered.status, 200);
+                return with_id(client().patch(server.url(&format!("/v1/pieces/{id}"))).json(&json!({
+                    "status":"approved", "expected_revision":revision_of(&rendered.body),
+                    "expected_assets":{"image_sha256":"0".repeat(64), "carousel_sha256":rendered.body["assets"]["carousel_sha256"]}
+                }))).await;
+            }
+            if code == "asset_integrity" {
+                assert_eq!(rendered.status, 200);
+                let hash = rendered.body["assets"]["image_sha256"].as_str().unwrap();
+                std::fs::write(server.dir.path().join("assets").join(hash), b"damaged").unwrap();
+                return with_id(client().get(server.url(&format!("/v1/pieces/{id}/assets/image"))))
+                    .await;
+            }
+            rendered
         }
         other => panic!("no producer for {other}"),
     }

@@ -24,7 +24,7 @@ Pending decision: answered (Facebook Login for Business with Page tokens, Standa
 
 ## Decision
 
-Pending: the slice 5 (channels and integrations) decision, not yet written. Until then this study is cited by no decision.
+[Decision 0003](../../decisions/0003-visual-renderer.md) uses the slice brief's conservative ten-slide cap for local assets, without implementing Meta publishing. The slice 5 channels and integrations decision remains pending.
 
 ## Files
 

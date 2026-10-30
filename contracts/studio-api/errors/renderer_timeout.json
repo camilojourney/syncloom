@@ -1,0 +1,10 @@
+{
+  "status": 504,
+  "body": {
+    "error": {
+      "code": "renderer_timeout",
+      "message": "The renderer took too long.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}
