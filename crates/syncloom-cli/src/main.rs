@@ -5,8 +5,8 @@
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use syncloom_core::{
-    PublishRequest, ReviewRequest, Settings, Status, StudioError, ThoughtRequest, build_studio,
-    studio_config,
+    PublishRequest, ReviewRequest, Settings, Status, Studio, StudioError, ThoughtRequest,
+    build_studio, studio_config,
 };
 
 #[derive(Parser)]
@@ -116,17 +116,7 @@ async fn run(cli: Cli) -> i32 {
             )
             .await
             .map(to_json),
-        Command::Linkedin { command } => match command {
-            LinkedinCommand::SignIn => match studio.linkedin_sign_in_begin() {
-                Ok(start) => {
-                    println!("{}", to_json(start));
-                    studio.linkedin_sign_in_wait().await.map(to_json)
-                }
-                Err(error) => Err(error),
-            },
-            LinkedinCommand::Status => studio.linkedin_connection().map(to_json),
-            LinkedinCommand::SignOut => studio.linkedin_sign_out().map(to_json),
-        },
+        Command::Linkedin { command } => linkedin(&studio, command).await,
     };
     match result {
         Ok(value) => {
@@ -134,6 +124,20 @@ async fn run(cli: Cli) -> i32 {
             0
         }
         Err(error) => failed(error),
+    }
+}
+
+/// The LinkedIn commands. Sign-in prints the authorization URL first, then waits for the
+/// browser and prints the connection.
+async fn linkedin(studio: &Studio, command: LinkedinCommand) -> Result<Value, StudioError> {
+    match command {
+        LinkedinCommand::SignIn => {
+            let start = studio.linkedin_sign_in_begin()?;
+            println!("{}", to_json(start));
+            studio.linkedin_sign_in_wait().await.map(to_json)
+        }
+        LinkedinCommand::Status => studio.linkedin_connection().map(to_json),
+        LinkedinCommand::SignOut => studio.linkedin_sign_out().map(to_json),
     }
 }
 

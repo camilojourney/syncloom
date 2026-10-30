@@ -29,18 +29,14 @@ impl BaseUrl {
     /// `value` when set, else `default`; the error names `variable`.
     pub fn parse(variable: &str, value: Option<&str>, default: &str) -> Result<BaseUrl, String> {
         let refused = || format!("{variable} must be an https URL or http://127.0.0.1:<port>");
-        let url = reqwest::Url::parse(value.unwrap_or(default)).map_err(|_| refused())?;
-        let plain = url.username().is_empty()
-            && url.password().is_none()
-            && url.query().is_none()
-            && url.fragment().is_none();
+        let url = plain_url(value.unwrap_or(default)).ok_or_else(refused)?;
         let allowed = match url.scheme() {
             "https" => url.host_str().is_some(),
             // `Url::port` is None for the scheme's default port, so `:80` is refused with no port.
             "http" => url.host_str() == Some("127.0.0.1") && url.port().is_some(),
             _ => false,
         };
-        if !plain || !allowed {
+        if !allowed {
             return Err(refused());
         }
         Ok(BaseUrl(url.as_str().trim_end_matches('/').to_owned()))
@@ -49,6 +45,27 @@ impl BaseUrl {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// A URL with no credentials, query or fragment, or `None`. The one owner of that rule for
+/// every URL the studio is configured with.
+pub(crate) fn plain_url(raw: &str) -> Option<reqwest::Url> {
+    let url = reqwest::Url::parse(raw).ok()?;
+    let plain = url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none();
+    plain.then_some(url)
+}
+
+/// The one outbound HTTP client policy: a 5 s connect timeout and no redirect following, so
+/// a provider or platform cannot send the studio anywhere else.
+pub(crate) fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("TLS client configuration is valid")
 }
 
 #[derive(Clone, Debug)]

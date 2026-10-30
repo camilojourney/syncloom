@@ -7,7 +7,6 @@ use super::{Draft, DraftFuture, DraftRequest, ModelProvider, ProviderError};
 use crate::config::{BaseUrl, usable_key};
 use crate::provenance::Usage;
 use reqwest::StatusCode;
-use std::time::Duration;
 
 /// The pinned Claude Sonnet model id (decision D4). UNVERIFIED until the live check runs.
 pub const DEFAULT_MODEL: &str = "claude-sonnet-5-5";
@@ -52,11 +51,7 @@ impl ClaudeProvider {
     /// `key` is the raw environment value; a value that cannot be a key counts as absent.
     pub fn new(key: Option<String>, base: ProviderBase, model: String) -> Self {
         Self {
-            client: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .expect("TLS client configuration is valid"),
+            client: crate::config::http_client(),
             key: key.as_deref().and_then(usable_key),
             endpoint: format!("{}/v1/messages", base.as_str()),
             model,

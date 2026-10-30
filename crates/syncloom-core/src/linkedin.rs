@@ -105,17 +105,12 @@ impl RedirectUrl {
 /// or fragment. Either host binds `127.0.0.1`.
 pub fn redirect_url(value: Option<&str>) -> Result<RedirectUrl, &'static str> {
     const REFUSED: &str = "SYNCLOOM_LINKEDIN_REDIRECT_URL must be http://127.0.0.1:<port>/<path> or http://localhost:<port>/<path>";
-    let raw = value.unwrap_or(DEFAULT_REDIRECT_URL);
-    let url = reqwest::Url::parse(raw).map_err(|_| REFUSED)?;
-    let plain = url.username().is_empty()
-        && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
+    let url = crate::config::plain_url(value.unwrap_or(DEFAULT_REDIRECT_URL)).ok_or(REFUSED)?;
     let host_ok = matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"));
     let Some(port) = url.port() else {
         return Err(REFUSED);
     };
-    if url.scheme() != "http" || !plain || !host_ok {
+    if url.scheme() != "http" || !host_ok {
         return Err(REFUSED);
     }
     Ok(RedirectUrl {
@@ -158,7 +153,7 @@ pub fn post_url(post_id: &str) -> String {
     format!("https://www.linkedin.com/feed/update/{post_id}/")
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionStatus {
     SignedOut,
@@ -254,11 +249,7 @@ impl Linkedin {
             store,
             clock,
             sign_in_deadline,
-            client: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .expect("TLS client configuration is valid"),
+            client: crate::config::http_client(),
             pending: Mutex::new(None),
         }
     }
@@ -293,12 +284,17 @@ impl Linkedin {
         }
     }
 
+    /// The app credentials, needed only to sign in.
+    fn app(&self) -> Result<(&str, &Secret), StudioError> {
+        match (&self.config.client_id, &self.config.client_secret) {
+            (Some(id), Some(secret)) => Ok((id.as_str(), secret)),
+            _ => Err(StudioError::LinkedinNotConfigured),
+        }
+    }
+
     /// Bind the callback listener and return the authorization URL.
     pub fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
-        let (Some(client_id), Some(_)) = (&self.config.client_id, &self.config.client_secret)
-        else {
-            return Err(StudioError::LinkedinNotConfigured);
-        };
+        let (client_id, _) = self.app()?;
         let mut slot = self
             .pending
             .lock()
@@ -396,68 +392,14 @@ impl Linkedin {
         pending: &Pending,
         callback: Callback,
     ) -> Result<Connection, StudioError> {
-        let state_ok = callback.state.as_deref().is_some_and(|state| {
-            constant_time_eq(state.as_bytes(), pending.state.expose().as_bytes())
-        });
-        if !state_ok {
-            return Err(StudioError::SignInStateMismatch);
-        }
-        if callback.error.is_some() {
-            return Err(StudioError::SignInDenied);
-        }
-        let code = callback.code.ok_or(StudioError::SignInDenied)?;
-        let (Some(client_id), Some(client_secret)) =
-            (&self.config.client_id, &self.config.client_secret)
-        else {
-            return Err(StudioError::LinkedinNotConfigured);
-        };
-        let mut form: Vec<(&str, &str)> = vec![
-            ("grant_type", "authorization_code"),
-            ("code", code.as_str()),
-            ("redirect_uri", self.config.redirect.as_str()),
-            ("client_id", client_id.as_str()),
-        ];
-        match &pending.code_verifier {
-            Some(verifier) => form.push(("code_verifier", verifier.expose())),
-            None => form.push(("client_secret", client_secret.expose())),
-        }
-        let issued = self
-            .client
-            .post(format!(
-                "{}/oauth/v2/accessToken",
-                self.config.auth_base.as_str()
-            ))
-            .form(&form)
-            .send()
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
-        #[derive(Deserialize)]
-        struct Issued {
-            access_token: String,
-            expires_in: u64,
-            #[serde(default)]
-            scope: String,
-        }
-        let issued: Issued = read_json(issued).await.ok_or(StudioError::SignInRejected)?;
-        let userinfo = self
-            .client
-            .get(format!("{}/v2/userinfo", self.config.api_base.as_str()))
-            .bearer_auth(&issued.access_token)
-            .send()
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
-        #[derive(Deserialize)]
-        struct UserInfo {
-            sub: String,
-        }
-        let userinfo: UserInfo = read_json(userinfo)
-            .await
-            .ok_or(StudioError::SignInRejected)?;
+        let code = accepted_code(pending, callback)?;
+        let issued = self.exchange(pending, &code).await?;
+        let member_id = self.member_id(&issued.access_token).await?;
         let now = self.clock.now();
         let token = Token {
             access_token: Secret::new(issued.access_token),
             expires_at: rfc3339(now + Duration::from_secs(issued.expires_in)),
-            member_id: userinfo.sub,
+            member_id,
             scope: issued.scope,
             obtained_at: rfc3339(now),
         };
@@ -467,6 +409,48 @@ impl Linkedin {
             expires_at: Some(token.expires_at),
             scope: Some(token.scope),
         })
+    }
+
+    /// One token request for the code, proving the app with the secret or the verifier as
+    /// the flow demands.
+    async fn exchange(&self, pending: &Pending, code: &str) -> Result<Issued, StudioError> {
+        let (client_id, client_secret) = self.app()?;
+        let mut form: Vec<(&str, &str)> = vec![
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", self.config.redirect.as_str()),
+            ("client_id", client_id),
+        ];
+        match &pending.code_verifier {
+            Some(verifier) => form.push(("code_verifier", verifier.expose())),
+            None => form.push(("client_secret", client_secret.expose())),
+        }
+        let response = self
+            .client
+            .post(format!(
+                "{}/oauth/v2/accessToken",
+                self.config.auth_base.as_str()
+            ))
+            .form(&form)
+            .send()
+            .await
+            .map_err(|_| StudioError::SignInRejected)?;
+        read_json(response).await.ok_or(StudioError::SignInRejected)
+    }
+
+    /// `GET /v2/userinfo`: the member id (`sub`) the Posts API needs as author.
+    async fn member_id(&self, access_token: &str) -> Result<String, StudioError> {
+        let response = self
+            .client
+            .get(format!("{}/v2/userinfo", self.config.api_base.as_str()))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|_| StudioError::SignInRejected)?;
+        let info: UserInfo = read_json(response)
+            .await
+            .ok_or(StudioError::SignInRejected)?;
+        Ok(info.sub)
     }
 
     /// The connection from the stored token and the clock; no platform call.
@@ -504,6 +488,23 @@ impl Linkedin {
 
     /// Exactly one `POST /rest/posts`. The caller (the studio) applies the deadline.
     async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
+        let token = self.usable_token()?;
+        let response = self
+            .client
+            .post(format!("{}/rest/posts", self.config.api_base.as_str()))
+            .bearer_auth(token.access_token.expose())
+            .header("LinkedIn-Version", API_VERSION)
+            .header("X-Restli-Protocol-Version", "2.0.0")
+            .json(&post_body(&token.member_id, &request.text))
+            .send()
+            .await
+            .map_err(transport_failure)?;
+        outcome(response)
+    }
+
+    /// The stored token when present and not expired; otherwise consent is required and
+    /// nothing is sent.
+    fn usable_token(&self) -> Result<Token, PostFailure> {
         let token = self
             .store
             .load(ACCOUNT)
@@ -512,54 +513,7 @@ impl Linkedin {
         if token.is_expired_at(&self.clock.now_rfc3339()) {
             return Err(PostFailure::ConsentRequired);
         }
-        let body = serde_json::json!({
-            "author": format!("urn:li:person:{}", token.member_id),
-            "commentary": request.text,
-            "visibility": "PUBLIC",
-            "distribution": {
-                "feedDistribution": "MAIN_FEED",
-                "targetEntities": [],
-                "thirdPartyDistributionChannels": []
-            },
-            "lifecycleState": "PUBLISHED",
-            "isReshareDisabledByAuthor": false
-        });
-        let response = self
-            .client
-            .post(format!("{}/rest/posts", self.config.api_base.as_str()))
-            .bearer_auth(token.access_token.expose())
-            .header("LinkedIn-Version", API_VERSION)
-            .header("X-Restli-Protocol-Version", "2.0.0")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| {
-                if error.is_connect() {
-                    PostFailure::Unreachable
-                } else {
-                    PostFailure::Unknown
-                }
-            })?;
-        let status = response.status();
-        if status.is_success() {
-            let post_id = response
-                .headers()
-                .get("x-restli-id")
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned)
-                .filter(|id| !id.is_empty())
-                .ok_or(PostFailure::Unknown)?;
-            return Ok(Posted {
-                url: post_url(&post_id),
-                post_id,
-            });
-        }
-        Err(match status.as_u16() {
-            401 => PostFailure::ConsentRequired,
-            429 => PostFailure::RateLimited,
-            400..=499 => PostFailure::Refused,
-            _ => PostFailure::Unknown,
-        })
+        Ok(token)
     }
 }
 
@@ -567,6 +521,88 @@ impl Platform for Linkedin {
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(self.post(request))
     }
+}
+
+/// The token endpoint's answer.
+#[derive(Deserialize)]
+struct Issued {
+    access_token: String,
+    expires_in: u64,
+    #[serde(default)]
+    scope: String,
+}
+
+/// The `userinfo` answer: only the subject is kept.
+#[derive(Deserialize)]
+struct UserInfo {
+    sub: String,
+}
+
+/// The callback's code, once its `state` matches the pending sign-in and LinkedIn reported no
+/// error. A mismatch refuses before anything is exchanged.
+fn accepted_code(pending: &Pending, callback: Callback) -> Result<String, StudioError> {
+    let state_ok = callback
+        .state
+        .as_deref()
+        .is_some_and(|state| constant_time_eq(state.as_bytes(), pending.state.expose().as_bytes()));
+    if !state_ok {
+        return Err(StudioError::SignInStateMismatch);
+    }
+    if callback.error.is_some() {
+        return Err(StudioError::SignInDenied);
+    }
+    callback.code.ok_or(StudioError::SignInDenied)
+}
+
+/// The Posts API body for a text post on the member's own feed.
+fn post_body(member_id: &str, text: &str) -> serde_json::Value {
+    serde_json::json!({
+        "author": format!("urn:li:person:{member_id}"),
+        "commentary": text,
+        "visibility": "PUBLIC",
+        "distribution": {
+            "feedDistribution": "MAIN_FEED",
+            "targetEntities": [],
+            "thirdPartyDistributionChannels": []
+        },
+        "lifecycleState": "PUBLISHED",
+        "isReshareDisabledByAuthor": false
+    })
+}
+
+/// A failure before any answer arrived: unreachable when the connection failed, else unknown
+/// because the request may have landed.
+fn transport_failure(error: reqwest::Error) -> PostFailure {
+    if error.is_connect() {
+        PostFailure::Unreachable
+    } else {
+        PostFailure::Unknown
+    }
+}
+
+/// LinkedIn's answer as one outcome: 2xx with `x-restli-id` is posted; a 2xx without it is
+/// unknown; 401 needs consent, 429 is rate limited, any other 4xx refused, anything else unknown.
+fn outcome(response: reqwest::Response) -> Result<Posted, PostFailure> {
+    let status = response.status();
+    if !status.is_success() {
+        return Err(match status.as_u16() {
+            401 => PostFailure::ConsentRequired,
+            429 => PostFailure::RateLimited,
+            400..=499 => PostFailure::Refused,
+            _ => PostFailure::Unknown,
+        });
+    }
+    let post_id = response
+        .headers()
+        .get("x-restli-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .filter(|id| !id.is_empty())
+        .ok_or(PostFailure::Unknown)?;
+    Ok(Posted {
+        url: post_url(&post_id),
+        post_id,
+    })
 }
 
 /// The callback handler: hand the first callback to the waiting sign-in, answer the fixed page.

@@ -92,18 +92,13 @@ impl KeychainStore {
 /// The error's kind as the store reports it; the message never carries the secret.
 #[cfg(target_os = "macos")]
 fn kind(error: keyring_core::Error) -> StoreError {
+    use keyring_core::Error::*;
     let name = match error {
-        keyring_core::Error::PlatformFailure(_) => "platform_failure",
-        keyring_core::Error::NoStorageAccess(_) => "no_storage_access",
-        keyring_core::Error::NoEntry => "no_entry",
-        keyring_core::Error::BadEncoding(_) => "bad_encoding",
-        keyring_core::Error::BadDataFormat(_, _) => "bad_data_format",
-        keyring_core::Error::BadStoreFormat(_) => "bad_store_format",
-        keyring_core::Error::TooLong(_, _) => "too_long",
-        keyring_core::Error::Invalid(_, _) => "invalid",
-        keyring_core::Error::Ambiguous(_) => "ambiguous",
-        keyring_core::Error::NoDefaultStore => "no_default_store",
-        keyring_core::Error::NotSupportedByStore(_) => "not_supported",
+        PlatformFailure(_) => "platform_failure",
+        NoStorageAccess(_) => "no_storage_access",
+        NoEntry => "no_entry",
+        BadEncoding(_) | BadDataFormat(_, _) | BadStoreFormat(_) => "bad_format",
+        TooLong(_, _) | Invalid(_, _) | Ambiguous(_) => "invalid",
         _ => "other",
     };
     StoreError(name.to_owned())

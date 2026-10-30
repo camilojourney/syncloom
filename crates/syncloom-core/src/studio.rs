@@ -344,43 +344,63 @@ impl Studio {
         piece_id: &str,
         request: PublishRequest,
     ) -> Result<PublishResponse, StudioError> {
-        let (key, piece, intent, created) = {
-            let lock = self.store.lock()?;
-            let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
-            if request.dry_run {
-                let payload = payload_for(&piece);
-                return Ok(PublishResponse {
-                    piece,
-                    status: "dry_run".to_owned(),
-                    request_id: None,
-                    created: false,
-                    payload,
-                    post_id: None,
-                    post_url: None,
-                    attempts: 0,
-                });
-            }
-            if piece.status != Status::Approved || piece.review_decision_id.is_none() {
-                return Err(StudioError::ApprovalRequired);
-            }
-            let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
-            match lock.load_intent(&key)? {
-                Some(existing) => (key, piece, existing, false),
-                None => {
-                    let intent = self.reserve_intent(&lock, &key, &mut piece)?;
-                    (key, piece, intent, true)
-                }
-            }
+        let (key, piece, intent, created) = match self.reserve_or_load(piece_id, request)? {
+            Reserved::DryRun(response) => return Ok(response),
+            Reserved::Intent {
+                key,
+                piece,
+                intent,
+                created,
+            } => (key, piece, intent, created),
         };
         let Some(platform) = self.delivery.get(&piece.platform).cloned() else {
             return Ok(response_from(piece, &intent, created));
         };
         match intent.status {
-            IntentStatus::Posted => Ok(response_from(piece, &intent, false)),
+            IntentStatus::Posted | IntentStatus::Unknown => {
+                Ok(response_from(piece, &intent, false))
+            }
             IntentStatus::Posting => self.settle_unknown(&key, piece, intent),
-            IntentStatus::Unknown => Ok(response_from(piece, &intent, false)),
             _ => self.attempt(&key, piece, intent, created, platform).await,
         }
+    }
+
+    /// Under the lock: the revision check, the dry-run answer, the approval check, and the
+    /// intent, loaded when it exists or reserved as contained when it does not.
+    fn reserve_or_load(
+        &self,
+        piece_id: &str,
+        request: PublishRequest,
+    ) -> Result<Reserved, StudioError> {
+        let lock = self.store.lock()?;
+        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+        if request.dry_run {
+            let payload = payload_for(&piece);
+            return Ok(Reserved::DryRun(PublishResponse {
+                piece,
+                status: "dry_run".to_owned(),
+                request_id: None,
+                created: false,
+                payload,
+                post_id: None,
+                post_url: None,
+                attempts: 0,
+            }));
+        }
+        if piece.status != Status::Approved || piece.review_decision_id.is_none() {
+            return Err(StudioError::ApprovalRequired);
+        }
+        let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
+        let (intent, created) = match lock.load_intent(&key)? {
+            Some(existing) => (existing, false),
+            None => (self.reserve_intent(&lock, &key, &mut piece)?, true),
+        };
+        Ok(Reserved::Intent {
+            key,
+            piece,
+            intent,
+            created,
+        })
     }
 
     /// Record the one intent for this piece revision as contained. Whether it is dispatched
@@ -414,15 +434,7 @@ impl Studio {
         piece.publish_status = Some(IntentStatus::Contained.as_str().to_owned());
         piece.updated_at = now;
         lock.save_piece(piece)?;
-        self.record(
-            lock,
-            EventKind::IntentReserved,
-            piece,
-            Extra {
-                request_id: Some(intent.request_id.clone()),
-                ..Extra::default()
-            },
-        )?;
+        self.record_intent(lock, EventKind::IntentReserved, piece, &intent)?;
         Ok(intent)
     }
 
@@ -447,15 +459,7 @@ impl Studio {
             piece.publish_status = Some(IntentStatus::Posting.as_str().to_owned());
             piece.updated_at = now;
             lock.save_piece(&piece)?;
-            self.record(
-                &lock,
-                EventKind::DispatchAttempted,
-                &piece,
-                Extra {
-                    request_id: Some(intent.request_id.clone()),
-                    ..Extra::default()
-                },
-            )?;
+            self.record_intent(&lock, EventKind::DispatchAttempted, &piece, &intent)?;
         }
         let request = PostRequest {
             request_id: intent.request_id.clone(),
@@ -539,6 +543,25 @@ impl Studio {
         lock.load_piece(piece_id)?.ok_or(StudioError::PieceNotFound)
     }
 
+    /// An event about an intent: the piece's ids plus the request id.
+    fn record_intent(
+        &self,
+        lock: &Lock<'_>,
+        kind: EventKind,
+        piece: &Piece,
+        intent: &DispatchIntent,
+    ) -> Result<(), StudioError> {
+        self.record(
+            lock,
+            kind,
+            piece,
+            Extra {
+                request_id: Some(intent.request_id.clone()),
+                ..Extra::default()
+            },
+        )
+    }
+
     /// One event per state change, holding ids, hashes, statuses and outcomes only.
     fn record(
         &self,
@@ -564,6 +587,17 @@ impl Studio {
         };
         Ok(lock.append_event(&event)?)
     }
+}
+
+/// What the locked part of a publish produced.
+enum Reserved {
+    DryRun(PublishResponse),
+    Intent {
+        key: String,
+        piece: Piece,
+        intent: DispatchIntent,
+        created: bool,
+    },
 }
 
 /// The optional fields of an event.
