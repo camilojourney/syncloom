@@ -14,7 +14,6 @@ use std::{
     process::{Command, Stdio},
     sync::Arc,
 };
-use syncloom_core::{KeychainStore, TokenStore};
 use tempfile::TempDir;
 
 const THOUGHT: &str = "Agents write better when the spec names one owner per rule.";
@@ -78,7 +77,9 @@ impl LinkedinEnv {
             .unwrap()
             .port();
         let service = format!("syncloom-test-cli-{}-{}", std::process::id(), uuid_like());
+        // The Keychain lives under the real HOME; the data directory stays the temp one.
         let mut vars = vec![
+            ("HOME".to_owned(), std::env::var("HOME").unwrap()),
             (
                 "SYNCLOOM_LINKEDIN_AUTH_BASE_URL".to_owned(),
                 fake.base_url(),
@@ -110,16 +111,36 @@ impl LinkedinEnv {
             command.env(name, value);
         }
     }
-    fn stored(&self) -> Option<syncloom_core::Token> {
-        KeychainStore::new(self.service.clone())
-            .load("linkedin")
+    /// Whether the Keychain holds the item, by its attributes only. The secret is readable only
+    /// by the binary that stored it (the Keychain binds the item to that code hash), so this
+    /// test process asks Apple's own tool for presence and lets `syncloom` read the value.
+    fn item_exists(&self) -> bool {
+        Command::new("/usr/bin/security")
+            .args([
+                "find-generic-password",
+                "-s",
+                &self.service,
+                "-a",
+                "linkedin",
+            ])
+            .output()
             .unwrap()
+            .status
+            .success()
     }
 }
 
 impl Drop for LinkedinEnv {
     fn drop(&mut self) {
-        let _ = KeychainStore::new(self.service.clone()).delete("linkedin");
+        let _ = Command::new("/usr/bin/security")
+            .args([
+                "delete-generic-password",
+                "-s",
+                &self.service,
+                "-a",
+                "linkedin",
+            ])
+            .output();
     }
 }
 
@@ -425,10 +446,10 @@ async fn linkedin_sign_in_publish_repeat_and_sign_out_work_end_to_end() {
     assert_eq!(connection["status"], "signed_in");
     assert_eq!(connection["expires_at"].as_str().unwrap().len(), 20);
     assert!(!run.stdout.contains("fake-access-token"), "{}", run.stdout);
-    let token = env
-        .stored()
-        .expect("the token is in the Keychain under the test service");
-    assert_eq!(token.access_token.expose(), "fake-access-token-zebrafish");
+    assert!(
+        env.item_exists(),
+        "the token is in the Keychain under the test service"
+    );
     let all_files: String = walk(dir.path());
     assert!(
         !all_files.contains("fake-access-token"),
@@ -482,7 +503,7 @@ async fn linkedin_sign_in_publish_repeat_and_sign_out_work_end_to_end() {
     let out = syncloom_linkedin(&dir, &base, &env, &["linkedin", "sign-out"]);
     assert_eq!(out.status, 0, "{}", out.stderr);
     assert_eq!(out.json()["status"], "signed_out");
-    assert!(env.stored().is_none(), "sign-out deleted the Keychain item");
+    assert!(!env.item_exists(), "sign-out deleted the Keychain item");
 }
 
 // studio-cli: Core errors for LinkedIn (linkedin_not_configured, sign_in_denied)
@@ -513,7 +534,7 @@ async fn linkedin_failures_print_the_api_code_and_message() {
         fixture_message("sign_in_denied")
     );
     assert!(!run.stderr.contains("client-secret-axolotl"));
-    assert!(env.stored().is_none());
+    assert!(!env.item_exists());
     assert!(linkedin.token_requests().is_empty());
 }
 

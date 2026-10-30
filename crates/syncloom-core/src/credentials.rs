@@ -62,7 +62,9 @@ pub trait TokenStore: Send + Sync {
     fn delete(&self, account: &str) -> Result<(), StoreError>;
 }
 
-/// The macOS Keychain: one generic-password item per account under `service`.
+/// The macOS Keychain: one generic-password item per account under `service`, holding the
+/// token bundle as JSON. Read for this store: `keyring-core` 1.0.1 (`Entry`, `Error::NoEntry`)
+/// and `apple-native-keyring-store` 1.0.2 (`keychain::Store`, the login keychain).
 pub struct KeychainStore {
     service: String,
 }
@@ -76,16 +78,71 @@ impl KeychainStore {
     pub fn service(&self) -> &str {
         &self.service
     }
+
+    #[cfg(target_os = "macos")]
+    fn entry(&self, account: &str) -> Result<keyring_core::Entry, StoreError> {
+        let store = apple_native_keyring_store::keychain::Store::new().map_err(kind)?;
+        // The store's `build` needs no process-wide default; one store per call keeps the
+        // Keychain domain explicit and avoids global state.
+        use keyring_core::api::CredentialStoreApi;
+        store.build(&self.service, account, None).map_err(kind)
+    }
 }
 
+/// The error's kind as the store reports it; the message never carries the secret.
+#[cfg(target_os = "macos")]
+fn kind(error: keyring_core::Error) -> StoreError {
+    let name = match error {
+        keyring_core::Error::PlatformFailure(_) => "platform_failure",
+        keyring_core::Error::NoStorageAccess(_) => "no_storage_access",
+        keyring_core::Error::NoEntry => "no_entry",
+        keyring_core::Error::BadEncoding(_) => "bad_encoding",
+        keyring_core::Error::BadDataFormat(_, _) => "bad_data_format",
+        keyring_core::Error::BadStoreFormat(_) => "bad_store_format",
+        keyring_core::Error::TooLong(_, _) => "too_long",
+        keyring_core::Error::Invalid(_, _) => "invalid",
+        keyring_core::Error::Ambiguous(_) => "ambiguous",
+        keyring_core::Error::NoDefaultStore => "no_default_store",
+        keyring_core::Error::NotSupportedByStore(_) => "not_supported",
+        _ => "other",
+    };
+    StoreError(name.to_owned())
+}
+
+#[cfg(target_os = "macos")]
+impl TokenStore for KeychainStore {
+    fn load(&self, account: &str) -> Result<Option<Token>, StoreError> {
+        match self.entry(account)?.get_secret() {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map(Some)
+                .map_err(|_| StoreError("bad_token_bundle".to_owned())),
+            Err(keyring_core::Error::NoEntry) => Ok(None),
+            Err(error) => Err(kind(error)),
+        }
+    }
+    fn save(&self, account: &str, token: &Token) -> Result<(), StoreError> {
+        let bytes =
+            serde_json::to_vec(token).map_err(|_| StoreError("token_serialize".to_owned()))?;
+        self.entry(account)?.set_secret(&bytes).map_err(kind)
+    }
+    fn delete(&self, account: &str) -> Result<(), StoreError> {
+        match self.entry(account)?.delete_credential() {
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(error) => Err(kind(error)),
+        }
+    }
+}
+
+/// No Keychain on this platform: the store reports itself unsupported rather than pretending.
+#[cfg(not(target_os = "macos"))]
 impl TokenStore for KeychainStore {
     fn load(&self, _account: &str) -> Result<Option<Token>, StoreError> {
-        Err(StoreError("not implemented".to_owned()))
+        Err(StoreError("keychain_unsupported_platform".to_owned()))
     }
     fn save(&self, _account: &str, _token: &Token) -> Result<(), StoreError> {
-        Err(StoreError("not implemented".to_owned()))
+        Err(StoreError("keychain_unsupported_platform".to_owned()))
     }
     fn delete(&self, _account: &str) -> Result<(), StoreError> {
-        Err(StoreError("not implemented".to_owned()))
+        Err(StoreError("keychain_unsupported_platform".to_owned()))
     }
 }

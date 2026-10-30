@@ -3,14 +3,17 @@
 //!
 //! Invariants: a request persists either all of its pieces or none (drafts are generated
 //! before anything is written); every persisted state change appends one provenance event
-//! after the record it describes; nothing is written while the model provider is running.
+//! after the record it describes; nothing is written while the model provider is running;
+//! a dispatch writes the intent as `posting` before the platform request and its outcome after,
+//! and holds the store lock during neither the provider nor the platform call; a `posted`
+//! intent is never sent again and a `posting` or `unknown` one is never retried blindly.
 use crate::channel::{Channel, fit};
 use crate::clock::Clock;
 use crate::error::StudioError;
 use crate::linkedin::Linkedin;
 use crate::outbox::{DispatchIntent, IntentStatus, OPERATION_PUBLISH, Payload, intent_key};
 use crate::piece::{Piece, Source, Status, piece_id, review_decision_id, revision};
-use crate::platform::Platform;
+use crate::platform::{Platform, PostFailure, PostRequest};
 use crate::provenance::{Event, EventKind, SCHEMA_VERSION, Usage};
 use crate::provider::{Draft, DraftRequest, ModelProvider, ProviderError};
 use crate::store::{Lock, Store};
@@ -161,25 +164,6 @@ fn payload_for(piece: &Piece) -> Payload {
     }
 }
 
-fn publish_response(
-    piece: Piece,
-    status: String,
-    request_id: Option<String>,
-    created: bool,
-    payload: Payload,
-) -> PublishResponse {
-    PublishResponse {
-        piece,
-        status,
-        request_id,
-        created,
-        payload,
-        post_id: None,
-        post_url: None,
-        attempts: 0,
-    }
-}
-
 impl Studio {
     pub fn new(
         store: Store,
@@ -300,7 +284,15 @@ impl Studio {
         let lock = self.store.lock()?;
         for (piece, (_, draft)) in pieces.iter().zip(&drafts) {
             lock.save_piece(piece)?;
-            self.record(&lock, EventKind::PieceCreated, piece, draft.usage, None)?;
+            self.record(
+                &lock,
+                EventKind::PieceCreated,
+                piece,
+                Extra {
+                    usage: draft.usage,
+                    ..Extra::default()
+                },
+            )?;
         }
         Ok(ThoughtResponse { group_id, pieces })
     }
@@ -343,7 +335,7 @@ impl Studio {
         };
         piece.updated_at = self.clock.now_rfc3339();
         lock.save_piece(&piece)?;
-        self.record(&lock, event, &piece, None, None)?;
+        self.record(&lock, event, &piece, Extra::default())?;
         Ok(piece)
     }
 
@@ -352,43 +344,53 @@ impl Studio {
         piece_id: &str,
         request: PublishRequest,
     ) -> Result<PublishResponse, StudioError> {
-        let _ = (&self.delivery, self.settings.platform_deadline);
-        let lock = self.store.lock()?;
-        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
-        if request.dry_run {
-            let payload = payload_for(&piece);
-            return Ok(publish_response(
-                piece,
-                "dry_run".to_owned(),
-                None,
-                false,
-                payload,
-            ));
-        }
-        if piece.status != Status::Approved || piece.review_decision_id.is_none() {
-            return Err(StudioError::ApprovalRequired);
-        }
-        let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
-        match lock.load_intent(&key)? {
-            Some(existing) => Ok(publish_response(
-                piece,
-                existing.status.as_str().to_owned(),
-                Some(existing.request_id),
-                false,
-                existing.payload,
-            )),
-            None => self.reserve_intent(&lock, &key, &mut piece),
+        let (key, piece, intent, created) = {
+            let lock = self.store.lock()?;
+            let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+            if request.dry_run {
+                let payload = payload_for(&piece);
+                return Ok(PublishResponse {
+                    piece,
+                    status: "dry_run".to_owned(),
+                    request_id: None,
+                    created: false,
+                    payload,
+                    post_id: None,
+                    post_url: None,
+                    attempts: 0,
+                });
+            }
+            if piece.status != Status::Approved || piece.review_decision_id.is_none() {
+                return Err(StudioError::ApprovalRequired);
+            }
+            let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
+            match lock.load_intent(&key)? {
+                Some(existing) => (key, piece, existing, false),
+                None => {
+                    let intent = self.reserve_intent(&lock, &key, &mut piece)?;
+                    (key, piece, intent, true)
+                }
+            }
+        };
+        let Some(platform) = self.delivery.get(&piece.platform).cloned() else {
+            return Ok(response_from(piece, &intent, created));
+        };
+        match intent.status {
+            IntentStatus::Posted => Ok(response_from(piece, &intent, false)),
+            IntentStatus::Posting => self.settle_unknown(&key, piece, intent),
+            IntentStatus::Unknown => Ok(response_from(piece, &intent, false)),
+            _ => self.attempt(&key, piece, intent, created, platform).await,
         }
     }
 
-    /// Record the one intent for this piece revision. No platform integration exists, so
-    /// every intent is contained and nothing leaves the machine.
+    /// Record the one intent for this piece revision as contained. Whether it is dispatched
+    /// is decided by the delivery grant, afterwards.
     fn reserve_intent(
         &self,
         lock: &Lock<'_>,
         key: &str,
         piece: &mut Piece,
-    ) -> Result<PublishResponse, StudioError> {
+    ) -> Result<DispatchIntent, StudioError> {
         let now = self.clock.now_rfc3339();
         let intent = DispatchIntent {
             request_id: crate::outbox::request_id(
@@ -416,16 +418,104 @@ impl Studio {
             lock,
             EventKind::IntentReserved,
             piece,
-            None,
-            Some(intent.request_id.clone()),
+            Extra {
+                request_id: Some(intent.request_id.clone()),
+                ..Extra::default()
+            },
         )?;
-        Ok(publish_response(
-            piece.clone(),
-            intent.status.as_str().to_owned(),
-            Some(intent.request_id),
-            true,
-            intent.payload,
-        ))
+        Ok(intent)
+    }
+
+    /// One platform attempt: `posting` written first, the lock released for the call, the
+    /// outcome written after. A deadline overrun is `unknown`: the request may have landed.
+    async fn attempt(
+        &self,
+        key: &str,
+        mut piece: Piece,
+        mut intent: DispatchIntent,
+        created: bool,
+        platform: Arc<dyn Platform>,
+    ) -> Result<PublishResponse, StudioError> {
+        {
+            let lock = self.store.lock()?;
+            let now = self.clock.now_rfc3339();
+            intent.status = IntentStatus::Posting;
+            intent.attempts += 1;
+            intent.attempted_at = Some(now.clone());
+            intent.finished_at = None;
+            lock.save_intent(key, &intent)?;
+            piece.publish_status = Some(IntentStatus::Posting.as_str().to_owned());
+            piece.updated_at = now;
+            lock.save_piece(&piece)?;
+            self.record(
+                &lock,
+                EventKind::DispatchAttempted,
+                &piece,
+                Extra {
+                    request_id: Some(intent.request_id.clone()),
+                    ..Extra::default()
+                },
+            )?;
+        }
+        let request = PostRequest {
+            request_id: intent.request_id.clone(),
+            text: intent.payload.content.clone(),
+        };
+        let result =
+            tokio::time::timeout(self.settings.platform_deadline, platform.publish(request)).await;
+        let (status, posted) = match result {
+            Ok(Ok(posted)) => (IntentStatus::Posted, Some(posted)),
+            Ok(Err(failure)) => (status_of(failure), None),
+            Err(_) => (IntentStatus::Unknown, None),
+        };
+        intent.status = status;
+        intent.post_id = posted.as_ref().map(|p| p.post_id.clone());
+        intent.post_url = posted.as_ref().map(|p| p.url.clone());
+        self.finish(key, &piece.piece_id, intent, created)
+    }
+
+    /// A `posting` record found later: its attempt's outcome is unknown and stays so.
+    fn settle_unknown(
+        &self,
+        key: &str,
+        piece: Piece,
+        mut intent: DispatchIntent,
+    ) -> Result<PublishResponse, StudioError> {
+        intent.status = IntentStatus::Unknown;
+        self.finish(key, &piece.piece_id, intent, false)
+    }
+
+    /// Write the outcome to the intent and, when the piece is still at this revision, to the
+    /// piece; append `dispatch_finished`.
+    fn finish(
+        &self,
+        key: &str,
+        piece_id: &str,
+        mut intent: DispatchIntent,
+        created: bool,
+    ) -> Result<PublishResponse, StudioError> {
+        let lock = self.store.lock()?;
+        let now = self.clock.now_rfc3339();
+        intent.finished_at = Some(now.clone());
+        lock.save_intent(key, &intent)?;
+        let mut piece = self.load(&lock, piece_id)?;
+        if piece.revision == intent.revision {
+            piece.publish_status = Some(intent.status.as_str().to_owned());
+            piece.updated_at = now;
+            lock.save_piece(&piece)?;
+        }
+        self.record(
+            &lock,
+            EventKind::DispatchFinished,
+            &piece,
+            Extra {
+                request_id: Some(intent.request_id.clone()),
+                outcome: Some(intent.status.as_str().to_owned()),
+                post_id: intent.post_id.clone(),
+                usage: None,
+            },
+        )?;
+        Ok(response_from(piece, &intent, created))
     }
 
     /// The piece at the revision the caller saw; any other revision is a conflict.
@@ -449,14 +539,13 @@ impl Studio {
         lock.load_piece(piece_id)?.ok_or(StudioError::PieceNotFound)
     }
 
-    /// One event per state change, holding ids, hashes and statuses only.
+    /// One event per state change, holding ids, hashes, statuses and outcomes only.
     fn record(
         &self,
         lock: &Lock<'_>,
         kind: EventKind,
         piece: &Piece,
-        usage: Option<Usage>,
-        request_id: Option<String>,
+        extra: Extra,
     ) -> Result<(), StudioError> {
         let event = Event {
             schema_version: SCHEMA_VERSION.to_owned(),
@@ -468,11 +557,44 @@ impl Studio {
             channel: piece.channel,
             revision: piece.revision.clone(),
             status: piece.status,
-            usage,
-            request_id,
-            outcome: None,
-            post_id: None,
+            usage: extra.usage,
+            request_id: extra.request_id,
+            outcome: extra.outcome,
+            post_id: extra.post_id,
         };
         Ok(lock.append_event(&event)?)
+    }
+}
+
+/// The optional fields of an event.
+#[derive(Default)]
+struct Extra {
+    usage: Option<Usage>,
+    request_id: Option<String>,
+    outcome: Option<String>,
+    post_id: Option<String>,
+}
+
+/// The intent's status as the platform failure named it.
+fn status_of(failure: PostFailure) -> IntentStatus {
+    match failure {
+        PostFailure::ConsentRequired => IntentStatus::ConsentRequired,
+        PostFailure::Refused => IntentStatus::Refused,
+        PostFailure::RateLimited => IntentStatus::RateLimited,
+        PostFailure::Unreachable => IntentStatus::Unreachable,
+        PostFailure::Unknown => IntentStatus::Unknown,
+    }
+}
+
+fn response_from(piece: Piece, intent: &DispatchIntent, created: bool) -> PublishResponse {
+    PublishResponse {
+        piece,
+        status: intent.status.as_str().to_owned(),
+        request_id: Some(intent.request_id.clone()),
+        created,
+        payload: intent.payload.clone(),
+        post_id: intent.post_id.clone(),
+        post_url: intent.post_url.clone(),
+        attempts: intent.attempts,
     }
 }
