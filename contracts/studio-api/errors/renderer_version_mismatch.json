@@ -1,0 +1,10 @@
+{
+  "status": 503,
+  "body": {
+    "error": {
+      "code": "renderer_version_mismatch",
+      "message": "The renderer does not match the configured version.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "assets_required",
+      "message": "Render current visual assets before viewing or approving this piece.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

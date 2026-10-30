@@ -1,6 +1,6 @@
 # Q7: rendering 1080x1350 images and multi-page PDF carousels from Rust
 
-Status: pending decision
+Status: open
 
 ## Question
 
@@ -20,11 +20,11 @@ Phrona 5.0.12 study `main969-q7-render`, run by the phrona-lab home on 2026-10-3
 
 ## Status
 
-Pending decision: answered (keep headless Chromium as the production renderer, run the Typst spike before dropping it; resvg-only and WKWebView are not the main path; the two reports disagree on resvg), and the slice 3 decision it serves is not written yet. It will be written with the slice 3 change.
+Open: the production choice is recorded in [decision 0003](../../decisions/0003-visual-renderer.md): keep headless Chromium, with a gated later Typst spike; resvg-only and WKWebView are not the main path. Browser distribution, cross-machine equivalence and the Typst spike remain later work; neither report establishes those outcomes.
 
 ## Decision
 
-Pending: the slice 3 (visual assets) decision, not yet written. Until then this study is cited by no decision.
+[Decision 0003](../../decisions/0003-visual-renderer.md) records the slice 3 choice. Local Rust rendering is implemented on the visual slice branch; no distribution or platform upload is claimed.
 
 ## Files
 

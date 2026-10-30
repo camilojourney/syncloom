@@ -104,6 +104,7 @@ pub struct Studio {
     delivery: HashMap<String, Arc<dyn Platform>>,
     /// The LinkedIn integration for sign-in and connection, granted or not.
     linkedin: Option<Arc<Linkedin>>,
+    renderer: crate::visual::RendererConfig,
 }
 
 /// Surrounding whitespace removed and inner whitespace runs collapsed to one space.
@@ -178,7 +179,115 @@ impl Studio {
             settings,
             delivery: HashMap::new(),
             linkedin: None,
+            renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
         }
+    }
+
+    pub fn with_renderer(mut self, config: crate::visual::RendererConfig) -> Self {
+        self.renderer = config;
+        self
+    }
+
+    /// Configure first, render without the lock, and accept bytes only at that exact revision.
+    pub async fn render(
+        &self,
+        piece_id: &str,
+        request: crate::visual::RenderRequest,
+    ) -> Result<Piece, StudioError> {
+        use crate::visual::{Assets, TEMPLATE_VERSION};
+        let content = request.content()?;
+        let configured = {
+            let lock = self.store.lock()?;
+            let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+            let changed = piece.visual.as_ref() != Some(&content);
+            piece.revision = crate::piece::revision_with_visual(
+                piece.channel,
+                &piece.piece_id,
+                &piece.text,
+                Some(&content),
+            );
+            piece.visual = Some(content.clone());
+            // Starting any rerender invalidates approval and old bytes, even if it fails.
+            piece.invalidate_review();
+            self.save_change(
+                &lock,
+                if changed {
+                    EventKind::VisualConfigured
+                } else {
+                    EventKind::AssetsInvalidated
+                },
+                &mut piece,
+                Extra::default(),
+            )?;
+            piece
+        };
+        let rendered = match self.renderer.render(&content).await {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                let lock = self.store.lock()?;
+                self.record(
+                    &lock,
+                    EventKind::RenderFailed,
+                    &configured,
+                    Extra {
+                        outcome: Some(error.code().to_owned()),
+                        ..Extra::default()
+                    },
+                )?;
+                return Err(error);
+            }
+        };
+        let lock = self.store.lock()?;
+        let mut piece = self.load_at(&lock, piece_id, &configured.revision)?;
+        let image_sha256 = lock.save_asset(&rendered.image)?;
+        let carousel_sha256 = lock.save_asset(&rendered.carousel)?;
+        piece.invalidate_review();
+        piece.assets = Some(Assets {
+            revision: piece.revision.clone(),
+            template_version: TEMPLATE_VERSION.into(),
+            image_sha256,
+            carousel_sha256,
+            pages: content.slides.len(),
+            renderer_version: self.renderer.version.clone(),
+            font_sha256: self.renderer.font_sha256.clone(),
+        });
+        self.save_change(
+            &lock,
+            EventKind::AssetsRendered,
+            &mut piece,
+            Extra::default(),
+        )?;
+        Ok(piece)
+    }
+
+    fn checked_assets<'a>(
+        &self,
+        lock: &Lock<'_>,
+        piece: &'a Piece,
+    ) -> Result<&'a crate::visual::Assets, StudioError> {
+        let assets = piece.assets.as_ref().ok_or(StudioError::AssetsRequired)?;
+        if assets.revision != piece.revision
+            || assets.template_version != crate::visual::TEMPLATE_VERSION
+        {
+            return Err(StudioError::AssetsRequired);
+        }
+        lock.load_asset(&assets.image_sha256)?;
+        lock.load_asset(&assets.carousel_sha256)?;
+        Ok(assets)
+    }
+
+    pub fn view_asset(
+        &self,
+        piece_id: &str,
+        kind: crate::visual::AssetKind,
+    ) -> Result<(Vec<u8>, String), StudioError> {
+        let lock = self.store.lock()?;
+        let piece = self.load(&lock, piece_id)?;
+        let assets = self.checked_assets(&lock, &piece)?;
+        let hash = kind.hash(assets).to_owned();
+        let bytes = lock.load_asset(&hash)?;
+        self.record(&lock, EventKind::AssetsViewed, &piece, Extra::default())?;
+        Ok((bytes, hash))
     }
 
     /// Grant delivery to one platform: its intents are dispatched instead of contained.
@@ -270,6 +379,8 @@ impl Studio {
                     status: Status::PendingReview,
                     review_decision_id: None,
                     publish_status: None,
+                    visual: None,
+                    assets: None,
                     fit: fit(*channel, &draft.text),
                     text: draft.text.clone(),
                     source: Source {
@@ -308,35 +419,65 @@ impl Studio {
         let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         let event = match action {
             ReviewAction::Status(next) => {
-                if !piece.status.can_move_to(next) {
-                    return Err(StudioError::InvalidStatusTransition);
-                }
-                if next == piece.status {
+                if !self.review_status(&lock, &mut piece, next)? {
                     return Ok(piece);
                 }
-                piece.status = next;
-                piece.review_decision_id = (next == Status::Approved)
-                    .then(|| review_decision_id(&piece.piece_id, &piece.revision));
                 EventKind::PieceReviewed
             }
             ReviewAction::Text(text) => {
                 if text == piece.text {
                     return Ok(piece);
                 }
-                piece.revision = revision(piece.channel, &piece.piece_id, &text);
+                piece.revision = crate::piece::revision_with_visual(
+                    piece.channel,
+                    &piece.piece_id,
+                    &text,
+                    piece.visual.as_ref(),
+                );
                 piece.fit = fit(piece.channel, &text);
                 piece.text = text;
-                piece.status = Status::PendingReview;
-                piece.review_decision_id = None;
-                // The new revision has no intent yet; the old one's stays in the outbox.
-                piece.publish_status = None;
+                // The old revision's intent stays in the outbox, but never authorizes this one.
+                piece.invalidate_review();
                 EventKind::PieceEdited
             }
         };
-        piece.updated_at = self.clock.now_rfc3339();
-        lock.save_piece(&piece)?;
-        self.record(&lock, event, &piece, Extra::default())?;
+        self.save_change(&lock, event, &mut piece, Extra::default())?;
         Ok(piece)
+    }
+
+    fn require_visual_assets(&self, lock: &Lock<'_>, piece: &Piece) -> Result<(), StudioError> {
+        if piece.visual.is_some() {
+            self.checked_assets(lock, piece)?;
+        }
+        Ok(())
+    }
+
+    fn require_approval(&self, lock: &Lock<'_>, piece: &Piece) -> Result<(), StudioError> {
+        if piece.status != Status::Approved || piece.review_decision_id.is_none() {
+            return Err(StudioError::ApprovalRequired);
+        }
+        self.require_visual_assets(lock, piece)
+    }
+
+    fn review_status(
+        &self,
+        lock: &Lock<'_>,
+        piece: &mut Piece,
+        next: Status,
+    ) -> Result<bool, StudioError> {
+        if next == Status::Approved {
+            self.require_visual_assets(lock, piece)?;
+        }
+        if !piece.status.can_move_to(next) {
+            return Err(StudioError::InvalidStatusTransition);
+        }
+        if next == piece.status {
+            return Ok(false);
+        }
+        piece.status = next;
+        piece.review_decision_id = (next == Status::Approved)
+            .then(|| review_decision_id(&piece.piece_id, &piece.revision));
+        Ok(true)
     }
 
     pub async fn publish(
@@ -353,7 +494,12 @@ impl Studio {
                 created,
             } => (key, piece, intent, created),
         };
-        let Some(platform) = self.delivery.get(&piece.platform).cloned() else {
+        let Some(platform) = self
+            .delivery
+            .get(&piece.platform)
+            .filter(|_| piece.visual.is_none())
+            .cloned()
+        else {
             return Ok(response_from(piece, &intent, created));
         };
         match intent.status {
@@ -387,9 +533,7 @@ impl Studio {
                 attempts: 0,
             }));
         }
-        if piece.status != Status::Approved || piece.review_decision_id.is_none() {
-            return Err(StudioError::ApprovalRequired);
-        }
+        self.require_approval(&lock, &piece)?;
         let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
         let (intent, created) = match lock.load_intent(&key)? {
             Some(existing) => (existing, false),
@@ -562,6 +706,19 @@ impl Studio {
         )
     }
 
+    /// Persist a piece change before its event; the event never describes an unwritten record.
+    fn save_change(
+        &self,
+        lock: &Lock<'_>,
+        kind: EventKind,
+        piece: &mut Piece,
+        extra: Extra,
+    ) -> Result<(), StudioError> {
+        piece.updated_at = self.clock.now_rfc3339();
+        lock.save_piece(piece)?;
+        self.record(lock, kind, piece, extra)
+    }
+
     /// One event per state change, holding ids, hashes, statuses and outcomes only.
     fn record(
         &self,
@@ -584,6 +741,8 @@ impl Studio {
             request_id: extra.request_id,
             outcome: extra.outcome,
             post_id: extra.post_id,
+            image_sha256: piece.assets.as_ref().map(|a| a.image_sha256.clone()),
+            carousel_sha256: piece.assets.as_ref().map(|a| a.carousel_sha256.clone()),
         };
         Ok(lock.append_event(&event)?)
     }

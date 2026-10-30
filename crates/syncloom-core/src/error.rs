@@ -21,6 +21,13 @@ pub enum StudioError {
     SignInStateMismatch,
     SignInTimedOut,
     SignInRejected,
+    RendererMissing,
+    RendererVersionMismatch,
+    RendererFontMismatch,
+    RendererTimeout,
+    RendererFailed,
+    AssetsRequired,
+    AssetIntegrity,
     Internal,
 }
 
@@ -32,7 +39,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 18] = [
+const ROWS: [Row; 25] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -98,11 +105,36 @@ const ROWS: [Row; 18] = [
         "sign_in_rejected",
         "LinkedIn refused to issue a token for this sign-in. Check the app's client id, secret and redirect URL.",
     ),
+    row(
+        "renderer_missing",
+        "The configured renderer binary is missing.",
+    ),
+    row(
+        "renderer_version_mismatch",
+        "The renderer does not match the configured version.",
+    ),
+    row(
+        "renderer_font_mismatch",
+        "The renderer font does not match the configured checksum.",
+    ),
+    row("renderer_timeout", "The renderer took too long."),
+    row(
+        "renderer_failed",
+        "The renderer failed to produce visual assets.",
+    ),
+    row(
+        "assets_required",
+        "Render current visual assets before viewing or approving this piece.",
+    ),
+    row(
+        "asset_integrity",
+        "The visual asset bytes do not match their recorded hashes.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 18] = [
+    pub const ALL: [StudioError; 25] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -120,6 +152,13 @@ impl StudioError {
         StudioError::SignInStateMismatch,
         StudioError::SignInTimedOut,
         StudioError::SignInRejected,
+        StudioError::RendererMissing,
+        StudioError::RendererVersionMismatch,
+        StudioError::RendererFontMismatch,
+        StudioError::RendererTimeout,
+        StudioError::RendererFailed,
+        StudioError::AssetsRequired,
+        StudioError::AssetIntegrity,
         StudioError::Internal,
     ];
 
