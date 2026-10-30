@@ -1,0 +1,6 @@
+command: env -u PYTEST_ADDOPTS PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<worktree>/src <slot-1 .venv>/bin/python -m pytest tests/ -q -p no:cacheprovider --basetemp=/tmp/fm-syncloom-v2-rust-plan-20261029/pt --junitxml=/tmp/fm-syncloom-v2-rust-plan-20261029/junit.xml
+cwd: /Users/camiloslaptop/.treehouse/syncloom-b30920/2/syncloom @ 3efcd35 (detached, clean before run)
+interpreter: Python 3.13.14 from /Users/camiloslaptop/.treehouse/syncloom-b30920/1/syncloom/.venv used read-only (offline uv sync failed: playwright/mypy wheels not cached); holus imported from this worktree's src
+junit: tests=1892 failures=0 errors=0 skipped=1 time=99.633s
+exit=0
+side effect observed: run created data/lineage/events.jsonl, data/lineage/.lineage.lock, data/.niche-research-state.json and .pytest_cache inside the worktree (git status --ignored after run)

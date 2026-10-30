@@ -1,0 +1,46 @@
+# Fleet shared OpenSpec baseline 1.0.0
+schema: spec-driven
+
+context: |
+  Use stock OpenSpec with thin plans and the installed /code 5.0.0.
+  OpenSpec owns artifact guidance; Code owns implementation, security and testing rules.
+  Load Code before code edits and only the references this change needs.
+  Project context below owns tools, commands, architecture and specification migration.
+  Follow existing specification owners until an explicit migration; never create a competing owner.
+  syncloom.v2 is a from-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought-to-content studio. The old Python app lives in the separate syncloom repository and is not part of this one.
+  Language: Rust for all first-party code, toolchain pinned in rust-toolchain.toml. cargo is not on PATH here; run checks as nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#clippy nixpkgs#rustfmt -c sh -c '<command>'.
+  Layout: crates/syncloom-core (domain rules, ports, file store, Claude adapter), crates/syncloom-server (Axum loopback HTTP API, binary syncloom-server), crates/syncloom-cli (binary syncloom), contracts/ (fixtures the server tests against), scripts/ (record checkers), docs/, openspec/.
+  Check code: cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+  Check specs and records: openspec validate --all --strict --no-interactive; python3 scripts/check-change-shape.py openspec/changes/<change>; python3 -I scripts/check-research-records.py
+  openspec/specs/ is the only specification authority for syncloom.v2. Unmigrated owners for the old app are listed in docs/migration.md; read the overlapping ones before naming a capability.
+  Change concerns: model calls and spend (Claude Sonnet, within USD 5 a day), external publishing (stays contained and explicit; a real post needs the captain's word), social platform credentials, personal content and brand data, outbound URL fetches.
+  Search openspec/specs/ and openspec/changes/ before naming a capability. Keep README.md accurate.
+
+rules:
+  proposal:
+    - 'Start with a "Request" section quoting the requester''s words verbatim, then an "Approval" section that says "pending"; only the reviewer fills it in. Never write approved yourself.'
+    - 'Before naming capabilities, run `openspec list --specs` and read every spec whose purpose overlaps, including unmigrated project owners; modify an existing capability unless none fits, and say which ones you checked.'
+    - 'For each new capability, add a line under Approval: "New capability requested: <name>". The reviewer turns it into "New capability approved: <name>".'
+    - 'For each copy of the same knowledge the design keeps (two blocks where changing one rule would need the same edit in both), add a line under Approval: "Duplicate kept: <where>, because <reason>". The reviewer decides; merge it if they do not accept the reason.'
+    - 'End with an "Open questions" section listing each assumption or missing case the request leaves open, as a question for the product owner, or "None."'
+    - 'Write for a busy reviewer: short sentences, no filler, no restating the request. Keep the proposal body, outside the Request quote, under 250 words.'
+  specs:
+    - 'One behavior per requirement: one SHALL sentence of at most 30 words. Put example values and edge cases in scenarios, not in the requirement sentence.'
+    - 'Do not restate rules another capability owns; name that capability instead.'
+    - 'Keep implementation details (algorithms, data structures, private helpers, file paths) out of specs; a technical spec may name the public interface callers use.'
+    - 'If two requirements state the same behavior in different words, keep one and remove the other.'
+    - 'A new or changed public interface gets a requirement naming the operation, its inputs, outputs and errors.'
+  design:
+    - 'Record decisions, not narration: one or two sentences per decision, naming the rejected alternative and why. Do not repeat the proposal or specs.'
+    - 'Add a "References" line naming the code skill references this change needs: security (auth, object ids, files, URLs, subprocesses, secrets, logs, dependencies), data (stored data, time, migrations, events, metrics, personal data), integrations (external calls, webhooks, retries), llm (model calls, prompts, agent tools), ui (screens, copy); or "none".'
+    - 'For applicable security boundaries, use Code references/security.md and the project''s existing security requirements; identify uncovered decisions or evidence rather than asserting safety from artifact structure.'
+  tasks:
+    - 'Make task 1.1 "Load the code skill": read its SKILL.md and each reference the design names, then follow its rules in every later task.'
+    - 'Plan the test-first evidence required by Code rules 14-22 using project verification commands; record the selected failing test, intended failure, passing implementation and behavior-preserving refactor, not only a final green suite.'
+operations:
+  apply:
+    guidance:
+      - 'Follow the loaded Code skill and project verification commands; report each actual result and any checks not run. Instructions and passing structure are not execution evidence.'
+  archive:
+    guidance:
+      - 'Archive inside the same branch and, when authorized, the same pull request as the code, so conflicting edits to the same requirement surface as Git conflicts. Archiving grants no publication or merge authority.'

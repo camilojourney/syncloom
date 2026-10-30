@@ -1,0 +1,46 @@
+# Migration ledger: the old Syncloom (Holus) capabilities and their state in syncloom.v2
+
+Pinned to the old repository `camilojourney/syncloom` at commit `3efcd35370242a37985fbacb272dacf80b2d42dd` (local main, 2026-09-28). Paths in the "Old owner" column are relative to that commit. Verdicts come from the plan report, section 2 ([rust-plan](research/2026-10-29-rust-plan/report.md)); approvals come from [decision 0001](decisions/0001-syncloom-v2-rebuild-decisions.md), the captain's "yes to all" on the vision text of 2026-10-30.
+
+How this ledger works (plan section 6.3):
+
+- `openspec/specs/` is the only specification authority for syncloom.v2. Nothing in the old `specs/` is edited or deleted now; the old app is preserved and still runs.
+- A capability **migrates** when an OpenSpec change rebuilds it. The change's proposal names the old owner it read; its `design.md` records which old behaviors were kept or changed, and why; the row below flips in the same branch.
+- A capability **retires** with the approval named in its row, never by deleting old code or data. The old repository's specs are retired only once, in one deliberate change in the original repository at merge-back time, citing this ledger.
+- States: `unmigrated` (nothing in v2 owns it yet, including deferred work), `partly migrated` (a v2 capability owns part of it; the row says what remains), `migrated`, `retired` (not carried into v2; stays in the old repository).
+
+## The studio loop
+
+| Old capability | Old owner at `3efcd35` | Verdict | v2 capability, or retirement reason and approval | State |
+|---|---|---|---|---|
+| Thought intake (text or URL, provenance) | `src/holus/api/routes/content.py:381` (`POST /api/v1/content/from-thought`); `src/holus/agents/marketing/thought_pipeline.py:384-466` | Retain behavior | `thought-drafting` owns text thoughts (slice 1). URL intake waits for its own slice and security review (plan section 1.4). | partly migrated |
+| Draft generation | `thought_pipeline.py:972-1003, 1036-1160` (deterministic template, hard-coded copy) | Rebuild | `thought-drafting`: model-backed drafting behind a provider trait (slice 1). The hard-coded copy and the agent labels that claimed work that never ran are retired: captain, 2026-10-30, vision 2.3. | migrated |
+| Platform rules (limits, shapes) | `thought_pipeline.py:1659-1667`; `src/holus/integrations/holus_social_api/client.py:30-37`; the capability matrix (three disagreeing tables) | Rebuild | `platform-rules`, one owner (slice 1, `linkedin_text` only). Other channels' rows arrive with slice 5 and the platform research. | partly migrated |
+| Language and account routing (EN/ES) | `thought_pipeline.py:40-53, 1580-1616` (substring markers) | Rebuild | Slice 5, with the behavior statements of unlanded spec 038 as input. | unmigrated |
+| Review workflow (status transitions, revision-bound approval) | `content.py:507-517` (transition table), `content.py:107-118, 523-526` (approval bound to revision, 409 on stale) | Retain behavior | `draft-review` (slice 1). | migrated |
+| Dispatch outbox and containment | `src/holus/lineage/outbox.py:60-104`; `src/holus/integrations/holus_social_api/containment.py:16-32` | Retain behavior | `dispatch-outbox` (slice 1): one contained intent per piece, revision and operation; repeated calls return the same request id. The delivery grant and real sending arrive with each platform integration (slice 2 onwards). | partly migrated |
+| Social API client | `src/holus/integrations/holus_social_api/client.py` (drifted: `client.py:137, 238-240, 254`; `content.py:717-723`) | Rebuild | D2 (changed by the captain): platform integrations rebuilt in Rust inside syncloom.v2, one per platform, after its research answer. First: LinkedIn (slice 2, after Q2 and Q8). The old client is not ported. | unmigrated |
+| Capture (suggest, preview, confirm) | `src/holus/api/routes/capture.py` (confirm approves and publishes in one call, `capture.py:188-234`) | Rebuild later | After the review screen (slice 4, D1); the confirm semantics need a product answer. | unmigrated |
+| Lineage (provenance JSONL) | `docs/lineage.md`; `src/holus/lineage/` | Retain behavior, simpler | `provenance-log` (slice 1): append-only events with ids and hashes, never text. Not carried: the export API, the validation CLI and the Holusight consumer boundary (no consumer exists in v2). | partly migrated |
+| Visual rendering (PNG, PDF carousel) | `src/holus/visual/engine.py` (Playwright and headless Chromium over HTML/CSS templates) | Rebuild after Q-RENDER | Slice 3 `visual-assets`, after question Q7. The templates, palettes and fonts stay input material. | unmigrated |
+| Visual judge and quality score | `src/holus/visual/quality_score.py` | Rebuild later | After slice 3, as an evaluated part. | unmigrated |
+
+## Everything else
+
+| Old capability | Old owner at `3efcd35` | Verdict | v2 capability, or retirement reason and approval | State |
+|---|---|---|---|---|
+| Research Radar | spec 037; `src/holus/research/` | Defer | Retain the behavior when an intake slice needs it (vision 6.2, later). | unmigrated |
+| Observatory dashboard (agents, trajectories, evaluations, knowledge, health) | `observatory/frontend/`; the Observatory API routes | Defer or retire with D5 | Stays in the old repository: captain, 2026-10-30, vision 7.3 (D5: studio first). The studio needs review screens, not a fleet dashboard. | retired |
+| Public demo and the `holus.generation.v1` contract | `src/holus/generation/*`; `observatory/frontend/lib`; `observatory/frontend/vercel.json` | D3 | Stays on the old app: D3, captain 2026-10-30. | retired |
+| Agent registry, 3-layer prompt loader, 45 prompt files | `agentic/agents/`; the registry and prompt loader under `src/holus/agents/` | Retire as a runtime | Captain, 2026-10-30, vision 7.1. The KERNEL prompts stay reference text for v2 generation prompts. | retired |
+| Autonomous marketing agent (LangGraph ReAct), auto-publish, orchestrator, specialist dispatch, Thompson bandit, prompt evolution, DSPy bridge, learning loop, diagnostician | `src/holus/agents/marketing/*` and related modules | Defer (D5) | Revisit once analytics data exists (vision 1.4, 7.1). | unmigrated |
+| Redis event bus, mem0 memory, launchd scheduling, kill switch | `src/holus/core/events.py`; `src/holus/core/kill_switch.py`; `src/holus/memory/mem0_client.py` | Defer | A stop control returns only with autonomy (vision 7.1). | unmigrated |
+| Genpeli video and Pilaster image clients | the Genpeli and Pilaster integrations under `src/holus/integrations/` | Retire from v2 until an adapter slice | Captain, 2026-10-30, vision 7.2: later adapters, never blockers. | retired |
+| Company OS evaluation code | `src/holus/evaluation/company_os_contract.py` | Retire from the product repository | Captain, 2026-10-30, vision 7.3. | retired |
+| Telegram gate | never wired (`docs/AUDIT-2026-03-23.md:56,145`) | Retire | Captain, 2026-10-30, vision 7.3. | retired |
+| MCP server | `src/holus/mcp` | Defer (plan); stays in the old repository (vision 7.3) | Captain, 2026-10-30, vision 7.3. The real integration path is direct HTTP. | retired |
+| Repository hygiene practices (548 committed `node_modules` files under `docs/reference`, 89 tracked `data/` files, tests that write into `data/`) | the old repository's tree and test suite | Retire these practices | v2 rule: tests use temporary directories and leave `git status --porcelain --ignored` unchanged (`studio-api` requirement "Hermetic tests"); no runtime data is tracked. | retired |
+
+## Old specifications
+
+The plan's judgment of each old spec (wrong, stale, sound, partly sound) is in the report, section 2.3. Nothing in `specs/` owns the shipped core loop; its de facto owners are the prose and code paths named in the rows above. Unlanded spec 038 and the evalloop cases stay on their branch (`fm/syncloom-evalloop-fable` at `16890bd`) until slice 5 ports their sound behaviors.

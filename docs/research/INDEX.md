@@ -1,0 +1,27 @@
+# Research index
+
+One row per study: the question, why it was asked (the decision it serves), how the reports were collected, its status and the decision it fed. How a study is stored and added is in [README.md](README.md). Decisions are in [`docs/decisions/`](../decisions/README.md); a row that names a decision means that decision's "Evidence and gaps" cites the study.
+
+Status is `complete` (answered, nothing pending), `open` (answered in part; the card lists what is open) or `pending decision` (answered, but the decision it serves is not written yet; the card names it).
+
+| Study | Date | Question | Why asked (the decision it serves) | How collected | Status | Decision |
+|---|---|---|---|---|---|---|
+| [rust-plan](2026-10-29-rust-plan/README.md) | 2026-10-29 | What does the old Syncloom (Holus) repository hold, what should a Rust syncloom.v2 retain, rebuild or retire, what is the smallest end-to-end first slice, and which captain decisions and research questions remain? | The go decision for syncloom.v2 and the scope of slice 1; became decisions D1-D7. | Read-only scout agent over the old repository at `3efcd35` and Main's records, one run of the old Python test suite; no network | complete | [0001](../decisions/0001-syncloom-v2-rebuild-decisions.md) |
+| [social-api-research-questions](2026-10-30-social-api-research-questions/README.md) | 2026-10-30 | What do the old Social API adapters actually do today, and which exact questions must each platform's API research answer before its integration is rebuilt in Rust? | Decision D2 (integrations rebuilt in Rust after deep research): the adapter inventory and the eight questions to run. | Read-only scout agent over the old Social API and studio repositories and the plan; no web research, no question sent yet | open | [0001](../decisions/0001-syncloom-v2-rebuild-decisions.md) |
+
+## Pending studies
+
+Questions written and not yet run. Each is stated in full, with the decision it serves and what would change the answer, in the linked question file. When a study runs, it gets a folder, a card and a row above, and its entry here is removed. Sending a question to an outside provider needs the owner's approval of the exact rendered text (Phrona skill).
+
+| Id | Question in one sentence | Decision it serves | Where written |
+|---|---|---|---|
+| Q1 | What a single-user app may do through the official X, Threads and Bluesky APIs as of late 2026, and at what cost. | Slice 5 channels and the platform-rules values. | [q1-x-threads-bluesky.md](2026-10-30-social-api-research-questions/questions/q1-x-threads-bluesky.md) |
+| Q2 | How a solo founder's local Rust app publishes to LinkedIn (personal, company page, PDF document carousels, analytics) through the official API. | Slice 2, the first platform integration. | [q2-linkedin.md](2026-10-30-social-api-research-questions/questions/q2-linkedin.md) |
+| Q3 | What Facebook Pages and Instagram allow a single-user app through Meta's APIs, including carousels and review. | Slice 5 and the Instagram carousel in slice 3. | [q3-meta-facebook-instagram.md](2026-10-30-social-api-research-questions/questions/q3-meta-facebook-instagram.md) |
+| Q4 | What YouTube, including Shorts, allows a single-user app: verification, quota, upload privacy, scheduling. | The video slice, after slice 5. | [q4-youtube.md](2026-10-30-social-api-research-questions/questions/q4-youtube.md) |
+| Q5 | Whether TikTok, Reddit or Mastodon belong in "all the social media" for this founder. | The scope of slice 5. | [q5-tiktok-reddit-mastodon-scope.md](2026-10-30-social-api-research-questions/questions/q5-tiktok-reddit-mastodon-scope.md) |
+| Q6 | What reading of social platforms for content research the official APIs allow, and what stays out. | Research Radar and intake slices; vision 3.3. | [q6-reading-platforms-for-research.md](2026-10-30-social-api-research-questions/questions/q6-reading-platforms-for-research.md) |
+| Q7 | How syncloom.v2 renders 1080x1350 images and multi-page PDF carousels in Rust (Chromium over CDP, Typst or resvg). | Slice 3, visual assets (the plan's Q-RENDER). | [q7-render-images-carousels-rust.md](2026-10-30-social-api-research-questions/questions/q7-render-images-carousels-rust.md) |
+| Q8 | How a local-first single-user app stores platform credentials, runs OAuth without a server and schedules posts. | Slice 2 dispatch and the credentials design before any live post. | [q8-local-first-auth-and-scheduling.md](2026-10-30-social-api-research-questions/questions/q8-local-first-auth-and-scheduling.md) |
+| Q-UI | Which Rust approach implements the browser review studio (server-rendered templates, Leptos or Dioxus web). | Slice 4, the review screen (D1). | [rust-plan report, section 5](2026-10-29-rust-plan/report.md) |
+| Q-ACCESS | How the phone reaches previews and approval safely (overlay network, authenticated tunnel, hosted service or signed read-only links). | The phone path of vision 4.2. | [rust-plan report, section 5](2026-10-29-rust-plan/report.md) |

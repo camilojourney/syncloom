@@ -1,0 +1,2 @@
+# Imported reports are kept byte for byte, so whitespace style is not checked in them.
+docs/research/** -whitespace
