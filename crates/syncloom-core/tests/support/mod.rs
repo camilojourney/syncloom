@@ -8,6 +8,7 @@ use syncloom_core::{FixedClock, ModelProvider, Settings, Store, Studio};
 use tempfile::TempDir;
 use time::macros::datetime;
 
+#[allow(unused_imports)]
 pub use scripted::{Reply, Scripted, text};
 
 /// 2026-10-30T18:00:00Z, the fixed instant of every test.
@@ -35,8 +36,10 @@ pub fn fast() -> Settings {
 
 /// A thought with a canary word that must never reach logs or events.
 pub const CANARY: &str = "zebrafish";
-pub const THOUGHT: &str = "  Agents write better when the  spec names one owner per rule; zebrafish.  ";
-pub const NORMALIZED: &str = "Agents write better when the spec names one owner per rule; zebrafish.";
+pub const THOUGHT: &str =
+    "  Agents write better when the  spec names one owner per rule; zebrafish.  ";
+pub const NORMALIZED: &str =
+    "Agents write better when the spec names one owner per rule; zebrafish.";
 
 pub fn events(dir: &TempDir) -> Vec<serde_json::Value> {
     let path = dir.path().join("provenance").join("events.jsonl");

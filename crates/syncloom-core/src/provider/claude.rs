@@ -1,9 +1,29 @@
 //! Claude over the Messages API (`POST {base}/v1/messages`), raw HTTPS.
+//!
+//! Read for this adapter: the Anthropic Messages API reference (headers `x-api-key` and
+//! `anthropic-version`; body `model`, `max_tokens`, `system`, `messages`; response `content`
+//! blocks and `usage`). The real endpoint has not been called from this repository yet.
 use super::{Draft, DraftFuture, DraftRequest, ModelProvider, ProviderError};
+use crate::config::usable_key;
+use crate::provenance::Usage;
+use reqwest::StatusCode;
+use std::time::Duration;
 
 /// The pinned Claude Sonnet model id (decision D4). UNVERIFIED until the live check runs.
 pub const DEFAULT_MODEL: &str = "claude-sonnet-5-5";
 pub const DEFAULT_PROVIDER_BASE: &str = "https://api.anthropic.com";
+const API_VERSION: &str = "2023-06-01";
+/// Enough for a 3000-character LinkedIn post with room to spare; the fit check flags overruns.
+const MAX_TOKENS: u32 = 1200;
+/// Largest provider answer read. A draft is far smaller.
+const MAX_ANSWER_BYTES: usize = 1024 * 1024;
+
+/// Fixed instruction. The thought travels as the user message, never inside this text.
+const SYSTEM_INSTRUCTION: &str = "You write LinkedIn posts for a solo founder from one raw thought they wrote. \
+Write in the founder's own voice: direct, concrete, first person, no hype and no filler. \
+Name only the products, people, numbers and facts the thought names; invent nothing. \
+Plain text, no markdown, no hashtags unless the thought has them, under 2500 characters, ready to post. \
+Return only the post text.";
 
 /// A provider base URL that passed [`provider_base`]: `https`, or `http://127.0.0.1:<port>`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,39 +36,131 @@ impl ProviderBase {
 }
 
 pub fn provider_base(value: Option<&str>) -> Result<ProviderBase, &'static str> {
-    let _ = value;
-    Err("SYNCLOOM_CLAUDE_BASE_URL must be an https URL or http://127.0.0.1:<port>")
+    const REFUSED: &str =
+        "SYNCLOOM_CLAUDE_BASE_URL must be an https URL or http://127.0.0.1:<port>";
+    let url = reqwest::Url::parse(value.unwrap_or(DEFAULT_PROVIDER_BASE)).map_err(|_| REFUSED)?;
+    let plain = url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none();
+    let allowed = match url.scheme() {
+        "https" => url.host_str().is_some(),
+        // `Url::port` is None for the scheme's default port, so `:80` is refused with no port.
+        "http" => url.host_str() == Some("127.0.0.1") && url.port().is_some(),
+        _ => false,
+    };
+    if !plain || !allowed {
+        return Err(REFUSED);
+    }
+    Ok(ProviderBase(url.as_str().trim_end_matches('/').to_owned()))
 }
 
 /// The model id: the environment override when set and not blank, else [`DEFAULT_MODEL`].
 pub fn model_id(value: Option<&str>) -> String {
-    let _ = value;
-    String::new()
+    value
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .unwrap_or(DEFAULT_MODEL)
+        .to_owned()
 }
 
 pub struct ClaudeProvider {
+    client: reqwest::Client,
     key: Option<String>,
-    base: ProviderBase,
+    endpoint: String,
     model: String,
 }
 
 impl ClaudeProvider {
+    /// `key` is the raw environment value; a value that cannot be a key counts as absent.
     pub fn new(key: Option<String>, base: ProviderBase, model: String) -> Self {
-        Self { key, base, model }
+        Self {
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("TLS client configuration is valid"),
+            key: key.as_deref().and_then(usable_key),
+            endpoint: format!("{}/v1/messages", base.as_str()),
+            model,
+        }
+    }
+
+    async fn call(&self, key: &str, request: &DraftRequest) -> Result<Draft, ProviderError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": MAX_TOKENS,
+            "system": SYSTEM_INSTRUCTION,
+            "messages": [{"role": "user", "content": request.thought}],
+        });
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .header("x-api-key", key)
+            .header("anthropic-version", API_VERSION)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| ProviderError::Rejected)?;
+        read_answer(response).await
     }
 }
 
 impl ModelProvider for ClaudeProvider {
     fn draft(&self, request: DraftRequest) -> DraftFuture<'_> {
-        let _ = (request, &self.key, &self.base, &self.model);
-        Box::pin(async { Err(ProviderError::Rejected) })
+        Box::pin(async move {
+            let key = self.key.as_deref().ok_or(ProviderError::Unconfigured)?;
+            self.call(key, &request).await
+        })
     }
 }
 
-#[allow(dead_code)]
-fn unused_draft() -> Draft {
-    Draft {
-        text: String::new(),
-        usage: None,
+/// Map a provider response to a draft. Provider bodies are never kept except the text blocks
+/// and the usage counts.
+async fn read_answer(mut response: reqwest::Response) -> Result<Draft, ProviderError> {
+    match response.status() {
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            return Err(ProviderError::Unconfigured);
+        }
+        status if !status.is_success() => return Err(ProviderError::Rejected),
+        _ => {}
     }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| ProviderError::Rejected)?
+    {
+        if body.len() + chunk.len() > MAX_ANSWER_BYTES {
+            return Err(ProviderError::Rejected);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    #[derive(serde::Deserialize)]
+    struct Block {
+        #[serde(rename = "type")]
+        kind: String,
+        #[serde(default)]
+        text: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        content: Vec<Block>,
+        #[serde(default)]
+        usage: Option<Usage>,
+    }
+    let answer: Answer = serde_json::from_slice(&body).map_err(|_| ProviderError::Rejected)?;
+    let texts: Vec<&str> = answer
+        .content
+        .iter()
+        .filter(|block| block.kind == "text")
+        .map(|block| block.text.as_str())
+        .collect();
+    if texts.is_empty() {
+        return Err(ProviderError::Rejected);
+    }
+    Ok(Draft {
+        text: texts.join("\n"),
+        usage: answer.usage,
+    })
 }

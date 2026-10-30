@@ -1,7 +1,8 @@
 //! The one owner of channel identities, their platforms and text bounds (`platform-rules`).
 use serde::{Deserialize, Serialize};
 
-/// A channel a piece is drafted for. The table of channels is this enum and its methods.
+/// A channel a piece is drafted for. The table of channels is this enum and its methods;
+/// no other module carries a channel name or a limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
@@ -18,8 +19,10 @@ pub struct Bounds {
 impl Channel {
     /// The exact channel name, or `None` for anything not in the table.
     pub fn parse(name: &str) -> Option<Channel> {
-        let _ = name;
-        None
+        match name {
+            "linkedin_text" => Some(Channel::LinkedinText),
+            _ => None,
+        }
     }
     pub fn name(self) -> &'static str {
         match self {
@@ -32,11 +35,12 @@ impl Channel {
             Channel::LinkedinText => "linkedin",
         }
     }
+    /// Retained from the old pipeline for LinkedIn text: 20 to 3000 characters.
     pub fn bounds(self) -> Bounds {
         match self {
             Channel::LinkedinText => Bounds {
-                min_chars: 0,
-                max_chars: 0,
+                min_chars: 20,
+                max_chars: 3000,
             },
         }
     }
@@ -59,12 +63,22 @@ pub struct Fit {
     pub max_chars: usize,
 }
 
+/// `PASS` inside the channel's bounds (inclusive), `REVIEW` outside. Never truncates.
 pub fn fit(channel: Channel, text: &str) -> Fit {
-    let _ = (channel, text);
+    let Bounds {
+        min_chars,
+        max_chars,
+    } = channel.bounds();
+    let char_count = text.chars().count();
+    let verdict = if (min_chars..=max_chars).contains(&char_count) {
+        Verdict::Pass
+    } else {
+        Verdict::Review
+    };
     Fit {
-        verdict: Verdict::Review,
-        char_count: 0,
-        min_chars: 0,
-        max_chars: 0,
+        verdict,
+        char_count,
+        min_chars,
+        max_chars,
     }
 }

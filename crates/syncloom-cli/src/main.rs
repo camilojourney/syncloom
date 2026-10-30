@@ -1,8 +1,20 @@
 //! `syncloom`: the studio from the command line, over the same core as the HTTP API.
+//!
+//! Results print as JSON on stdout with exit 0. A failed command prints the core's
+//! `{"error":{"code","message"}}` on stderr with exit 1. Configuration errors exit 2.
 use clap::{Parser, Subcommand};
+use serde_json::{Value, json};
+use syncloom_core::{
+    PublishRequest, ReviewRequest, Settings, Status, StudioError, ThoughtRequest, build_studio,
+    studio_config,
+};
 
 #[derive(Parser)]
-#[command(name = "syncloom", about = "Syncloom: thought to reviewed content", version)]
+#[command(
+    name = "syncloom",
+    about = "Syncloom: thought to reviewed content",
+    version
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -36,7 +48,77 @@ enum Command {
     },
 }
 
-fn main() {
-    let _cli = Cli::parse();
-    std::process::exit(1);
+fn to_json<T: serde::Serialize>(value: T) -> Value {
+    serde_json::to_value(value).expect("studio results serialize")
+}
+
+async fn run(cli: Cli) -> i32 {
+    let config = match studio_config(|name| std::env::var(name).ok()) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{error}");
+            return 2;
+        }
+    };
+    let studio = match build_studio(config, Settings::default()) {
+        Ok(studio) => studio,
+        Err(error) => return failed(StudioError::from(error)),
+    };
+    let result = match cli.command {
+        Command::Thought { text, channel } => studio
+            .create_thought(ThoughtRequest {
+                text,
+                channels: channel,
+            })
+            .await
+            .map(to_json),
+        Command::Show { piece_id } => studio.show(&piece_id).map(to_json),
+        Command::Approve {
+            piece_id,
+            expected_revision,
+        } => studio
+            .review(
+                &piece_id,
+                ReviewRequest {
+                    status: Some(Status::Approved),
+                    text: None,
+                    expected_revision,
+                },
+            )
+            .map(to_json),
+        Command::Publish {
+            piece_id,
+            expected_revision,
+            dry_run,
+        } => studio
+            .publish(
+                &piece_id,
+                PublishRequest {
+                    expected_revision,
+                    dry_run,
+                },
+            )
+            .map(to_json),
+    };
+    match result {
+        Ok(value) => {
+            println!("{value}");
+            0
+        }
+        Err(error) => failed(error),
+    }
+}
+
+fn failed(error: StudioError) -> i32 {
+    eprintln!(
+        "{}",
+        json!({"error": {"code": error.code(), "message": error.message()}})
+    );
+    1
+}
+
+#[tokio::main]
+async fn main() {
+    let code = run(Cli::parse()).await;
+    std::process::exit(code);
 }

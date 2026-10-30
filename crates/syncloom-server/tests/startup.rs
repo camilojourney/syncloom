@@ -42,10 +42,7 @@ fn binary(dir: &TempDir) -> Command {
 fn the_process_refuses_other_bind_addresses_naming_the_variable() {
     let dir = TempDir::new().unwrap();
     for refused in ["0.0.0.0:8790", "[::1]:8790", "localhost:8790"] {
-        let output = binary(&dir)
-            .env("SYNCLOOM_ADDR", refused)
-            .output()
-            .unwrap();
+        let output = binary(&dir).env("SYNCLOOM_ADDR", refused).output().unwrap();
         assert!(!output.status.success(), "{refused} was accepted");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("SYNCLOOM_ADDR"), "{refused}: {stderr}");
@@ -56,7 +53,12 @@ fn the_process_refuses_other_bind_addresses_naming_the_variable() {
 #[test]
 fn the_process_refuses_a_bad_provider_base_url_naming_the_variable() {
     let dir = TempDir::new().unwrap();
-    for refused in ["http://example.com", "ftp://x", "https://u:p@api.anthropic.com", "https://api.anthropic.com/?q=1"] {
+    for refused in [
+        "http://example.com",
+        "ftp://x",
+        "https://u:p@api.anthropic.com",
+        "https://api.anthropic.com/?q=1",
+    ] {
         let output = binary(&dir)
             .env("SYNCLOOM_ADDR", "127.0.0.1:0")
             .env("SYNCLOOM_CLAUDE_BASE_URL", refused)
@@ -64,7 +66,10 @@ fn the_process_refuses_a_bad_provider_base_url_naming_the_variable() {
             .unwrap();
         assert!(!output.status.success(), "{refused} was accepted");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("SYNCLOOM_CLAUDE_BASE_URL"), "{refused}: {stderr}");
+        assert!(
+            stderr.contains("SYNCLOOM_CLAUDE_BASE_URL"),
+            "{refused}: {stderr}"
+        );
     }
 }
 
@@ -83,7 +88,8 @@ fn the_process_announces_the_bound_address_in_one_json_line() {
         .unwrap();
     child.kill().unwrap();
     child.wait().unwrap();
-    let json: serde_json::Value = serde_json::from_str(&line).unwrap_or_else(|_| panic!("not JSON: {line:?}"));
+    let json: serde_json::Value =
+        serde_json::from_str(&line).unwrap_or_else(|_| panic!("not JSON: {line:?}"));
     assert_eq!(json["message"], "listening");
     let address = json["address"].as_str().unwrap();
     assert!(address.starts_with("127.0.0.1:"), "{address}");

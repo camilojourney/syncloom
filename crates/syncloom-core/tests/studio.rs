@@ -47,7 +47,11 @@ async fn drafted(dir: &TempDir, reply: Reply) -> (Studio, Piece) {
 }
 
 async fn approved(dir: &TempDir) -> (Studio, Piece) {
-    let (studio, piece) = drafted(dir, text("A fine draft about one owner per rule; zebrafish.")).await;
+    let (studio, piece) = drafted(
+        dir,
+        text("A fine draft about one owner per rule; zebrafish."),
+    )
+    .await;
     let piece = studio
         .review(&piece.piece_id, status(Status::Approved, &piece.revision))
         .unwrap();
@@ -55,8 +59,14 @@ async fn approved(dir: &TempDir) -> (Studio, Piece) {
 }
 
 fn nothing_stored(dir: &TempDir) {
-    assert!(support::files(dir, "pieces").is_empty(), "a piece was stored");
-    assert!(support::files(dir, "outbox").is_empty(), "an intent was stored");
+    assert!(
+        support::files(dir, "pieces").is_empty(),
+        "a piece was stored"
+    );
+    assert!(
+        support::files(dir, "outbox").is_empty(),
+        "an intent was stored"
+    );
     assert!(support::events(dir).is_empty(), "an event was appended");
 }
 
@@ -114,7 +124,11 @@ async fn seven_non_space_characters_are_too_short_and_eight_are_enough() {
         .await
         .unwrap_err();
     assert_eq!(error, StudioError::ThoughtTooShort);
-    assert_eq!(provider.requests().len(), 0, "the provider must not be called");
+    assert_eq!(
+        provider.requests().len(),
+        0,
+        "the provider must not be called"
+    );
     nothing_stored(&dir);
     let response = studio.create_thought(thought("a b c d e f g h")).await;
     assert!(response.is_ok(), "{response:?}");
@@ -205,7 +219,14 @@ async fn show_returns_the_created_piece_and_not_found_for_unknown_or_unsafe_ids(
             .unwrap_err(),
         StudioError::PieceNotFound
     );
-    for unsafe_id in ["../x", "a/b", "thought-..-x", "", &"a".repeat(129), "piece id"] {
+    for unsafe_id in [
+        "../x",
+        "a/b",
+        "thought-..-x",
+        "",
+        &"a".repeat(129),
+        "piece id",
+    ] {
         assert_eq!(
             studio.show(unsafe_id).unwrap_err(),
             StudioError::PieceNotFound,
@@ -238,7 +259,10 @@ async fn allowed_transitions_move_the_piece_and_approval_records_the_decision_id
         .unwrap();
     assert_eq!(rejected.status, Status::Rejected);
     let pending = studio
-        .review(&piece.piece_id, status(Status::PendingReview, &piece.revision))
+        .review(
+            &piece.piece_id,
+            status(Status::PendingReview, &piece.revision),
+        )
         .unwrap();
     assert_eq!(pending.status, Status::PendingReview);
 }
@@ -249,7 +273,10 @@ async fn refused_transitions_leave_the_piece_unchanged() {
     let dir = TempDir::new().unwrap();
     let (studio, piece) = approved(&dir).await;
     let error = studio
-        .review(&piece.piece_id, status(Status::PendingReview, &piece.revision))
+        .review(
+            &piece.piece_id,
+            status(Status::PendingReview, &piece.revision),
+        )
         .unwrap_err();
     assert_eq!(error, StudioError::InvalidStatusTransition);
     assert_eq!(studio.show(&piece.piece_id).unwrap(), piece);
@@ -274,11 +301,18 @@ async fn a_stale_revision_is_refused_and_changes_nothing() {
         .unwrap_err();
     assert_eq!(error, StudioError::RevisionConflict);
     let error = studio
-        .review(&piece.piece_id, edit("New text for the piece, long enough.", &stale))
+        .review(
+            &piece.piece_id,
+            edit("New text for the piece, long enough.", &stale),
+        )
         .unwrap_err();
     assert_eq!(error, StudioError::RevisionConflict);
     assert_eq!(studio.show(&piece.piece_id).unwrap(), piece);
-    assert_eq!(support::events(&dir).len(), 1, "refused requests add no event");
+    assert_eq!(
+        support::events(&dir).len(),
+        1,
+        "refused requests add no event"
+    );
 }
 
 // draft-review: Edit creates a revision and voids approval; platform-rules: Fit follows the text
@@ -288,7 +322,10 @@ async fn an_edit_voids_approval_and_recomputes_revision_and_fit() {
     let (studio, piece) = approved(&dir).await;
     let long = "y".repeat(3001);
     let edited = studio
-        .review(&piece.piece_id, edit(&format!("  {long}  "), &piece.revision))
+        .review(
+            &piece.piece_id,
+            edit(&format!("  {long}  "), &piece.revision),
+        )
         .unwrap();
     assert_eq!(edited.text, long);
     assert_ne!(edited.revision, piece.revision);
@@ -380,7 +417,10 @@ async fn a_stale_revision_is_refused_on_publish_and_on_dry_run() {
     assert!(support::files(&dir, "outbox").is_empty());
     assert_eq!(
         studio
-            .publish("thought-000000000000-linkedin_text", publish(&piece.revision, true))
+            .publish(
+                "thought-000000000000-linkedin_text",
+                publish(&piece.revision, true)
+            )
             .unwrap_err(),
         StudioError::PieceNotFound
     );
@@ -399,7 +439,11 @@ async fn a_publish_reserves_one_contained_intent_and_a_repeat_returns_it() {
     let request_id = first.request_id.clone().expect("a request id");
     assert!(request_id.starts_with("dispatch-"));
     assert_eq!(request_id.len(), "dispatch-".len() + 32);
-    assert!(request_id["dispatch-".len()..].chars().all(|c| c.is_ascii_hexdigit()));
+    assert!(
+        request_id["dispatch-".len()..]
+            .chars()
+            .all(|c| c.is_ascii_hexdigit())
+    );
     assert_eq!(first.piece.publish_status.as_deref(), Some("contained"));
     assert_eq!(first.piece.status, Status::Approved);
     assert_eq!(first.payload.content, piece.text);
@@ -447,16 +491,31 @@ async fn every_state_change_appends_one_event_in_order_without_content() {
         .review(&id, status(Status::Approved, &piece.revision))
         .unwrap();
     let edited = studio
-        .review(&id, edit("An edited draft, still about zebrafish.", &approved.revision))
+        .review(
+            &id,
+            edit(
+                "An edited draft, still about zebrafish.",
+                &approved.revision,
+            ),
+        )
         .unwrap();
     let approved_again = studio
         .review(&id, status(Status::Approved, &edited.revision))
         .unwrap();
-    studio.publish(&id, publish(&approved_again.revision, true)).unwrap();
-    studio.publish(&id, publish(&approved_again.revision, false)).unwrap();
-    studio.publish(&id, publish(&approved_again.revision, false)).unwrap();
+    studio
+        .publish(&id, publish(&approved_again.revision, true))
+        .unwrap();
+    studio
+        .publish(&id, publish(&approved_again.revision, false))
+        .unwrap();
+    studio
+        .publish(&id, publish(&approved_again.revision, false))
+        .unwrap();
     let events = support::events(&dir);
-    let kinds: Vec<&str> = events.iter().map(|e| e["event"].as_str().unwrap()).collect();
+    let kinds: Vec<&str> = events
+        .iter()
+        .map(|e| e["event"].as_str().unwrap())
+        .collect();
     assert_eq!(
         kinds,
         [
@@ -472,7 +531,10 @@ async fn every_state_change_appends_one_event_in_order_without_content() {
     assert_eq!(events[2]["revision"], edited.revision);
     assert_eq!(events[2]["status"], "pending_review");
     let raw = std::fs::read_to_string(dir.path().join("provenance").join("events.jsonl")).unwrap();
-    assert!(!raw.contains(CANARY), "thought or draft text leaked into the log");
+    assert!(
+        !raw.contains(CANARY),
+        "thought or draft text leaked into the log"
+    );
 }
 
 // draft-review and dispatch-outbox: Durable across a restart
@@ -512,7 +574,11 @@ async fn a_failed_event_append_is_an_internal_error_and_the_piece_stays() {
     std::fs::set_permissions(&provenance, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(result.unwrap_err(), StudioError::Internal);
     let pieces = support::files(&dir, "pieces");
-    assert_eq!(pieces.len(), 1, "the piece write preceded the failed append");
+    assert_eq!(
+        pieces.len(),
+        1,
+        "the piece write preceded the failed append"
+    );
     let id = pieces[0].trim_end_matches(".json");
     assert_eq!(studio.show(id).unwrap().text, "A draft.");
 }

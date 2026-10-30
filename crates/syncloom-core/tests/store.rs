@@ -4,8 +4,8 @@ mod support;
 use std::time::{Duration, Instant};
 use support::FIXED_AT;
 use syncloom_core::{
-    Channel, DispatchIntent, Event, EventKind, Fit, Payload, Piece, Source, Status, Store,
-    Verdict, outbox,
+    Channel, DispatchIntent, Event, EventKind, Fit, Payload, Piece, Source, Status, Store, Verdict,
+    outbox,
 };
 use tempfile::TempDir;
 
@@ -57,7 +57,11 @@ fn a_piece_survives_reopening_the_store() {
     let dir = TempDir::new().unwrap();
     {
         let store = Store::open(dir.path()).unwrap();
-        store.lock().unwrap().save_piece(&piece("hello world")).unwrap();
+        store
+            .lock()
+            .unwrap()
+            .save_piece(&piece("hello world"))
+            .unwrap();
     }
     let store = Store::open(dir.path()).unwrap();
     let loaded = store
@@ -93,7 +97,11 @@ fn saving_again_replaces_the_record_and_leaves_no_temporary_file() {
 fn a_leftover_temporary_file_is_never_read_as_the_record() {
     let dir = TempDir::new().unwrap();
     let store = Store::open(dir.path()).unwrap();
-    store.lock().unwrap().save_piece(&piece("whole record")).unwrap();
+    store
+        .lock()
+        .unwrap()
+        .save_piece(&piece("whole record"))
+        .unwrap();
     std::fs::write(
         dir.path()
             .join("pieces")
@@ -153,7 +161,10 @@ fn an_intent_survives_reopening_the_store() {
         lock.save_intent(&key, &intent).unwrap();
     }
     let store = Store::open(dir.path()).unwrap();
-    assert_eq!(store.lock().unwrap().load_intent(&key).unwrap(), Some(intent));
+    assert_eq!(
+        store.lock().unwrap().load_intent(&key).unwrap(),
+        Some(intent)
+    );
     assert_eq!(support::files(&dir, "outbox"), vec![format!("{key}.json")]);
 }
 
@@ -184,7 +195,10 @@ fn reopening_and_appending_leaves_earlier_lines_byte_identical() {
     let last: serde_json::Value = serde_json::from_str(after.lines().last().unwrap()).unwrap();
     assert_eq!(last["event"], "intent_reserved");
     assert_eq!(last["schema_version"], "1.0");
-    assert!(last.get("usage").is_none(), "absent usage is omitted, not null");
+    assert!(
+        last.get("usage").is_none(),
+        "absent usage is omitted, not null"
+    );
 }
 
 // store: one exclusive lock across store handles (cross-process safety for CLI plus server)

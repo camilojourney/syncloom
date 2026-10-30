@@ -30,8 +30,17 @@ async fn a_wrong_host_is_refused_on_every_path_without_touching_the_provider() {
         }
     }
     // No Host header at all.
-    let answer = raw(server.addr, &head_with_hosts("GET /v1/health HTTP/1.1", &[], &[])).await;
-    assert_eq!((answer.status, answer.code()), (403, "host_not_allowed"), "{}", answer.raw);
+    let answer = raw(
+        server.addr,
+        &head_with_hosts("GET /v1/health HTTP/1.1", &[], &[]),
+    )
+    .await;
+    assert_eq!(
+        (answer.status, answer.code()),
+        (403, "host_not_allowed"),
+        "{}",
+        answer.raw
+    );
     assert!(provider.requests().is_empty());
     assert!(files(&server.dir, "pieces").is_empty());
 }
@@ -43,10 +52,19 @@ async fn two_host_headers_are_refused_even_when_one_is_right() {
     let right = format!("Host: {}", server.host());
     let answer = raw(
         server.addr,
-        &head_with_hosts("GET /v1/health HTTP/1.1", &[&right, "Host: evil.example"], &[]),
+        &head_with_hosts(
+            "GET /v1/health HTTP/1.1",
+            &[&right, "Host: evil.example"],
+            &[],
+        ),
     )
     .await;
-    assert_eq!((answer.status, answer.code()), (403, "host_not_allowed"), "{}", answer.raw);
+    assert_eq!(
+        (answer.status, answer.code()),
+        (403, "host_not_allowed"),
+        "{}",
+        answer.raw
+    );
 }
 
 // studio-api: No cross-origin access
@@ -135,29 +153,49 @@ async fn a_valid_request_id_is_kept_and_an_invalid_one_is_replaced_by_a_uuid() {
         ),
     )
     .await;
-    assert_eq!(raw_answer.request_id().len(), 36, "non-ASCII id must be replaced");
+    assert_eq!(
+        raw_answer.request_id().len(),
+        36,
+        "non-ASCII id must be replaced"
+    );
 }
 
 // studio-api: Error envelope, Message never echoes the request
 #[tokio::test]
 async fn error_messages_are_fixed_and_never_echo_request_content() {
     let server = start(Scripted::new(Reply::Fail)).await;
-    let canary = "canary-9f1e";
+    // Five non-space characters: alone it is too short, which is one of the failures below.
+    let canary = "c9f1e";
     let cases: Vec<(Answer, &str)> = vec![
         (
             get(&server, &format!("/v1/pieces/{canary}")).await,
             "piece_not_found",
         ),
         (
-            post(&server, "/v1/thoughts", json!({"text": canary, "channels": ["linkedin_text"]})).await,
+            post(
+                &server,
+                "/v1/thoughts",
+                json!({"text": canary, "channels": ["linkedin_text"]}),
+            )
+            .await,
             "thought_too_short",
         ),
         (
-            post(&server, "/v1/thoughts", json!({"text": format!("{canary} and more words"), "channels": [canary]})).await,
+            post(
+                &server,
+                "/v1/thoughts",
+                json!({"text": format!("{canary} and more words"), "channels": [canary]}),
+            )
+            .await,
             "unsupported_channel",
         ),
         (
-            post(&server, "/v1/thoughts", json!({"text": format!("{canary} and more words"), "channels": ["linkedin_text"]})).await,
+            post(
+                &server,
+                "/v1/thoughts",
+                json!({"text": format!("{canary} and more words"), "channels": ["linkedin_text"]}),
+            )
+            .await,
             "provider_error",
         ),
         (get(&server, &format!("/{canary}")).await, "not_found"),
@@ -179,7 +217,10 @@ async fn error_messages_are_fixed_and_never_echo_request_content() {
     for (answer, code) in cases {
         assert_eq!(answer.code(), code, "{}", answer.raw);
         let expected = fixture(&format!("errors/{code}.json"));
-        assert_eq!(answer.body["error"]["message"], expected["body"]["error"]["message"]);
+        assert_eq!(
+            answer.body["error"]["message"],
+            expected["body"]["error"]["message"]
+        );
         assert_eq!(answer.status, expected["status"].as_u64().unwrap() as u16);
         assert!(!answer.raw.contains(canary), "{code}: {}", answer.raw);
         assert_eq!(
@@ -219,7 +260,12 @@ async fn malformed_thought_bodies_are_invalid_requests_without_a_provider_call()
     ];
     for body in bodies {
         let answer = post(&server, "/v1/thoughts", body.clone()).await;
-        assert_eq!((answer.status, answer.code()), (400, "invalid_request"), "{body}: {}", answer.raw);
+        assert_eq!(
+            (answer.status, answer.code()),
+            (400, "invalid_request"),
+            "{body}: {}",
+            answer.raw
+        );
     }
     let answer = answer(
         client()
@@ -243,27 +289,52 @@ async fn a_thought_is_drafted_into_a_pending_piece() {
     let piece = piece_of(&answer);
     let group = answer.body["group_id"].as_str().unwrap();
     assert_eq!(group.len(), 32);
-    assert_eq!(piece["piece_id"], format!("thought-{}-linkedin_text", &group[..12]));
+    assert_eq!(
+        piece["piece_id"],
+        format!("thought-{}-linkedin_text", &group[..12])
+    );
     assert_eq!(piece["group_id"], group);
     assert_eq!(piece["channel"], "linkedin_text");
     assert_eq!(piece["platform"], "linkedin");
     assert_eq!(piece["status"], "pending_review");
     assert_eq!(piece["text"], "A draft about the thought.");
-    assert_eq!(piece["source"], json!({"type": "text", "raw_input": THOUGHT}));
+    assert_eq!(
+        piece["source"],
+        json!({"type": "text", "raw_input": THOUGHT})
+    );
     assert_eq!(piece["review_decision_id"], Value::Null);
     assert_eq!(piece["publish_status"], Value::Null);
-    assert_eq!(piece["fit"], json!({"verdict": "PASS", "char_count": 26, "min_chars": 20, "max_chars": 3000}));
+    assert_eq!(
+        piece["fit"],
+        json!({"verdict": "PASS", "char_count": 26, "min_chars": 20, "max_chars": 3000})
+    );
     assert_eq!(piece["created_at"], "2026-10-30T18:00:00Z");
     assert_eq!(piece["updated_at"], piece["created_at"]);
     assert_eq!(piece["revision"].as_str().unwrap().len(), 64);
-    let keys: Vec<&str> = piece.as_object().unwrap().keys().map(String::as_str).collect();
-    assert_eq!(
-        keys,
-        [
-            "piece_id", "group_id", "channel", "platform", "text", "revision", "status",
-            "review_decision_id", "publish_status", "fit", "source", "created_at", "updated_at"
-        ]
-    );
+    // Parsed JSON sorts keys, so the comparison is on the set of fields, not their order.
+    let keys: Vec<&str> = piece
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let mut expected = vec![
+        "piece_id",
+        "group_id",
+        "channel",
+        "platform",
+        "text",
+        "revision",
+        "status",
+        "review_decision_id",
+        "publish_status",
+        "fit",
+        "source",
+        "created_at",
+        "updated_at",
+    ];
+    expected.sort_unstable();
+    assert_eq!(keys, expected);
 }
 
 // thought-drafting: Thought too short and Unsupported channel (status codes through the API)
@@ -295,7 +366,12 @@ async fn provider_failures_have_their_statuses_and_leave_no_record() {
     for (reply, status, code) in cases {
         let server = start_with(Scripted::new(reply.clone()), fast()).await;
         let answer = create(&server, THOUGHT).await;
-        assert_eq!((answer.status, answer.code()), (status, code), "{reply:?}: {}", answer.raw);
+        assert_eq!(
+            (answer.status, answer.code()),
+            (status, code),
+            "{reply:?}: {}",
+            answer.raw
+        );
         assert!(files(&server.dir, "pieces").is_empty(), "{reply:?}");
         assert!(events(&server.dir).is_empty(), "{reply:?}");
     }
@@ -307,8 +383,16 @@ async fn a_provider_panic_is_an_internal_error_and_the_server_keeps_serving() {
     let provider = Scripted::new(Reply::Panic);
     let server = start(provider.clone()).await;
     let answer = create(&server, THOUGHT).await;
-    assert_eq!((answer.status, answer.code()), (500, "internal_error"), "{}", answer.raw);
-    assert_eq!(answer.body["error"]["message"], fixture("errors/internal_error.json")["body"]["error"]["message"]);
+    assert_eq!(
+        (answer.status, answer.code()),
+        (500, "internal_error"),
+        "{}",
+        answer.raw
+    );
+    assert_eq!(
+        answer.body["error"]["message"],
+        fixture("errors/internal_error.json")["body"]["error"]["message"]
+    );
     provider.set(text("A draft."));
     assert_eq!(create(&server, THOUGHT).await.status, 201);
 }
@@ -335,11 +419,25 @@ async fn review_moves_along_the_table_binds_approval_and_refuses_stale_revisions
     let path = format!("/v1/pieces/{}", id_of(&piece));
     let revision = revision_of(&piece);
 
-    let answer = patch(&server, &path, json!({"status": "draft", "expected_revision": revision})).await;
+    let answer = patch(
+        &server,
+        &path,
+        json!({"status": "draft", "expected_revision": revision}),
+    )
+    .await;
     assert_eq!((answer.status, answer.code()), (400, "invalid_request"));
-    let answer = patch(&server, &path, json!({"status": "approved", "expected_revision": "0".repeat(64)})).await;
+    let answer = patch(
+        &server,
+        &path,
+        json!({"status": "approved", "expected_revision": "0".repeat(64)}),
+    )
+    .await;
     assert_eq!((answer.status, answer.code()), (409, "revision_conflict"));
-    assert_eq!(get(&server, &path).await.body, piece, "a refused request changes nothing");
+    assert_eq!(
+        get(&server, &path).await.body,
+        piece,
+        "a refused request changes nothing"
+    );
 
     let approved = approve(&server, &piece).await;
     assert_eq!(approved.status, 200, "{}", approved.raw);
@@ -349,17 +447,46 @@ async fn review_moves_along_the_table_binds_approval_and_refuses_stale_revisions
         format!("review-{}-{}", id_of(&piece), &revision[..16])
     );
     let again = approve(&server, &piece).await;
-    assert_eq!(again.body, approved.body, "repeating the status changes nothing");
+    assert_eq!(
+        again.body, approved.body,
+        "repeating the status changes nothing"
+    );
 
-    let answer = patch(&server, &path, json!({"status": "pending_review", "expected_revision": revision})).await;
-    assert_eq!((answer.status, answer.code()), (409, "invalid_status_transition"));
+    let answer = patch(
+        &server,
+        &path,
+        json!({"status": "pending_review", "expected_revision": revision}),
+    )
+    .await;
+    assert_eq!(
+        (answer.status, answer.code()),
+        (409, "invalid_status_transition")
+    );
     assert_eq!(get(&server, &path).await.body, approved.body);
 
-    let rejected = patch(&server, &path, json!({"status": "rejected", "expected_revision": revision})).await;
+    let rejected = patch(
+        &server,
+        &path,
+        json!({"status": "rejected", "expected_revision": revision}),
+    )
+    .await;
     assert_eq!(rejected.body["status"], "rejected");
-    let answer = patch(&server, &path, json!({"status": "approved", "expected_revision": revision})).await;
-    assert_eq!((answer.status, answer.code()), (409, "invalid_status_transition"));
-    let pending = patch(&server, &path, json!({"status": "pending_review", "expected_revision": revision})).await;
+    let answer = patch(
+        &server,
+        &path,
+        json!({"status": "approved", "expected_revision": revision}),
+    )
+    .await;
+    assert_eq!(
+        (answer.status, answer.code()),
+        (409, "invalid_status_transition")
+    );
+    let pending = patch(
+        &server,
+        &path,
+        json!({"status": "pending_review", "expected_revision": revision}),
+    )
+    .await;
     assert_eq!(pending.body["status"], "pending_review");
 }
 
@@ -373,7 +500,12 @@ async fn an_edit_voids_approval_and_a_publish_then_needs_a_new_approval() {
     approve(&server, &piece).await;
 
     let long = "y".repeat(3001);
-    let edited = patch(&server, &path, json!({"text": format!(" {long} "), "expected_revision": revision})).await;
+    let edited = patch(
+        &server,
+        &path,
+        json!({"text": format!(" {long} "), "expected_revision": revision}),
+    )
+    .await;
     assert_eq!(edited.status, 200, "{}", edited.raw);
     assert_eq!(edited.body["text"], long);
     assert_ne!(edited.body["revision"], revision);
@@ -399,9 +531,19 @@ async fn an_edit_voids_approval_and_a_publish_then_needs_a_new_approval() {
         json!({"text": "fine"}),
     ] {
         let answer = patch(&server, &path, body.clone()).await;
-        assert_eq!((answer.status, answer.code()), (400, "invalid_request"), "{body}: {}", answer.raw);
+        assert_eq!(
+            (answer.status, answer.code()),
+            (400, "invalid_request"),
+            "{body}: {}",
+            answer.raw
+        );
     }
-    let answer = patch(&server, "/v1/pieces/thought-000000000000-linkedin_text", json!({"status": "approved", "expected_revision": new_revision})).await;
+    let answer = patch(
+        &server,
+        "/v1/pieces/thought-000000000000-linkedin_text",
+        json!({"status": "approved", "expected_revision": new_revision}),
+    )
+    .await;
     assert_eq!((answer.status, answer.code()), (404, "piece_not_found"));
 }
 
@@ -414,23 +556,41 @@ async fn publish_dry_runs_then_reserves_one_contained_intent_and_repeats_it() {
     let path = format!("/v1/pieces/{}/publish", id_of(&piece));
     let revision = revision_of(&piece);
 
-    let dry = post(&server, &path, json!({"expected_revision": revision, "dry_run": true})).await;
+    let dry = post(
+        &server,
+        &path,
+        json!({"expected_revision": revision, "dry_run": true}),
+    )
+    .await;
     assert_eq!(dry.status, 200, "{}", dry.raw);
     assert_eq!(dry.body["status"], "dry_run");
     assert_eq!(dry.body["request_id"], Value::Null);
     assert_eq!(dry.body["created"], false);
-    assert_eq!(dry.body["payload"], json!({"content": "A draft.", "platforms": ["linkedin"], "style": "raw"}));
+    assert_eq!(
+        dry.body["payload"],
+        json!({"content": "A draft.", "platforms": ["linkedin"], "style": "raw"})
+    );
     assert_eq!(dry.body["piece"], piece);
     assert!(files(&server.dir, "outbox").is_empty());
     assert_eq!(events(&server.dir).len(), 1);
 
     let answer = post(&server, &path, json!({"expected_revision": revision})).await;
     assert_eq!((answer.status, answer.code()), (409, "approval_required"));
-    let answer = post(&server, &path, json!({"expected_revision": "0".repeat(64), "dry_run": true})).await;
+    let answer = post(
+        &server,
+        &path,
+        json!({"expected_revision": "0".repeat(64), "dry_run": true}),
+    )
+    .await;
     assert_eq!((answer.status, answer.code()), (409, "revision_conflict"));
     let answer = post(&server, &path, json!({"dry_run": true})).await;
     assert_eq!((answer.status, answer.code()), (400, "invalid_request"));
-    let answer = post(&server, "/v1/pieces/thought-000000000000-linkedin_text/publish", json!({"expected_revision": revision})).await;
+    let answer = post(
+        &server,
+        "/v1/pieces/thought-000000000000-linkedin_text/publish",
+        json!({"expected_revision": revision}),
+    )
+    .await;
     assert_eq!((answer.status, answer.code()), (404, "piece_not_found"));
 
     approve(&server, &piece).await;
@@ -440,13 +600,29 @@ async fn publish_dry_runs_then_reserves_one_contained_intent_and_repeats_it() {
     assert_eq!(first.body["status"], "contained");
     assert_eq!(first.body["created"], true);
     let request_id = first.body["request_id"].as_str().unwrap().to_owned();
-    assert!(request_id.starts_with("dispatch-") && request_id.len() == 41, "{request_id}");
+    assert!(
+        request_id.starts_with("dispatch-") && request_id.len() == 41,
+        "{request_id}"
+    );
     assert_eq!(first.body["piece"]["publish_status"], "contained");
     assert_eq!(first.body["piece"]["status"], "approved");
     assert_eq!(files(&server.dir, "outbox").len(), 1);
-    assert_eq!(provider.requests().len(), calls_before, "publishing makes no outbound call");
-    let keys: Vec<&str> = first.body.as_object().unwrap().keys().map(String::as_str).collect();
-    assert_eq!(keys, ["piece", "status", "request_id", "created", "payload"]);
+    assert_eq!(
+        provider.requests().len(),
+        calls_before,
+        "publishing makes no outbound call"
+    );
+    let keys: Vec<&str> = first
+        .body
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        ["created", "payload", "piece", "request_id", "status"]
+    );
 
     let second = post(&server, &path, json!({"expected_revision": revision})).await;
     assert_eq!(second.body["request_id"], request_id);
@@ -456,6 +632,14 @@ async fn publish_dry_runs_then_reserves_one_contained_intent_and_repeats_it() {
         .iter()
         .map(|e| e["event"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(kinds, ["piece_created", "piece_reviewed", "intent_reserved"]);
-    assert_eq!(get(&server, &format!("/v1/pieces/{}", id_of(&piece))).await.body, first.body["piece"]);
+    assert_eq!(
+        kinds,
+        ["piece_created", "piece_reviewed", "intent_reserved"]
+    );
+    assert_eq!(
+        get(&server, &format!("/v1/pieces/{}", id_of(&piece)))
+            .await
+            .body,
+        first.body["piece"]
+    );
 }

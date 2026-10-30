@@ -65,11 +65,21 @@ async fn produce(code: &str) -> Answer {
         }
         "thought_too_short" => {
             let server = start(Scripted::new(text("x"))).await;
-            with_id(client().post(server.url("/v1/thoughts")).json(&json!({"text": "short", "channels": ["linkedin_text"]}))).await
+            with_id(
+                client()
+                    .post(server.url("/v1/thoughts"))
+                    .json(&json!({"text": "short", "channels": ["linkedin_text"]})),
+            )
+            .await
         }
         "unsupported_channel" => {
             let server = start(Scripted::new(text("x"))).await;
-            with_id(client().post(server.url("/v1/thoughts")).json(&json!({"text": THOUGHT, "channels": ["tiktok_video"]}))).await
+            with_id(
+                client()
+                    .post(server.url("/v1/thoughts"))
+                    .json(&json!({"text": THOUGHT, "channels": ["tiktok_video"]})),
+            )
+            .await
         }
         "invalid_status_transition" | "revision_conflict" | "approval_required" => {
             let server = start(Scripted::new(text("A draft."))).await;
@@ -79,17 +89,39 @@ async fn produce(code: &str) -> Answer {
             match code {
                 "invalid_status_transition" => {
                     approve(&server, &piece).await;
-                    with_id(client().patch(server.url(&path)).json(&json!({"status": "pending_review", "expected_revision": revision}))).await
+                    with_id(
+                        client().patch(server.url(&path)).json(
+                            &json!({"status": "pending_review", "expected_revision": revision}),
+                        ),
+                    )
+                    .await
                 }
                 "revision_conflict" => {
-                    with_id(client().patch(server.url(&path)).json(&json!({"status": "approved", "expected_revision": "0".repeat(64)}))).await
+                    with_id(
+                        client().patch(server.url(&path)).json(
+                            &json!({"status": "approved", "expected_revision": "0".repeat(64)}),
+                        ),
+                    )
+                    .await
                 }
-                _ => with_id(client().post(server.url(&format!("{path}/publish"))).json(&json!({"expected_revision": revision}))).await,
+                _ => {
+                    with_id(
+                        client()
+                            .post(server.url(&format!("{path}/publish")))
+                            .json(&json!({"expected_revision": revision})),
+                    )
+                    .await
+                }
             }
         }
         "internal_error" => {
             let server = start(Scripted::new(Reply::Panic)).await;
-            with_id(client().post(server.url("/v1/thoughts")).json(&json!({"text": THOUGHT, "channels": ["linkedin_text"]}))).await
+            with_id(
+                client()
+                    .post(server.url("/v1/thoughts"))
+                    .json(&json!({"text": THOUGHT, "channels": ["linkedin_text"]})),
+            )
+            .await
         }
         "provider_error" | "provider_timeout" | "provider_not_configured" => {
             let reply = match code {
@@ -98,7 +130,12 @@ async fn produce(code: &str) -> Answer {
                 _ => Reply::Unconfigured,
             };
             let server = start_with(Scripted::new(reply), fast()).await;
-            with_id(client().post(server.url("/v1/thoughts")).json(&json!({"text": THOUGHT, "channels": ["linkedin_text"]}))).await
+            with_id(
+                client()
+                    .post(server.url("/v1/thoughts"))
+                    .json(&json!({"text": THOUGHT, "channels": ["linkedin_text"]})),
+            )
+            .await
         }
         other => panic!("no producer for {other}"),
     }
@@ -120,12 +157,16 @@ async fn every_error_fixture_equals_the_servers_response() {
 
 #[test]
 fn the_error_fixture_directory_holds_exactly_the_documented_codes_with_their_statuses() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/studio-api/errors");
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/studio-api/errors");
     let files: BTreeSet<String> = std::fs::read_dir(&dir)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    let expected: BTreeSet<String> = ERROR_TABLE.iter().map(|(_, code)| format!("{code}.json")).collect();
+    let expected: BTreeSet<String> = ERROR_TABLE
+        .iter()
+        .map(|(_, code)| format!("{code}.json"))
+        .collect();
     assert_eq!(files, expected);
     for (status, code) in ERROR_TABLE {
         let file = fixture(&format!("errors/{code}.json"));
@@ -133,6 +174,9 @@ fn the_error_fixture_directory_holds_exactly_the_documented_codes_with_their_sta
         assert_eq!(file["body"]["error"]["code"], code);
         assert_eq!(file["body"]["error"]["request_id"], FIXTURE_ID);
         let message = file["body"]["error"]["message"].as_str().unwrap();
-        assert!(message.ends_with('.') && !message.is_empty(), "{code}: {message:?}");
+        assert!(
+            message.ends_with('.') && !message.is_empty(),
+            "{code}: {message:?}"
+        );
     }
 }

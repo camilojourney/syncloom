@@ -11,6 +11,7 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[allow(unused_imports)]
 pub use scripted::{Reply, Scripted, text};
 
 pub const FIXTURE_ID: &str = "fixture-request-id";
@@ -105,7 +106,12 @@ pub async fn get(server: &TestServer, path: &str) -> Answer {
     answer(client().get(server.url(path)).send().await.unwrap()).await
 }
 
-pub async fn send_json(server: &TestServer, method: reqwest::Method, path: &str, body: Value) -> Answer {
+pub async fn send_json(
+    server: &TestServer,
+    method: reqwest::Method,
+    path: &str,
+    body: Value,
+) -> Answer {
     answer(
         client()
             .request(method, server.url(path))
@@ -173,13 +179,14 @@ pub async fn raw(addr: SocketAddr, request: &str) -> Answer {
         .unwrap_or(0);
     let mut headers = reqwest::header::HeaderMap::new();
     for line in head.lines().skip(1) {
-        if let Some((name, value)) = line.split_once(':') {
-            if let (Ok(name), Ok(value)) = (
-                reqwest::header::HeaderName::from_bytes(name.trim().as_bytes()),
-                reqwest::header::HeaderValue::from_str(value.trim()),
-            ) {
-                headers.append(name, value);
-            }
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if let (Ok(name), Ok(value)) = (
+            reqwest::header::HeaderName::from_bytes(name.trim().as_bytes()),
+            reqwest::header::HeaderValue::from_str(value.trim()),
+        ) {
+            headers.append(name, value);
         }
     }
     Answer {
@@ -208,8 +215,10 @@ pub fn fixture(name: &str) -> Value {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../contracts/studio-api")
         .join(name);
-    serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}")))
-        .unwrap()
+    serde_json::from_str(
+        &std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}")),
+    )
+    .unwrap()
 }
 
 pub fn events(dir: &TempDir) -> Vec<Value> {

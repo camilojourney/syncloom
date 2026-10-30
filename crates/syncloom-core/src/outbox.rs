@@ -1,5 +1,6 @@
 //! Publish intents: one per piece, revision and operation, contained until a platform
 //! integration exists (`dispatch-outbox`).
+use crate::piece::sha256_json;
 use serde::{Deserialize, Serialize};
 
 pub const OPERATION_PUBLISH: &str = "publish";
@@ -25,14 +26,17 @@ pub struct DispatchIntent {
 }
 
 /// Hex SHA-256 of the compact sorted JSON of `operation`, `piece_id` and `revision`; the
-/// intent's file name.
+/// intent's file name. One key per piece revision and operation is what makes a repeat safe.
 pub fn intent_key(operation: &str, piece_id: &str, revision: &str) -> String {
-    let _ = (operation, piece_id, revision);
-    String::new()
+    sha256_json(&serde_json::json!({
+        "operation": operation,
+        "piece_id": piece_id,
+        "revision": revision,
+    }))
 }
 
 /// `dispatch-` plus the first 32 characters of [`intent_key`].
 pub fn request_id(operation: &str, piece_id: &str, revision: &str) -> String {
-    let _ = (operation, piece_id, revision);
-    String::new()
+    let key = intent_key(operation, piece_id, revision);
+    format!("dispatch-{}", &key[..32])
 }

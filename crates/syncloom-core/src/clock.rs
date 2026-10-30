@@ -25,7 +25,13 @@ impl Clock for FixedClock {
     }
 }
 
+/// Whole seconds, UTC, `Z` suffix. Sub-second precision is dropped so instants compare as
+/// strings and never carry a fractional part.
 pub fn rfc3339(instant: OffsetDateTime) -> String {
-    let _ = instant;
-    String::new()
+    instant
+        .to_offset(time::UtcOffset::UTC)
+        .replace_nanosecond(0)
+        .expect("zero nanoseconds is valid")
+        .format(&Rfc3339)
+        .expect("an RFC 3339 instant always formats")
 }

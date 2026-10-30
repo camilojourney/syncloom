@@ -19,10 +19,12 @@ struct Run {
 
 impl Run {
     fn json(&self) -> Value {
-        serde_json::from_str(&self.stdout).unwrap_or_else(|e| panic!("{e}: stdout {:?} stderr {:?}", self.stdout, self.stderr))
+        serde_json::from_str(&self.stdout)
+            .unwrap_or_else(|e| panic!("{e}: stdout {:?} stderr {:?}", self.stdout, self.stderr))
     }
     fn error(&self) -> Value {
-        serde_json::from_str(&self.stderr).unwrap_or_else(|e| panic!("{e}: stderr {:?}", self.stderr))
+        serde_json::from_str(&self.stderr)
+            .unwrap_or_else(|e| panic!("{e}: stderr {:?}", self.stderr))
     }
 }
 
@@ -50,17 +52,28 @@ fn fixture_message(code: &str) -> String {
         .join("../../contracts/studio-api/errors")
         .join(format!("{code}.json"));
     let file: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    file["body"]["error"]["message"].as_str().unwrap().to_owned()
+    file["body"]["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_owned()
 }
 
+// The fake endpoint lives in this runtime while the CLI process runs; the runtime must keep
+// serving while `Command::output` blocks, so these tests use worker threads.
+
 // studio-cli: The four commands
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn thought_show_approve_and_publish_work_end_to_end() {
     let fake = fake_claude::start(Mode::Ok("A draft from the fake provider.".into())).await;
     let dir = TempDir::new().unwrap();
     let base = fake.base_url();
 
-    let run = syncloom(&dir, &base, Some("sk-fake"), &["thought", "--text", THOUGHT, "--channel", "linkedin_text"]);
+    let run = syncloom(
+        &dir,
+        &base,
+        Some("sk-fake"),
+        &["thought", "--text", THOUGHT, "--channel", "linkedin_text"],
+    );
     assert_eq!(run.status, 0, "{}", run.stderr);
     let created = run.json();
     assert_eq!(created["group_id"].as_str().unwrap().len(), 32);
@@ -76,46 +89,97 @@ async fn thought_show_approve_and_publish_work_end_to_end() {
     assert_eq!(run.status, 0, "{}", run.stderr);
     assert_eq!(run.json(), *piece);
 
-    let run = syncloom(&dir, &base, None, &["approve", id, "--expected-revision", revision]);
+    let run = syncloom(
+        &dir,
+        &base,
+        None,
+        &["approve", id, "--expected-revision", revision],
+    );
     assert_eq!(run.status, 0, "{}", run.stderr);
     assert_eq!(run.json()["status"], "approved");
-    assert_eq!(run.json()["review_decision_id"], format!("review-{id}-{}", &revision[..16]));
+    assert_eq!(
+        run.json()["review_decision_id"],
+        format!("review-{id}-{}", &revision[..16])
+    );
 
-    let run = syncloom(&dir, &base, None, &["publish", id, "--expected-revision", revision, "--dry-run"]);
+    let run = syncloom(
+        &dir,
+        &base,
+        None,
+        &["publish", id, "--expected-revision", revision, "--dry-run"],
+    );
     assert_eq!(run.status, 0, "{}", run.stderr);
     assert_eq!(run.json()["status"], "dry_run");
-    assert_eq!(run.json()["payload"]["content"], "A draft from the fake provider.");
+    assert_eq!(
+        run.json()["payload"]["content"],
+        "A draft from the fake provider."
+    );
 
-    let run = syncloom(&dir, &base, None, &["publish", id, "--expected-revision", revision]);
+    let run = syncloom(
+        &dir,
+        &base,
+        None,
+        &["publish", id, "--expected-revision", revision],
+    );
     assert_eq!(run.status, 0, "{}", run.stderr);
     assert_eq!(run.json()["status"], "contained");
     assert_eq!(run.json()["created"], true);
     let request_id = run.json()["request_id"].as_str().unwrap().to_owned();
     assert!(request_id.starts_with("dispatch-"));
 
-    let run = syncloom(&dir, &base, None, &["publish", id, "--expected-revision", revision]);
+    let run = syncloom(
+        &dir,
+        &base,
+        None,
+        &["publish", id, "--expected-revision", revision],
+    );
     assert_eq!(run.json()["request_id"], request_id);
     assert_eq!(run.json()["created"], false);
-    assert_eq!(fake.requests().len(), 1, "publishing makes no provider call");
+    assert_eq!(
+        fake.requests().len(),
+        1,
+        "publishing makes no provider call"
+    );
 }
 
 // studio-cli: Same errors as the API
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn failures_print_the_api_code_and_message_on_stderr_and_exit_1() {
     let fake = fake_claude::start(Mode::Ok("A draft from the fake provider.".into())).await;
     let dir = TempDir::new().unwrap();
     let base = fake.base_url();
-    let created = syncloom(&dir, &base, Some("sk-fake"), &["thought", "--text", THOUGHT]).json();
+    let created = syncloom(
+        &dir,
+        &base,
+        Some("sk-fake"),
+        &["thought", "--text", THOUGHT],
+    )
+    .json();
     let id = created["pieces"][0]["piece_id"].as_str().unwrap();
     let revision = created["pieces"][0]["revision"].as_str().unwrap();
     let stale = "0".repeat(64);
 
     let cases: Vec<(Vec<&str>, &str)> = vec![
-        (vec!["thought", "--text", "a b c d e f g"], "thought_too_short"),
-        (vec!["show", "thought-000000000000-linkedin_text"], "piece_not_found"),
-        (vec!["approve", id, "--expected-revision", &stale], "revision_conflict"),
-        (vec!["publish", id, "--expected-revision", revision], "approval_required"),
-        (vec!["thought", "--text", THOUGHT, "--channel", "tiktok_video"], "unsupported_channel"),
+        (
+            vec!["thought", "--text", "a b c d e f g"],
+            "thought_too_short",
+        ),
+        (
+            vec!["show", "thought-000000000000-linkedin_text"],
+            "piece_not_found",
+        ),
+        (
+            vec!["approve", id, "--expected-revision", &stale],
+            "revision_conflict",
+        ),
+        (
+            vec!["publish", id, "--expected-revision", revision],
+            "approval_required",
+        ),
+        (
+            vec!["thought", "--text", THOUGHT, "--channel", "tiktok_video"],
+            "unsupported_channel",
+        ),
     ];
     for (args, code) in cases {
         let run = syncloom(&dir, &base, Some("sk-fake"), &args);
@@ -130,17 +194,28 @@ async fn failures_print_the_api_code_and_message_on_stderr_and_exit_1() {
     assert_eq!(run.status, 1);
     assert_eq!(run.error()["error"]["code"], "provider_not_configured");
     fake.set(Mode::Status(500));
-    let run = syncloom(&dir, &base, Some("sk-fake"), &["thought", "--text", THOUGHT]);
+    let run = syncloom(
+        &dir,
+        &base,
+        Some("sk-fake"),
+        &["thought", "--text", THOUGHT],
+    );
     assert_eq!(run.error()["error"]["code"], "provider_error");
     assert!(!run.stderr.contains("sk-fake"));
 }
 
 // studio-cli: Data directory, Shared store with the server
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_piece_created_by_the_cli_is_served_by_the_server_on_the_same_data_dir() {
     let fake = fake_claude::start(Mode::Ok("A draft from the fake provider.".into())).await;
     let dir = TempDir::new().unwrap();
-    let created = syncloom(&dir, &fake.base_url(), Some("sk-fake"), &["thought", "--text", THOUGHT]).json();
+    let created = syncloom(
+        &dir,
+        &fake.base_url(),
+        Some("sk-fake"),
+        &["thought", "--text", THOUGHT],
+    )
+    .json();
     let piece = created["pieces"][0].clone();
 
     let studio = syncloom_core::Studio::new(
@@ -151,12 +226,19 @@ async fn a_piece_created_by_the_cli_is_served_by_the_server_on_the_same_data_dir
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { syncloom_server::serve(listener, Arc::new(studio)).await.unwrap() });
+    tokio::spawn(async move {
+        syncloom_server::serve(listener, Arc::new(studio))
+            .await
+            .unwrap()
+    });
     let response = reqwest::Client::builder()
         .no_proxy()
         .build()
         .unwrap()
-        .get(format!("http://{addr}/v1/pieces/{}", piece["piece_id"].as_str().unwrap()))
+        .get(format!(
+            "http://{addr}/v1/pieces/{}",
+            piece["piece_id"].as_str().unwrap()
+        ))
         .send()
         .await
         .unwrap();
@@ -177,5 +259,8 @@ fn the_data_dir_defaults_to_home_dot_syncloom() {
     assert_eq!(output.status.code(), Some(1));
     let error: Value = serde_json::from_slice(&output.stderr).unwrap();
     assert_eq!(error["error"]["code"], "piece_not_found");
-    assert!(dir.path().join(".syncloom").join("pieces").is_dir(), "the default store was opened under HOME");
+    assert!(
+        dir.path().join(".syncloom").join("pieces").is_dir(),
+        "the default store was opened under HOME"
+    );
 }

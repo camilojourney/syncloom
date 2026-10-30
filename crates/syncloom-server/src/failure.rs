@@ -1,5 +1,7 @@
 //! HTTP failures: the transport's own codes plus the core's error table, each with one status.
-//! Messages come from the core table or are fixed here; none carries request content.
+//! Codes and messages for studio errors come from the core table (one owner); the three
+//! transport codes and every status live here. `contracts/studio-api/errors/` holds the same
+//! values and a test proves they agree.
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -20,15 +22,45 @@ impl From<StudioError> for Failure {
     }
 }
 
+/// One status per core error, in the order of the `StudioError` variants (`StudioError::ALL`).
+const STUDIO_STATUSES: [StatusCode; 11] = [
+    StatusCode::BAD_REQUEST,           // invalid_request
+    StatusCode::UNPROCESSABLE_ENTITY,  // thought_too_short
+    StatusCode::UNPROCESSABLE_ENTITY,  // unsupported_channel
+    StatusCode::NOT_FOUND,             // piece_not_found
+    StatusCode::CONFLICT,              // invalid_status_transition
+    StatusCode::CONFLICT,              // revision_conflict
+    StatusCode::CONFLICT,              // approval_required
+    StatusCode::SERVICE_UNAVAILABLE,   // provider_not_configured
+    StatusCode::BAD_GATEWAY,           // provider_error
+    StatusCode::GATEWAY_TIMEOUT,       // provider_timeout
+    StatusCode::INTERNAL_SERVER_ERROR, // internal_error
+];
+
 impl Failure {
     pub(crate) fn status(self) -> StatusCode {
-        StatusCode::INTERNAL_SERVER_ERROR
+        match self {
+            Failure::HostNotAllowed => StatusCode::FORBIDDEN,
+            Failure::NotFound => StatusCode::NOT_FOUND,
+            Failure::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            Failure::Studio(error) => STUDIO_STATUSES[error as usize],
+        }
     }
     pub(crate) fn code(self) -> &'static str {
-        ""
+        match self {
+            Failure::HostNotAllowed => "host_not_allowed",
+            Failure::NotFound => "not_found",
+            Failure::MethodNotAllowed => "method_not_allowed",
+            Failure::Studio(error) => error.code(),
+        }
     }
     pub(crate) fn message(self) -> &'static str {
-        ""
+        match self {
+            Failure::HostNotAllowed => "Requests must be sent to 127.0.0.1 on the server port.",
+            Failure::NotFound => "The requested endpoint does not exist.",
+            Failure::MethodNotAllowed => "This HTTP method is not supported for this endpoint.",
+            Failure::Studio(error) => error.message(),
+        }
     }
     /// The standard envelope, carrying the final request id.
     pub(crate) fn envelope(self, request_id: &str) -> Response {

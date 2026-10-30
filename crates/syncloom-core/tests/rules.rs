@@ -17,8 +17,17 @@ const REVISION: &str = "b0ca8c02601b2edcb612b47c88494925c5e5f9d92044e91bc510adf4
 fn the_channel_table_knows_linkedin_text_and_nothing_else() {
     let channel = Channel::parse("linkedin_text").expect("linkedin_text is in the table");
     assert_eq!(channel.platform(), "linkedin");
-    assert_eq!((channel.bounds().min_chars, channel.bounds().max_chars), (20, 3000));
-    for unknown in ["linkedin", "LinkedIn_Text", "linkedin_text ", "", "tiktok_video"] {
+    assert_eq!(
+        (channel.bounds().min_chars, channel.bounds().max_chars),
+        (20, 3000)
+    );
+    for unknown in [
+        "linkedin",
+        "LinkedIn_Text",
+        "linkedin_text ",
+        "",
+        "tiktok_video",
+    ] {
         assert_eq!(Channel::parse(unknown), None, "{unknown:?} must be unknown");
     }
 }
@@ -48,8 +57,14 @@ fn fit_counts_unicode_scalar_values_not_bytes() {
 // draft-review: Revision worked example
 #[test]
 fn the_revision_is_the_sha256_of_the_sorted_compact_json() {
-    assert_eq!(revision(Channel::LinkedinText, PIECE, "hello world"), REVISION);
-    assert_ne!(revision(Channel::LinkedinText, PIECE, "hello world!"), REVISION);
+    assert_eq!(
+        revision(Channel::LinkedinText, PIECE, "hello world"),
+        REVISION
+    );
+    assert_ne!(
+        revision(Channel::LinkedinText, PIECE, "hello world!"),
+        REVISION
+    );
 }
 
 // draft-review: Approval bound to a revision
@@ -77,7 +92,10 @@ fn the_request_id_is_dispatch_plus_32_hex_of_the_intent_key() {
         request_id(outbox::OPERATION_PUBLISH, PIECE, REVISION),
         "dispatch-904f4c443cf556d7f34c6c307a86dfe3"
     );
-    assert_eq!(outbox::intent_key(outbox::OPERATION_PUBLISH, PIECE, REVISION).len(), 64);
+    assert_eq!(
+        outbox::intent_key(outbox::OPERATION_PUBLISH, PIECE, REVISION).len(),
+        64
+    );
 }
 
 // draft-review: Status transitions (the retained table, both sides)
@@ -105,7 +123,10 @@ fn status_transitions_follow_the_retained_table() {
 // thought-drafting: Thought normalization
 #[test]
 fn normalization_trims_and_collapses_whitespace() {
-    assert_eq!(normalize_thought("  one\n\n two   three  "), "one two three");
+    assert_eq!(
+        normalize_thought("  one\n\n two   three  "),
+        "one two three"
+    );
     assert_eq!(normalize_thought("\t\n"), "");
 }
 
@@ -130,7 +151,10 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
     let actual: BTreeSet<&str> = StudioError::ALL.iter().map(|e| e.code()).collect();
     assert_eq!(actual, expected);
     for error in StudioError::ALL {
-        assert!(error.message().ends_with('.'), "{error:?} message is a sentence");
+        assert!(
+            error.message().ends_with('.'),
+            "{error:?} message is a sentence"
+        );
     }
     assert_eq!(
         StudioError::ThoughtTooShort.message(),
@@ -174,11 +198,15 @@ fn the_provider_base_is_https_or_loopback_http_with_a_port() {
         "https://api.anthropic.com"
     );
     assert_eq!(
-        provider_base(Some("https://api.anthropic.com/")).unwrap().as_str(),
+        provider_base(Some("https://api.anthropic.com/"))
+            .unwrap()
+            .as_str(),
         "https://api.anthropic.com"
     );
     assert_eq!(
-        provider_base(Some("http://127.0.0.1:4321")).unwrap().as_str(),
+        provider_base(Some("http://127.0.0.1:4321"))
+            .unwrap()
+            .as_str(),
         "http://127.0.0.1:4321"
     );
     for refused in [
@@ -192,7 +220,10 @@ fn the_provider_base_is_https_or_loopback_http_with_a_port() {
         "not a url",
     ] {
         let error = provider_base(Some(refused)).expect_err(refused);
-        assert!(error.contains("SYNCLOOM_CLAUDE_BASE_URL"), "{refused}: {error}");
+        assert!(
+            error.contains("SYNCLOOM_CLAUDE_BASE_URL"),
+            "{refused}: {error}"
+        );
     }
 }
 

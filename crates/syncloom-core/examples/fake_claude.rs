@@ -11,7 +11,10 @@ use clap::Parser;
 struct Args {
     #[arg(long, default_value = "ok")]
     mode: String,
-    #[arg(long, default_value = "A draft from the fake provider about the thought.")]
+    #[arg(
+        long,
+        default_value = "A draft from the fake provider about the thought."
+    )]
     text: String,
 }
 

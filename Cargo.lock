@@ -1172,6 +1172,7 @@ dependencies = [
  "axum",
  "clap",
  "reqwest",
+ "serde",
  "serde_json",
  "syncloom-core",
  "syncloom-server",

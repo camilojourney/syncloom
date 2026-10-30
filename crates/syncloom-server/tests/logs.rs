@@ -27,7 +27,8 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
 #[tokio::test]
 async fn each_request_logs_one_content_free_line() {
     let captured = Captured::default();
-    tracing::subscriber::set_global_default(syncloom_server::log_subscriber(captured.clone())).unwrap();
+    tracing::subscriber::set_global_default(syncloom_server::log_subscriber(captured.clone()))
+        .unwrap();
     let key = "sk-ant-secret-canary";
     let draft = "A draft that repeats zebrafish and nothing else.";
     let server = start(Scripted::new(text(draft))).await;
@@ -75,7 +76,16 @@ async fn each_request_logs_one_content_free_line() {
     assert_eq!(last["error_code"], "not_found");
     assert_eq!(last["route"], "unmatched");
     let routes: Vec<&str> = lines.iter().map(|l| l["route"].as_str().unwrap()).collect();
-    assert_eq!(routes, ["/v1/thoughts", "/v1/pieces/{piece_id}", "/v1/pieces/{piece_id}", "/v1/pieces/{piece_id}/publish", "unmatched"]);
+    assert_eq!(
+        routes,
+        [
+            "/v1/thoughts",
+            "/v1/pieces/{piece_id}",
+            "/v1/pieces/{piece_id}",
+            "/v1/pieces/{piece_id}/publish",
+            "unmatched"
+        ]
+    );
     for secret in [CANARY, draft, key, id_of(&piece).as_str()] {
         assert!(!raw.contains(secret), "{secret:?} reached the log:\n{raw}");
     }
