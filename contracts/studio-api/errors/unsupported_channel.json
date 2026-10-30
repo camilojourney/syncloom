@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "unsupported_channel",
+      "message": "One of the requested channels is not supported.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

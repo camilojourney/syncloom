@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "thought_too_short",
+      "message": "The thought needs at least 8 characters that are not spaces.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "revision_conflict",
+      "message": "The expected revision does not match the piece's current revision.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

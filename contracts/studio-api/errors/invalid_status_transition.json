@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "invalid_status_transition",
+      "message": "The piece cannot move from its current status to the requested one.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 502,
+  "body": {
+    "error": {
+      "code": "provider_error",
+      "message": "The model provider could not return a draft. Try again.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 404,
+  "body": {
+    "error": {
+      "code": "piece_not_found",
+      "message": "No piece exists with this id.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

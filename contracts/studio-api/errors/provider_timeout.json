@@ -1,0 +1,10 @@
+{
+  "status": 504,
+  "body": {
+    "error": {
+      "code": "provider_timeout",
+      "message": "The model provider took too long. Try again.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

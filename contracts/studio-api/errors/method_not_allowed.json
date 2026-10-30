@@ -1,0 +1,10 @@
+{
+  "status": 405,
+  "body": {
+    "error": {
+      "code": "method_not_allowed",
+      "message": "This HTTP method is not supported for this endpoint.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

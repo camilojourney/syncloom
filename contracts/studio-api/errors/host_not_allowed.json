@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "host_not_allowed",
+      "message": "Requests must be sent to 127.0.0.1 on the server port.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

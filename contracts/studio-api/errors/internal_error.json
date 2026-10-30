@@ -1,0 +1,10 @@
+{
+  "status": 500,
+  "body": {
+    "error": {
+      "code": "internal_error",
+      "message": "The studio hit an unexpected error.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

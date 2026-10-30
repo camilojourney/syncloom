@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "approval_required",
+      "message": "The piece must be approved at this revision before it can be published.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}
