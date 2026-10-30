@@ -2,9 +2,10 @@
 //! Expected values come from the specs' worked examples, never from the code's formulas.
 use std::collections::BTreeSet;
 use syncloom_core::{
-    Channel, StudioError, Verdict, clock, data_dir, fit, normalize_thought, outbox, piece_id,
+    AuthFlow, BaseUrl, Channel, IntentStatus, StudioError, Verdict, clock, data_dir,
+    delivery_grant, fit, keychain_service, normalize_thought, outbox, piece_id, post_url,
     provider::{DEFAULT_MODEL, model_id, provider_base},
-    request_id, review_decision_id, revision, usable_key,
+    redirect_url, request_id, review_decision_id, revision, usable_key,
 };
 use syncloom_core::{Status, Status::*};
 use time::macros::datetime;
@@ -144,6 +145,13 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "provider_not_configured",
         "provider_error",
         "provider_timeout",
+        "linkedin_not_configured",
+        "sign_in_in_progress",
+        "sign_in_not_started",
+        "sign_in_denied",
+        "sign_in_state_mismatch",
+        "sign_in_timed_out",
+        "sign_in_rejected",
         "internal_error",
     ]
     .into_iter()
@@ -239,4 +247,144 @@ fn the_data_dir_is_the_variable_or_home_dot_syncloom() {
         std::path::PathBuf::from("/Users/me/.syncloom")
     );
     assert!(data_dir(None, None).is_err());
+}
+
+// linkedin-integration: LinkedIn configuration, Redirect URL rule
+#[test]
+fn the_redirect_url_is_loopback_http_with_a_port_and_a_path() {
+    let default = redirect_url(None).unwrap();
+    assert_eq!(default.as_str(), "http://127.0.0.1:8791/linkedin/callback");
+    assert_eq!(default.bind_addr().to_string(), "127.0.0.1:8791");
+    assert_eq!(default.path(), "/linkedin/callback");
+    let localhost = redirect_url(Some("http://localhost:8791/linkedin/callback")).unwrap();
+    assert_eq!(
+        localhost.as_str(),
+        "http://localhost:8791/linkedin/callback"
+    );
+    assert_eq!(localhost.bind_addr().to_string(), "127.0.0.1:8791");
+    for refused in [
+        "https://127.0.0.1:8791/cb",
+        "http://127.0.0.1/cb",
+        "http://192.168.1.1:8791/cb",
+        "http://127.0.0.1:8791/cb?x=1",
+        "http://127.0.0.1:8791/cb#f",
+        "http://u:p@127.0.0.1:8791/cb",
+        "not a url",
+    ] {
+        let error = redirect_url(Some(refused)).expect_err(refused);
+        assert!(
+            error.contains("SYNCLOOM_LINKEDIN_REDIRECT_URL"),
+            "{refused}: {error}"
+        );
+    }
+}
+
+// linkedin-integration: Flow and base URL rules
+#[test]
+fn the_auth_flow_is_standard_by_default_or_native_pkce() {
+    assert_eq!(AuthFlow::parse(None).unwrap(), AuthFlow::Standard);
+    assert_eq!(AuthFlow::parse(Some("  ")).unwrap(), AuthFlow::Standard);
+    assert_eq!(
+        AuthFlow::parse(Some("standard")).unwrap(),
+        AuthFlow::Standard
+    );
+    assert_eq!(
+        AuthFlow::parse(Some("native_pkce")).unwrap(),
+        AuthFlow::NativePkce
+    );
+    for refused in ["pkce", "Standard", "device_code"] {
+        let error = AuthFlow::parse(Some(refused)).expect_err(refused);
+        assert!(error.contains("SYNCLOOM_LINKEDIN_AUTH_FLOW"), "{error}");
+    }
+}
+
+#[test]
+fn a_base_url_is_https_or_loopback_http_and_names_its_variable_when_refused() {
+    assert_eq!(
+        BaseUrl::parse(
+            "SYNCLOOM_LINKEDIN_API_BASE_URL",
+            None,
+            "https://api.linkedin.com"
+        )
+        .unwrap()
+        .as_str(),
+        "https://api.linkedin.com"
+    );
+    assert_eq!(
+        BaseUrl::parse("X", Some("http://127.0.0.1:4321/"), "https://x")
+            .unwrap()
+            .as_str(),
+        "http://127.0.0.1:4321"
+    );
+    for refused in [
+        "http://localhost:4321",
+        "http://example.com",
+        "https://a:b@x.y",
+        "https://x.y/?q",
+    ] {
+        let error = BaseUrl::parse(
+            "SYNCLOOM_LINKEDIN_AUTH_BASE_URL",
+            Some(refused),
+            "https://x",
+        )
+        .expect_err(refused);
+        assert!(
+            error.contains("SYNCLOOM_LINKEDIN_AUTH_BASE_URL"),
+            "{refused}: {error}"
+        );
+    }
+}
+
+// dispatch-outbox: Delivery grant (the pure rule)
+#[test]
+fn the_delivery_grant_names_known_platforms_or_nothing() {
+    assert!(delivery_grant(None).unwrap().is_empty());
+    assert!(delivery_grant(Some("  ")).unwrap().is_empty());
+    let granted = delivery_grant(Some(" linkedin ")).unwrap();
+    assert_eq!(granted.iter().collect::<Vec<_>>(), ["linkedin"]);
+    for refused in ["linkedin,tiktok", "instagram", "LinkedIn"] {
+        let error = delivery_grant(Some(refused)).expect_err(refused);
+        assert!(error.contains("SYNCLOOM_DELIVERY"), "{refused}: {error}");
+    }
+}
+
+// platform-credentials: the service name
+#[test]
+fn the_keychain_service_defaults_to_syncloom_with_an_override() {
+    assert_eq!(keychain_service(None), "syncloom");
+    assert_eq!(keychain_service(Some(" ")), "syncloom");
+    assert_eq!(keychain_service(Some("syncloom-test-1")), "syncloom-test-1");
+}
+
+// linkedin-integration: Posted with id and URL (the URL rule)
+#[test]
+fn the_post_url_is_the_feed_update_of_the_urn() {
+    assert_eq!(
+        post_url("urn:li:share:7000000000000000001"),
+        "https://www.linkedin.com/feed/update/urn:li:share:7000000000000000001/"
+    );
+}
+
+// dispatch-outbox: which statuses allow a new attempt
+#[test]
+fn only_contained_and_retryable_failures_allow_a_new_attempt() {
+    use IntentStatus::*;
+    for status in [
+        Contained,
+        Refused,
+        ConsentRequired,
+        RateLimited,
+        Unreachable,
+    ] {
+        assert!(status.allows_new_attempt(), "{status:?}");
+    }
+    for status in [Posting, Posted, Unknown] {
+        assert!(!status.allows_new_attempt(), "{status:?}");
+    }
+    assert_eq!(Posted.as_str(), "posted");
+    assert_eq!(ConsentRequired.as_str(), "consent_required");
+    assert_eq!(
+        serde_json::to_string(&RateLimited).unwrap(),
+        "\"rate_limited\""
+    );
 }

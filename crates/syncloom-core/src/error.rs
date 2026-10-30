@@ -14,6 +14,13 @@ pub enum StudioError {
     ProviderNotConfigured,
     ProviderError,
     ProviderTimeout,
+    LinkedinNotConfigured,
+    SignInInProgress,
+    SignInNotStarted,
+    SignInDenied,
+    SignInStateMismatch,
+    SignInTimedOut,
+    SignInRejected,
     Internal,
 }
 
@@ -25,7 +32,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 11] = [
+const ROWS: [Row; 18] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -63,11 +70,39 @@ const ROWS: [Row; 11] = [
         "provider_timeout",
         "The model provider took too long. Try again.",
     ),
+    row(
+        "linkedin_not_configured",
+        "LinkedIn sign-in needs SYNCLOOM_LINKEDIN_CLIENT_ID, SYNCLOOM_LINKEDIN_CLIENT_SECRET and a free port at SYNCLOOM_LINKEDIN_REDIRECT_URL.",
+    ),
+    row(
+        "sign_in_in_progress",
+        "A LinkedIn sign-in is already waiting for the browser. Finish it or wait for it to expire.",
+    ),
+    row(
+        "sign_in_not_started",
+        "No LinkedIn sign-in is waiting. Start one first.",
+    ),
+    row(
+        "sign_in_denied",
+        "LinkedIn did not grant consent for this sign-in.",
+    ),
+    row(
+        "sign_in_state_mismatch",
+        "The sign-in callback did not match the sign-in that was started. Nothing was exchanged.",
+    ),
+    row(
+        "sign_in_timed_out",
+        "The browser did not return in time. Start the sign-in again.",
+    ),
+    row(
+        "sign_in_rejected",
+        "LinkedIn refused to issue a token for this sign-in. Check the app's client id, secret and redirect URL.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 11] = [
+    pub const ALL: [StudioError; 18] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -78,6 +113,13 @@ impl StudioError {
         StudioError::ProviderNotConfigured,
         StudioError::ProviderError,
         StudioError::ProviderTimeout,
+        StudioError::LinkedinNotConfigured,
+        StudioError::SignInInProgress,
+        StudioError::SignInNotStarted,
+        StudioError::SignInDenied,
+        StudioError::SignInStateMismatch,
+        StudioError::SignInTimedOut,
+        StudioError::SignInRejected,
         StudioError::Internal,
     ];
 
@@ -103,6 +145,14 @@ impl std::error::Error for StudioError {}
 impl From<std::io::Error> for StudioError {
     fn from(error: std::io::Error) -> Self {
         tracing::error!(kind = ?error.kind(), "storage_failed");
+        StudioError::Internal
+    }
+}
+
+/// A credential store failure is internal; its kind is logged, never a secret.
+impl From<crate::credentials::StoreError> for StudioError {
+    fn from(error: crate::credentials::StoreError) -> Self {
+        tracing::error!(kind = %error.0, "credential_store_failed");
         StudioError::Internal
     }
 }

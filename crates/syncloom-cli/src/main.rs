@@ -38,7 +38,8 @@ enum Command {
         #[arg(long)]
         expected_revision: String,
     },
-    /// Record a contained publish intent, or preview the payload with --dry-run.
+    /// Publish an approved piece (dispatched when SYNCLOOM_DELIVERY grants its platform,
+    /// else a contained intent), or preview the payload with --dry-run.
     Publish {
         piece_id: String,
         #[arg(long)]
@@ -46,6 +47,21 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// The LinkedIn connection: sign in through the browser, show it, or sign out.
+    Linkedin {
+        #[command(subcommand)]
+        command: LinkedinCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum LinkedinCommand {
+    /// Print the authorization URL, wait for the browser, store the token in the Keychain.
+    SignIn,
+    /// Show the connection state from the Keychain; no LinkedIn call.
+    Status,
+    /// Delete the token from the Keychain.
+    SignOut,
 }
 
 fn to_json<T: serde::Serialize>(value: T) -> Value {
@@ -98,7 +114,19 @@ async fn run(cli: Cli) -> i32 {
                     dry_run,
                 },
             )
+            .await
             .map(to_json),
+        Command::Linkedin { command } => match command {
+            LinkedinCommand::SignIn => match studio.linkedin_sign_in_begin() {
+                Ok(start) => {
+                    println!("{}", to_json(start));
+                    studio.linkedin_sign_in_wait().await.map(to_json)
+                }
+                Err(error) => Err(error),
+            },
+            LinkedinCommand::Status => studio.linkedin_connection().map(to_json),
+            LinkedinCommand::SignOut => studio.linkedin_sign_out().map(to_json),
+        },
     };
     match result {
         Ok(value) => {

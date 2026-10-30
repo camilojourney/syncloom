@@ -23,7 +23,7 @@ impl From<StudioError> for Failure {
 }
 
 /// One status per core error, in the order of the `StudioError` variants (`StudioError::ALL`).
-const STUDIO_STATUSES: [StatusCode; 11] = [
+const STUDIO_STATUSES: [StatusCode; 18] = [
     StatusCode::BAD_REQUEST,           // invalid_request
     StatusCode::UNPROCESSABLE_ENTITY,  // thought_too_short
     StatusCode::UNPROCESSABLE_ENTITY,  // unsupported_channel
@@ -34,6 +34,13 @@ const STUDIO_STATUSES: [StatusCode; 11] = [
     StatusCode::SERVICE_UNAVAILABLE,   // provider_not_configured
     StatusCode::BAD_GATEWAY,           // provider_error
     StatusCode::GATEWAY_TIMEOUT,       // provider_timeout
+    StatusCode::SERVICE_UNAVAILABLE,   // linkedin_not_configured
+    StatusCode::CONFLICT,              // sign_in_in_progress
+    StatusCode::CONFLICT,              // sign_in_not_started
+    StatusCode::FORBIDDEN,             // sign_in_denied
+    StatusCode::FORBIDDEN,             // sign_in_state_mismatch
+    StatusCode::GATEWAY_TIMEOUT,       // sign_in_timed_out
+    StatusCode::BAD_GATEWAY,           // sign_in_rejected
     StatusCode::INTERNAL_SERVER_ERROR, // internal_error
 ];
 

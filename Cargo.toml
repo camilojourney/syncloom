@@ -11,10 +11,14 @@ publish = false
 [workspace.dependencies]
 syncloom-core = { path = "crates/syncloom-core" }
 syncloom-server = { path = "crates/syncloom-server" }
+apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }
 axum = "0.8"
+base64 = "0.22"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
+getrandom = "0.3"
 http-body-util = "0.1"
+keyring-core = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -26,4 +30,5 @@ tower-http = { version = "0.6", default-features = false, features = ["catch-pan
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["json"] }
+url = "2"
 uuid = { version = "1", features = ["v4"] }

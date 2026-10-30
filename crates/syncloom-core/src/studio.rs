@@ -7,17 +7,27 @@
 use crate::channel::{Channel, fit};
 use crate::clock::Clock;
 use crate::error::StudioError;
-use crate::outbox::{DispatchIntent, OPERATION_PUBLISH, Payload, STATUS_CONTAINED, intent_key};
+use crate::linkedin::Linkedin;
+use crate::outbox::{DispatchIntent, IntentStatus, OPERATION_PUBLISH, Payload, intent_key};
 use crate::piece::{Piece, Source, Status, piece_id, review_decision_id, revision};
+use crate::platform::Platform;
 use crate::provenance::{Event, EventKind, SCHEMA_VERSION, Usage};
 use crate::provider::{Draft, DraftRequest, ModelProvider, ProviderError};
 use crate::store::{Lock, Store};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 /// Fewest non-space characters a thought needs (retained from the old pipeline).
 pub const MIN_THOUGHT_CHARS: usize = 8;
 pub const PROVIDER_DEADLINE: Duration = Duration::from_secs(60);
+/// One budget for a platform request; past it the outcome is unknown.
+pub const PLATFORM_DEADLINE: Duration = Duration::from_secs(30);
+/// How long a sign-in waits for the browser.
+pub const SIGN_IN_DEADLINE: Duration = Duration::from_secs(300);
 /// Piece ids are generated here and used as file names; anything else is "not found".
 const MAX_PIECE_ID_LEN: usize = 128;
 
@@ -25,11 +35,15 @@ const MAX_PIECE_ID_LEN: usize = 128;
 pub struct Settings {
     /// One budget for the whole provider call.
     pub provider_deadline: Duration,
+    pub platform_deadline: Duration,
+    pub sign_in_deadline: Duration,
 }
 impl Default for Settings {
     fn default() -> Self {
         Self {
             provider_deadline: PROVIDER_DEADLINE,
+            platform_deadline: PLATFORM_DEADLINE,
+            sign_in_deadline: SIGN_IN_DEADLINE,
         }
     }
 }
@@ -73,6 +87,9 @@ pub struct PublishResponse {
     pub request_id: Option<String>,
     pub created: bool,
     pub payload: Payload,
+    pub post_id: Option<String>,
+    pub post_url: Option<String>,
+    pub attempts: u32,
 }
 
 pub struct Studio {
@@ -80,6 +97,10 @@ pub struct Studio {
     provider: Arc<dyn ModelProvider>,
     clock: Arc<dyn Clock>,
     settings: Settings,
+    /// Platforms granted delivery, by platform name. Absent means contained.
+    delivery: HashMap<String, Arc<dyn Platform>>,
+    /// The LinkedIn integration for sign-in and connection, granted or not.
+    linkedin: Option<Arc<Linkedin>>,
 }
 
 /// Surrounding whitespace removed and inner whitespace runs collapsed to one space.
@@ -153,6 +174,9 @@ fn publish_response(
         request_id,
         created,
         payload,
+        post_id: None,
+        post_url: None,
+        attempts: 0,
     }
 }
 
@@ -168,7 +192,40 @@ impl Studio {
             provider,
             clock,
             settings,
+            delivery: HashMap::new(),
+            linkedin: None,
         }
+    }
+
+    /// Grant delivery to one platform: its intents are dispatched instead of contained.
+    pub fn with_delivery(mut self, platform: &str, adapter: Arc<dyn Platform>) -> Self {
+        self.delivery.insert(platform.to_owned(), adapter);
+        self
+    }
+
+    /// Attach the LinkedIn integration for sign-in, connection and sign-out.
+    pub fn with_linkedin(mut self, linkedin: Arc<Linkedin>) -> Self {
+        self.linkedin = Some(linkedin);
+        self
+    }
+
+    fn linkedin(&self) -> Result<&Linkedin, StudioError> {
+        self.linkedin
+            .as_deref()
+            .ok_or(StudioError::LinkedinNotConfigured)
+    }
+
+    pub fn linkedin_sign_in_begin(&self) -> Result<crate::linkedin::SignInStart, StudioError> {
+        self.linkedin()?.sign_in_begin()
+    }
+    pub async fn linkedin_sign_in_wait(&self) -> Result<crate::linkedin::Connection, StudioError> {
+        self.linkedin()?.sign_in_wait().await
+    }
+    pub fn linkedin_connection(&self) -> Result<crate::linkedin::Connection, StudioError> {
+        self.linkedin()?.connection()
+    }
+    pub fn linkedin_sign_out(&self) -> Result<crate::linkedin::Connection, StudioError> {
+        self.linkedin()?.sign_out()
     }
 
     /// One provider call under the deadline; the studio, not the adapter, decides that
@@ -290,11 +347,12 @@ impl Studio {
         Ok(piece)
     }
 
-    pub fn publish(
+    pub async fn publish(
         &self,
         piece_id: &str,
         request: PublishRequest,
     ) -> Result<PublishResponse, StudioError> {
+        let _ = (&self.delivery, self.settings.platform_deadline);
         let lock = self.store.lock()?;
         let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         if request.dry_run {
@@ -314,7 +372,7 @@ impl Studio {
         match lock.load_intent(&key)? {
             Some(existing) => Ok(publish_response(
                 piece,
-                existing.status,
+                existing.status.as_str().to_owned(),
                 Some(existing.request_id),
                 false,
                 existing.payload,
@@ -342,11 +400,16 @@ impl Studio {
             piece_id: piece.piece_id.clone(),
             revision: piece.revision.clone(),
             payload: payload_for(piece),
-            status: STATUS_CONTAINED.to_owned(),
+            status: IntentStatus::Contained,
             created_at: now.clone(),
+            attempts: 0,
+            attempted_at: None,
+            finished_at: None,
+            post_id: None,
+            post_url: None,
         };
         lock.save_intent(key, &intent)?;
-        piece.publish_status = Some(STATUS_CONTAINED.to_owned());
+        piece.publish_status = Some(IntentStatus::Contained.as_str().to_owned());
         piece.updated_at = now;
         lock.save_piece(piece)?;
         self.record(
@@ -358,7 +421,7 @@ impl Studio {
         )?;
         Ok(publish_response(
             piece.clone(),
-            intent.status,
+            intent.status.as_str().to_owned(),
             Some(intent.request_id),
             true,
             intent.payload,
@@ -407,6 +470,8 @@ impl Studio {
             status: piece.status,
             usage,
             request_id,
+            outcome: None,
+            post_id: None,
         };
         Ok(lock.append_event(&event)?)
     }

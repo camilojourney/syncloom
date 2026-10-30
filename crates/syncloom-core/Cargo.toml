@@ -4,9 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Syncloom's rules: thought intake, drafting through a model provider, platform rules, review, the contained outbox, the provenance log and the file store."
+description = "Syncloom's rules: thought intake, drafting through a model provider, platform rules, review, the dispatch outbox, platform credentials, the LinkedIn integration, the provenance log and the file store."
 
 [dependencies]
+axum.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+keyring-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -16,10 +20,16 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store.workspace = true
+
 [dev-dependencies]
-axum.workspace = true
 clap.workspace = true
 tempfile.workspace = true
+url.workspace = true
 
 [[example]]
 name = "fake_claude"
+
+[[example]]
+name = "fake_linkedin"

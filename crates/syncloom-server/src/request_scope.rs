@@ -93,6 +93,8 @@ fn route_label(path: &str) -> &'static str {
         ["v1", "thoughts"] => "/v1/thoughts",
         ["v1", "pieces", _] => "/v1/pieces/{piece_id}",
         ["v1", "pieces", _, "publish"] => "/v1/pieces/{piece_id}/publish",
+        ["v1", "linkedin", "sign-in"] => "/v1/linkedin/sign-in",
+        ["v1", "linkedin", "connection"] => "/v1/linkedin/connection",
         _ => "unmatched",
     }
 }

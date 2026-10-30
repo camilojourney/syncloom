@@ -4,8 +4,8 @@ mod support;
 use std::time::{Duration, Instant};
 use support::FIXED_AT;
 use syncloom_core::{
-    Channel, DispatchIntent, Event, EventKind, Fit, Payload, Piece, Source, Status, Store, Verdict,
-    outbox,
+    Channel, DispatchIntent, Event, EventKind, Fit, IntentStatus, Payload, Piece, Source, Status,
+    Store, Verdict, outbox,
 };
 use tempfile::TempDir;
 
@@ -48,6 +48,8 @@ fn event(kind: EventKind) -> Event {
         status: Status::PendingReview,
         usage: None,
         request_id: None,
+        outcome: None,
+        post_id: None,
     }
 }
 
@@ -164,8 +166,13 @@ fn an_intent_survives_reopening_the_store() {
             platforms: vec!["linkedin".into()],
             style: "raw".into(),
         },
-        status: "contained".into(),
+        status: IntentStatus::Contained,
         created_at: FIXED_AT.into(),
+        attempts: 0,
+        attempted_at: None,
+        finished_at: None,
+        post_id: None,
+        post_url: None,
     };
     {
         let store = Store::open(dir.path()).unwrap();

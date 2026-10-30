@@ -13,6 +13,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
+use serde_json::json;
 use std::sync::Arc;
 use syncloom_core::{
     PublishRequest, ReviewRequest, Studio, StudioError, ThoughtRequest, ThoughtResponse,
@@ -39,6 +40,14 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         .route("/v1/thoughts", post(create_thought))
         .route("/v1/pieces/{piece_id}", get(show_piece).patch(review_piece))
         .route("/v1/pieces/{piece_id}/publish", post(publish_piece))
+        .route(
+            "/v1/linkedin/sign-in",
+            post(linkedin_sign_in_begin).get(linkedin_sign_in_wait),
+        )
+        .route(
+            "/v1/linkedin/connection",
+            get(linkedin_connection).delete(linkedin_sign_out),
+        )
         .fallback(|| async { Failure::NotFound })
         .method_not_allowed_fallback(|| async { Failure::MethodNotAllowed })
         .layer(CatchPanicLayer::custom(|_| request_scope::internal_error()))
@@ -67,7 +76,7 @@ async fn host_check(
 }
 
 async fn health() -> impl IntoResponse {
-    axum::Json(serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
+    axum::Json(json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
 }
 
 /// A JSON body that must be exactly the documented object (unknown fields are refused by the
@@ -139,6 +148,26 @@ async fn publish_piece(
     path: Result<Path<String>, PathRejection>,
     Strict(request): Strict<PublishRequest>,
 ) -> Result<Response, Failure> {
-    let response = state.studio.publish(&piece_id(path)?, request)?;
+    let response = state.studio.publish(&piece_id(path)?, request).await?;
     Ok(axum::Json(response).into_response())
+}
+
+async fn linkedin_sign_in_begin(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    let start = state.studio.linkedin_sign_in_begin()?;
+    Ok((StatusCode::ACCEPTED, axum::Json(start)).into_response())
+}
+
+async fn linkedin_sign_in_wait(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    let connection = state.studio.linkedin_sign_in_wait().await?;
+    Ok(axum::Json(connection).into_response())
+}
+
+async fn linkedin_connection(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    let connection = state.studio.linkedin_connection()?;
+    Ok(axum::Json(connection).into_response())
+}
+
+async fn linkedin_sign_out(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    let connection = state.studio.linkedin_sign_out()?;
+    Ok(axum::Json(connection).into_response())
 }

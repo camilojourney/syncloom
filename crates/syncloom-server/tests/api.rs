@@ -622,8 +622,20 @@ async fn publish_dry_runs_then_reserves_one_contained_intent_and_repeats_it() {
         .collect();
     assert_eq!(
         keys,
-        ["created", "payload", "piece", "request_id", "status"]
+        [
+            "attempts",
+            "created",
+            "payload",
+            "piece",
+            "post_id",
+            "post_url",
+            "request_id",
+            "status"
+        ]
     );
+    assert_eq!(first.body["post_id"], Value::Null);
+    assert_eq!(first.body["post_url"], Value::Null);
+    assert_eq!(first.body["attempts"], 0);
 
     let second = post(&server, &path, json!({"expected_revision": revision})).await;
     assert_eq!(second.body["request_id"], request_id);

@@ -3,6 +3,8 @@
 mod support;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
+use support::fake_linkedin::{AuthMode, PostMode, TokenMode};
+use support::memory_store::MemoryStore;
 use support::scripted::{Scripted, text};
 use support::*;
 
@@ -32,7 +34,32 @@ async fn each_request_logs_one_content_free_line() {
         .unwrap();
     let key = "sk-ant-secret-canary";
     let draft = "A draft that repeats zebrafish and nothing else.";
-    let server = start(Scripted::new(text(draft))).await;
+    let fake = fake_linkedin::start(
+        AuthMode::Consent,
+        TokenMode::ok(),
+        PostMode::Posted("urn:li:share:7000000000000000001".to_owned()),
+    )
+    .await;
+    let server = start_linkedin(
+        Scripted::new(text(draft)),
+        fast(),
+        &fake,
+        MemoryStore::new(),
+        true,
+        true,
+    )
+    .await;
+    let started = post_empty(&server, "/v1/linkedin/sign-in").await;
+    assert_eq!(started.status, 202, "{}", started.raw);
+    client()
+        .get(started.body["authorization_url"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap();
+    let signed_in = get(&server, "/v1/linkedin/sign-in").await;
+    assert_eq!(signed_in.status, 200, "{}", signed_in.raw);
+    let connection = get(&server, "/v1/linkedin/connection").await;
+    assert_eq!(connection.body["status"], "signed_in");
     let created = create(&server, THOUGHT).await;
     let piece = piece_of(&created);
     let path = format!("/v1/pieces/{}", id_of(&piece));
@@ -46,6 +73,7 @@ async fn each_request_logs_one_content_free_line() {
     )
     .await;
     assert_eq!(published.status, 200, "{}", published.raw);
+    assert_eq!(published.body["status"], "posted", "{}", published.raw);
     let failed = answer(
         client()
             .get(server.url("/missing"))
@@ -64,7 +92,7 @@ async fn each_request_logs_one_content_free_line() {
         .filter_map(|line| serde_json::from_str(line).ok())
         .filter(|line: &serde_json::Value| line["message"] == "request_finished")
         .collect();
-    assert_eq!(lines.len(), 5, "one line per request:\n{raw}");
+    assert_eq!(lines.len(), 8, "one line per request:\n{raw}");
     for line in &lines {
         for field in ["request_id", "route", "status", "total_ms", "outcome"] {
             assert!(line.get(field).is_some(), "missing {field} in {line}");
@@ -80,6 +108,9 @@ async fn each_request_logs_one_content_free_line() {
     assert_eq!(
         routes,
         [
+            "/v1/linkedin/sign-in",
+            "/v1/linkedin/sign-in",
+            "/v1/linkedin/connection",
             "/v1/thoughts",
             "/v1/pieces/{piece_id}",
             "/v1/pieces/{piece_id}",
@@ -87,7 +118,16 @@ async fn each_request_logs_one_content_free_line() {
             "unmatched"
         ]
     );
-    for secret in [CANARY, draft, key, id_of(&piece).as_str()] {
+    for secret in [
+        CANARY,
+        draft,
+        key,
+        id_of(&piece).as_str(),
+        fake_linkedin::DEFAULT_TOKEN,
+        CLIENT_SECRET_CANARY,
+        "fake-code-",
+        "urn:li:person:",
+    ] {
         assert!(!raw.contains(secret), "{secret:?} reached the log:\n{raw}");
     }
 }

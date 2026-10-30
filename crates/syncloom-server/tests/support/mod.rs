@@ -1,13 +1,21 @@
 //! Shared support for the server tests: a server over the scripted provider in a temporary
 //! directory, raw socket requests for Host header control, and body helpers.
 #![allow(dead_code)]
+#[path = "../../../syncloom-core/tests/support/fake_linkedin.rs"]
+pub mod fake_linkedin;
+#[path = "../../../syncloom-core/tests/support/memory_store.rs"]
+pub mod memory_store;
 #[path = "../../../syncloom-core/tests/support/scripted.rs"]
 pub mod scripted;
 
+use memory_store::MemoryStore;
 use scripted::Scripted;
 use serde_json::{Value, json};
 use std::{net::SocketAddr, sync::Arc};
-use syncloom_core::{FixedClock, Settings, Store, Studio};
+use syncloom_core::{
+    AuthFlow, BaseUrl, FixedClock, Linkedin, LinkedinConfig, Secret, Settings, Store, Studio,
+    Token, redirect_url,
+};
 use tempfile::TempDir;
 use time::macros::datetime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -33,17 +41,91 @@ impl TestServer {
 pub fn fast() -> Settings {
     Settings {
         provider_deadline: std::time::Duration::from_millis(200),
+        platform_deadline: std::time::Duration::from_millis(200),
+        sign_in_deadline: std::time::Duration::from_millis(300),
     }
 }
 
+pub const CLIENT_SECRET_CANARY: &str = "client-secret-axolotl";
+
+pub fn fixed_clock() -> Arc<FixedClock> {
+    Arc::new(FixedClock(datetime!(2026-10-30 18:00:00 UTC)))
+}
+
+pub fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+/// A token as a completed sign-in would have stored it.
+pub fn stored_token(expires_at: &str) -> Token {
+    Token {
+        access_token: Secret::new(fake_linkedin::DEFAULT_TOKEN),
+        expires_at: expires_at.to_owned(),
+        member_id: fake_linkedin::MEMBER_ID.to_owned(),
+        scope: "openid,profile,w_member_social".to_owned(),
+        obtained_at: "2026-10-30T18:00:00Z".to_owned(),
+    }
+}
+
+/// A server whose studio has the LinkedIn integration over the fake, with app credentials when
+/// `configured` and delivery granted when `granted`.
+pub async fn start_linkedin(
+    provider: Arc<Scripted>,
+    settings: Settings,
+    fake: &fake_linkedin::FakeLinkedin,
+    store: Arc<MemoryStore>,
+    configured: bool,
+    granted: bool,
+) -> TestServer {
+    let config = LinkedinConfig {
+        client_id: configured.then(|| "fake-client-id".to_owned()),
+        client_secret: configured.then(|| Secret::new(CLIENT_SECRET_CANARY)),
+        redirect: redirect_url(Some(&format!(
+            "http://127.0.0.1:{}/linkedin/callback",
+            free_port()
+        )))
+        .unwrap(),
+        auth_base: BaseUrl::parse("A", Some(&fake.base_url()), "").unwrap(),
+        api_base: BaseUrl::parse("B", Some(&fake.base_url()), "").unwrap(),
+        flow: AuthFlow::Standard,
+    };
+    let linkedin = Arc::new(Linkedin::new(
+        config,
+        store,
+        fixed_clock(),
+        settings.sign_in_deadline,
+    ));
+    start_studio(provider, settings, |studio| {
+        let studio = studio.with_linkedin(linkedin.clone());
+        if granted {
+            studio.with_delivery("linkedin", linkedin.clone())
+        } else {
+            studio
+        }
+    })
+    .await
+}
+
 pub async fn start_with(provider: Arc<Scripted>, settings: Settings) -> TestServer {
+    start_studio(provider, settings, |studio| studio).await
+}
+
+async fn start_studio(
+    provider: Arc<Scripted>,
+    settings: Settings,
+    shape: impl FnOnce(Studio) -> Studio,
+) -> TestServer {
     let dir = TempDir::new().unwrap();
-    let studio = Studio::new(
+    let studio = shape(Studio::new(
         Store::open(dir.path()).unwrap(),
         provider,
-        Arc::new(FixedClock(datetime!(2026-10-30 18:00:00 UTC))),
+        fixed_clock(),
         settings,
-    );
+    ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -110,19 +192,22 @@ pub async fn send_json(
     path: &str,
     body: Value,
 ) -> Answer {
-    answer(
-        client()
-            .request(method, server.url(path))
-            .json(&body)
-            .send()
-            .await
-            .unwrap(),
-    )
-    .await
+    let request = client().request(method, server.url(path));
+    let request = if body.is_null() {
+        request
+    } else {
+        request.json(&body)
+    };
+    answer(request.send().await.unwrap()).await
 }
 
 pub async fn post(server: &TestServer, path: &str, body: Value) -> Answer {
     send_json(server, reqwest::Method::POST, path, body).await
+}
+
+/// A POST with no body, as the sign-in operation takes.
+pub async fn post_empty(server: &TestServer, path: &str) -> Answer {
+    answer(client().post(server.url(path)).send().await.unwrap()).await
 }
 
 pub async fn patch(server: &TestServer, path: &str, body: Value) -> Answer {

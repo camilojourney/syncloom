@@ -342,6 +342,7 @@ async fn an_edit_voids_approval_and_recomputes_revision_and_fit() {
     assert_eq!(edited.fit.char_count, 3001);
     let error = studio
         .publish(&piece.piece_id, publish(&edited.revision, false))
+        .await
         .unwrap_err();
     assert_eq!(error, StudioError::ApprovalRequired);
 }
@@ -377,6 +378,7 @@ async fn a_dry_run_returns_the_payload_and_records_nothing() {
     let (studio, piece) = drafted(&dir, text("A draft.")).await;
     let response = studio
         .publish(&piece.piece_id, publish(&piece.revision, true))
+        .await
         .unwrap();
     assert_eq!(response.status, "dry_run");
     assert_eq!(response.request_id, None);
@@ -397,6 +399,7 @@ async fn publishing_an_unapproved_piece_is_refused_without_an_intent() {
     let (studio, piece) = drafted(&dir, text("A draft.")).await;
     let error = studio
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap_err();
     assert_eq!(error, StudioError::ApprovalRequired);
     studio
@@ -404,6 +407,7 @@ async fn publishing_an_unapproved_piece_is_refused_without_an_intent() {
         .unwrap();
     let error = studio
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap_err();
     assert_eq!(error, StudioError::ApprovalRequired);
     assert!(support::files(&dir, "outbox").is_empty());
@@ -418,6 +422,7 @@ async fn a_stale_revision_is_refused_on_publish_and_on_dry_run() {
     for dry_run in [false, true] {
         let error = studio
             .publish(&piece.piece_id, publish(&stale, dry_run))
+            .await
             .unwrap_err();
         assert_eq!(error, StudioError::RevisionConflict);
     }
@@ -428,6 +433,7 @@ async fn a_stale_revision_is_refused_on_publish_and_on_dry_run() {
                 "thought-000000000000-linkedin_text",
                 publish(&piece.revision, true)
             )
+            .await
             .unwrap_err(),
         StudioError::PieceNotFound
     );
@@ -440,6 +446,7 @@ async fn a_publish_reserves_one_contained_intent_and_a_repeat_returns_it() {
     let (studio, piece) = approved(&dir).await;
     let first = studio
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap();
     assert_eq!(first.status, "contained");
     assert!(first.created);
@@ -463,6 +470,7 @@ async fn a_publish_reserves_one_contained_intent_and_a_repeat_returns_it() {
 
     let second = studio
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap();
     assert_eq!(second.request_id.as_deref(), Some(request_id.as_str()));
     assert!(!second.created);
@@ -511,12 +519,15 @@ async fn every_state_change_appends_one_event_in_order_without_content() {
         .unwrap();
     studio
         .publish(&id, publish(&approved_again.revision, true))
+        .await
         .unwrap();
     studio
         .publish(&id, publish(&approved_again.revision, false))
+        .await
         .unwrap();
     studio
         .publish(&id, publish(&approved_again.revision, false))
+        .await
         .unwrap();
     let events = support::events(&dir);
     let kinds: Vec<&str> = events
@@ -551,6 +562,7 @@ async fn pieces_and_intents_survive_reopening_the_studio() {
     let (first, piece) = approved(&dir).await;
     let published = first
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap();
     drop(first);
     let second = Studio::new(
@@ -562,6 +574,7 @@ async fn pieces_and_intents_survive_reopening_the_studio() {
     assert_eq!(second.show(&piece.piece_id).unwrap(), published.piece);
     let again = second
         .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
         .unwrap();
     assert_eq!(again.request_id, published.request_id);
     assert!(!again.created);
