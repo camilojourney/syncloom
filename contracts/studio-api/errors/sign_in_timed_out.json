@@ -1,0 +1,10 @@
+{
+  "status": 504,
+  "body": {
+    "error": {
+      "code": "sign_in_timed_out",
+      "message": "The browser did not return in time. Start the sign-in again.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

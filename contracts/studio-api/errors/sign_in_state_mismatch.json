@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "sign_in_state_mismatch",
+      "message": "The sign-in callback did not match the sign-in that was started. Nothing was exchanged.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

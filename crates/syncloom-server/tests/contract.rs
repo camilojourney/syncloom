@@ -2,11 +2,13 @@
 mod support;
 use serde_json::json;
 use std::collections::BTreeSet;
+use support::fake_linkedin::{AuthMode, PostMode, TokenMode};
+use support::memory_store::MemoryStore;
 use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 14] = [
+const ERROR_TABLE: [(u16, &str); 21] = [
     (400, "invalid_request"),
     (403, "host_not_allowed"),
     (404, "not_found"),
@@ -15,12 +17,19 @@ const ERROR_TABLE: [(u16, &str); 14] = [
     (409, "invalid_status_transition"),
     (409, "revision_conflict"),
     (409, "approval_required"),
+    (409, "sign_in_in_progress"),
+    (409, "sign_in_not_started"),
+    (403, "sign_in_denied"),
+    (403, "sign_in_state_mismatch"),
     (422, "thought_too_short"),
     (422, "unsupported_channel"),
     (500, "internal_error"),
     (502, "provider_error"),
+    (502, "sign_in_rejected"),
     (503, "provider_not_configured"),
+    (503, "linkedin_not_configured"),
     (504, "provider_timeout"),
+    (504, "sign_in_timed_out"),
 ];
 
 async fn with_id(request: reqwest::RequestBuilder) -> Answer {
@@ -137,6 +146,73 @@ async fn produce(code: &str) -> Answer {
                     .json(&json!({"text": THOUGHT, "channels": ["linkedin_text"]})),
             )
             .await
+        }
+        "linkedin_not_configured" => {
+            let fake =
+                fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), PostMode::NoId).await;
+            let server = start_linkedin(
+                Scripted::new(text("x")),
+                fast(),
+                &fake,
+                MemoryStore::new(),
+                false,
+                false,
+            )
+            .await;
+            with_id(client().post(server.url("/v1/linkedin/sign-in"))).await
+        }
+        "sign_in_not_started" => {
+            let fake =
+                fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), PostMode::NoId).await;
+            let server = start_linkedin(
+                Scripted::new(text("x")),
+                fast(),
+                &fake,
+                MemoryStore::new(),
+                true,
+                false,
+            )
+            .await;
+            with_id(client().get(server.url("/v1/linkedin/sign-in"))).await
+        }
+        "sign_in_in_progress"
+        | "sign_in_timed_out"
+        | "sign_in_denied"
+        | "sign_in_state_mismatch"
+        | "sign_in_rejected" => {
+            let auth = match code {
+                "sign_in_denied" => AuthMode::Deny,
+                "sign_in_state_mismatch" => AuthMode::WrongState,
+                _ => AuthMode::Consent,
+            };
+            let token = if code == "sign_in_rejected" {
+                TokenMode::Status(400)
+            } else {
+                TokenMode::ok()
+            };
+            let fake = fake_linkedin::start(auth, token, PostMode::NoId).await;
+            let server = start_linkedin(
+                Scripted::new(text("x")),
+                fast(),
+                &fake,
+                MemoryStore::new(),
+                true,
+                false,
+            )
+            .await;
+            let started = post_empty(&server, "/v1/linkedin/sign-in").await;
+            assert_eq!(started.status, 202, "{}", started.raw);
+            if code == "sign_in_in_progress" {
+                return with_id(client().post(server.url("/v1/linkedin/sign-in"))).await;
+            }
+            if code != "sign_in_timed_out" {
+                client()
+                    .get(started.body["authorization_url"].as_str().unwrap())
+                    .send()
+                    .await
+                    .unwrap();
+            }
+            with_id(client().get(server.url("/v1/linkedin/sign-in"))).await
         }
         other => panic!("no producer for {other}"),
     }

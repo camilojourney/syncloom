@@ -4,7 +4,7 @@
 //! `anthropic-version`; body `model`, `max_tokens`, `system`, `messages`; response `content`
 //! blocks and `usage`). The real endpoint has not been called from this repository yet.
 use super::{Draft, DraftFuture, DraftRequest, ModelProvider, ProviderError};
-use crate::config::usable_key;
+use crate::config::{BaseUrl, usable_key};
 use crate::provenance::Usage;
 use reqwest::StatusCode;
 use std::time::Duration;
@@ -25,34 +25,11 @@ Name only the products, people, numbers and facts the thought names; invent noth
 Plain text, no markdown, no hashtags unless the thought has them, under 2500 characters, ready to post. \
 Return only the post text.";
 
-/// A provider base URL that passed [`provider_base`]: `https`, or `http://127.0.0.1:<port>`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderBase(String);
-impl ProviderBase {
-    /// The URL without a trailing slash.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+/// A provider base URL that passed [`provider_base`]; the rule is [`BaseUrl`]'s.
+pub type ProviderBase = BaseUrl;
 
-pub fn provider_base(value: Option<&str>) -> Result<ProviderBase, &'static str> {
-    const REFUSED: &str =
-        "SYNCLOOM_CLAUDE_BASE_URL must be an https URL or http://127.0.0.1:<port>";
-    let url = reqwest::Url::parse(value.unwrap_or(DEFAULT_PROVIDER_BASE)).map_err(|_| REFUSED)?;
-    let plain = url.username().is_empty()
-        && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
-    let allowed = match url.scheme() {
-        "https" => url.host_str().is_some(),
-        // `Url::port` is None for the scheme's default port, so `:80` is refused with no port.
-        "http" => url.host_str() == Some("127.0.0.1") && url.port().is_some(),
-        _ => false,
-    };
-    if !plain || !allowed {
-        return Err(REFUSED);
-    }
-    Ok(ProviderBase(url.as_str().trim_end_matches('/').to_owned()))
+pub fn provider_base(value: Option<&str>) -> Result<ProviderBase, String> {
+    BaseUrl::parse(crate::config::BASE_URL_ENV, value, DEFAULT_PROVIDER_BASE)
 }
 
 /// The model id: the environment override when set and not blank, else [`DEFAULT_MODEL`].

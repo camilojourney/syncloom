@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "sign_in_in_progress",
+      "message": "A LinkedIn sign-in is already waiting for the browser. Finish it or wait for it to expire.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 502,
+  "body": {
+    "error": {
+      "code": "sign_in_rejected",
+      "message": "LinkedIn refused to issue a token for this sign-in. Check the app's client id, secret and redirect URL.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

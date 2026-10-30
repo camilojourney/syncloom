@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "sign_in_not_started",
+      "message": "No LinkedIn sign-in is waiting. Start one first.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

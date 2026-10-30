@@ -1,24 +1,67 @@
-//! Configuration shared by the server and the CLI: the data directory and the provider
-//! settings, read from an environment lookup the binaries pass in.
+//! Configuration shared by the server and the CLI: the data directory, the provider settings,
+//! the delivery grant, the Keychain service and the LinkedIn settings, read from an
+//! environment lookup the binaries pass in.
+use crate::channel::Channel;
 use crate::clock::SystemClock;
-use crate::provider::{ClaudeProvider, ProviderBase, model_id, provider_base};
+use crate::credentials::KeychainStore;
+use crate::linkedin::{Linkedin, LinkedinConfig, linkedin_config};
+use crate::provider::{ClaudeProvider, model_id, provider_base};
 use crate::store::Store;
 use crate::studio::{Settings, Studio};
-use std::{io, path::PathBuf, sync::Arc};
+use std::{collections::BTreeSet, io, path::PathBuf, sync::Arc};
 
 pub const DATA_DIR_ENV: &str = "SYNCLOOM_DATA_DIR";
 pub const KEY_ENV: &str = "ANTHROPIC_API_KEY";
 pub const BASE_URL_ENV: &str = "SYNCLOOM_CLAUDE_BASE_URL";
 pub const MODEL_ENV: &str = "SYNCLOOM_CLAUDE_MODEL";
+/// Comma-separated platform names whose intents are dispatched; unset means all contained.
+pub const DELIVERY_ENV: &str = "SYNCLOOM_DELIVERY";
+pub const KEYCHAIN_SERVICE_ENV: &str = "SYNCLOOM_KEYCHAIN_SERVICE";
+pub const DEFAULT_KEYCHAIN_SERVICE: &str = "syncloom";
 const DEFAULT_DATA_DIR_NAME: &str = ".syncloom";
+
+/// A base URL that passed [`BaseUrl::parse`]: `https://<host>` or `http://127.0.0.1:<port>`,
+/// without credentials, query or fragment. The one owner of that rule.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BaseUrl(String);
+
+impl BaseUrl {
+    /// `value` when set, else `default`; the error names `variable`.
+    pub fn parse(variable: &str, value: Option<&str>, default: &str) -> Result<BaseUrl, String> {
+        let refused = || format!("{variable} must be an https URL or http://127.0.0.1:<port>");
+        let url = reqwest::Url::parse(value.unwrap_or(default)).map_err(|_| refused())?;
+        let plain = url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none();
+        let allowed = match url.scheme() {
+            "https" => url.host_str().is_some(),
+            // `Url::port` is None for the scheme's default port, so `:80` is refused with no port.
+            "http" => url.host_str() == Some("127.0.0.1") && url.port().is_some(),
+            _ => false,
+        };
+        if !plain || !allowed {
+            return Err(refused());
+        }
+        Ok(BaseUrl(url.as_str().trim_end_matches('/').to_owned()))
+    }
+    /// The URL without a trailing slash.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct StudioConfig {
     pub data_dir: PathBuf,
     /// The raw key as found; [`usable_key`] decides whether it can be sent.
     pub key: Option<String>,
-    pub base: ProviderBase,
+    pub base: BaseUrl,
     pub model: String,
+    /// Platforms granted delivery; every other platform's intents stay contained.
+    pub delivery: BTreeSet<String>,
+    pub keychain_service: String,
+    pub linkedin: LinkedinConfig,
 }
 
 /// `SYNCLOOM_DATA_DIR` when set and not blank, else `<home>/.syncloom`.
@@ -41,6 +84,38 @@ pub fn usable_key(raw: &str) -> Option<String> {
     (!key.is_empty() && !key.starts_with('#') && visible).then(|| key.to_owned())
 }
 
+/// The platforms named in `SYNCLOOM_DELIVERY`: comma-separated, each a platform of the channel
+/// table. Unset or blank grants nothing.
+pub fn delivery_grant(value: Option<&str>) -> Result<BTreeSet<String>, String> {
+    let mut granted = BTreeSet::new();
+    for name in value
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
+        let known = [Channel::LinkedinText]
+            .iter()
+            .any(|channel| channel.platform() == name);
+        if !known {
+            return Err(format!(
+                "{DELIVERY_ENV} names an unknown platform; known platforms: linkedin"
+            ));
+        }
+        granted.insert(name.to_owned());
+    }
+    Ok(granted)
+}
+
+/// The Keychain service name: the override when set and not blank, else `syncloom`.
+pub fn keychain_service(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or(DEFAULT_KEYCHAIN_SERVICE)
+        .to_owned()
+}
+
 /// Read the shared configuration through `get` (normally `std::env::var`).
 pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfig, String> {
     let data_dir = data_dir(get(DATA_DIR_ENV).as_deref(), get("HOME").as_deref())?;
@@ -50,17 +125,28 @@ pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfi
         key: get(KEY_ENV),
         base,
         model: model_id(get(MODEL_ENV).as_deref()),
+        delivery: delivery_grant(get(DELIVERY_ENV).as_deref())?,
+        keychain_service: keychain_service(get(KEYCHAIN_SERVICE_ENV).as_deref()),
+        linkedin: linkedin_config(&get)?,
     })
 }
 
-/// A studio over the Claude provider and the system clock.
+/// A studio over the Claude provider, the system clock, the Keychain and LinkedIn; LinkedIn
+/// delivers only when the grant names it.
 pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Studio> {
     let store = Store::open(config.data_dir)?;
     let provider = ClaudeProvider::new(config.key, config.base, config.model);
-    Ok(Studio::new(
-        store,
-        Arc::new(provider),
-        Arc::new(SystemClock),
-        settings,
-    ))
+    let clock = Arc::new(SystemClock);
+    let linkedin = Arc::new(Linkedin::new(
+        config.linkedin,
+        Arc::new(KeychainStore::new(config.keychain_service)),
+        clock.clone(),
+        settings.sign_in_deadline,
+    ));
+    let mut studio =
+        Studio::new(store, Arc::new(provider), clock, settings).with_linkedin(linkedin.clone());
+    if config.delivery.contains(crate::linkedin::PLATFORM) {
+        studio = studio.with_delivery(crate::linkedin::PLATFORM, linkedin);
+    }
+    Ok(studio)
 }

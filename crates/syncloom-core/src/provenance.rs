@@ -1,4 +1,4 @@
-//! Provenance events: ids, hashes and statuses, never text (`provenance-log`).
+//! Provenance events: ids, hashes and statuses, never text or secrets (`provenance-log`).
 use crate::channel::Channel;
 use crate::piece::Status;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ pub enum EventKind {
     PieceReviewed,
     PieceEdited,
     IntentReserved,
+    DispatchAttempted,
+    DispatchFinished,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,4 +38,10 @@ pub struct Event {
     pub usage: Option<Usage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    /// The intent status a `dispatch_finished` event recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    /// The platform's post id, only when the outcome is `posted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_id: Option<String>,
 }

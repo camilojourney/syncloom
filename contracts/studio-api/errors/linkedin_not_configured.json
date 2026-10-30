@@ -1,0 +1,10 @@
+{
+  "status": 503,
+  "body": {
+    "error": {
+      "code": "linkedin_not_configured",
+      "message": "LinkedIn sign-in needs SYNCLOOM_LINKEDIN_CLIENT_ID, SYNCLOOM_LINKEDIN_CLIENT_SECRET and a free port at SYNCLOOM_LINKEDIN_REDIRECT_URL.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}
