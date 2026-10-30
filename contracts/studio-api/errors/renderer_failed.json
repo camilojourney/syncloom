@@ -1,0 +1,10 @@
+{
+  "status": 502,
+  "body": {
+    "error": {
+      "code": "renderer_failed",
+      "message": "The renderer failed to produce visual assets.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

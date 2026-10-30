@@ -114,7 +114,7 @@ pub async fn start_with(provider: Arc<Scripted>, settings: Settings) -> TestServ
     start_studio(provider, settings, |studio| studio).await
 }
 
-async fn start_studio(
+pub async fn start_studio(
     provider: Arc<Scripted>,
     settings: Settings,
     shape: impl FnOnce(Studio) -> Studio,
@@ -241,7 +241,8 @@ pub async fn approve(server: &TestServer, piece: &Value) -> Answer {
     patch(
         server,
         &format!("/v1/pieces/{}", id_of(piece)),
-        json!({"status": "approved", "expected_revision": revision_of(piece)}),
+        json!({"status": "approved", "expected_revision": revision_of(piece),
+            "expected_assets": piece.get("assets").map(|a| json!({"image_sha256":a["image_sha256"],"carousel_sha256":a["carousel_sha256"]}))}),
     )
     .await
 }

@@ -50,6 +50,20 @@ pub struct Piece {
     pub source: Source,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visual: Option<crate::visual::VisualContent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assets: Option<crate::visual::Assets>,
+}
+
+impl Piece {
+    /// Every content change or rerender voids approval and the previous visual bytes.
+    pub(crate) fn invalidate_review(&mut self) {
+        self.status = Status::PendingReview;
+        self.review_decision_id = None;
+        self.publish_status = None;
+        self.assets = None;
+    }
 }
 
 /// `thought-<first 12 of group id>-<channel>`, the shape the old queue used.
@@ -66,11 +80,22 @@ pub(crate) fn sha256_json(value: &serde_json::Value) -> String {
 
 /// Lowercase hex SHA-256 of the compact JSON object with sorted keys `channel`, `piece_id`, `text`.
 pub fn revision(channel: Channel, piece_id: &str, text: &str) -> String {
-    sha256_json(&serde_json::json!({
-        "channel": channel.name(),
-        "piece_id": piece_id,
-        "text": text,
-    }))
+    revision_with_visual(channel, piece_id, text, None)
+}
+
+/// One owner of piece revision identity; absent visual content preserves the old encoding.
+pub(crate) fn revision_with_visual(
+    channel: Channel,
+    piece_id: &str,
+    text: &str,
+    visual: Option<&crate::visual::VisualContent>,
+) -> String {
+    let mut value =
+        serde_json::json!({"channel": channel.name(), "piece_id":piece_id, "text":text});
+    if let Some(visual) = visual {
+        value["visual"] = serde_json::to_value(visual).expect("visual content serializes");
+    }
+    sha256_json(&value)
 }
 
 /// `review-<piece id>-<first 16 of revision>`.

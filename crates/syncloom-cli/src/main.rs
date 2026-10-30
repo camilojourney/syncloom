@@ -32,11 +32,15 @@ enum Command {
     },
     /// Show one piece.
     Show { piece_id: String },
-    /// Approve one piece at the revision you reviewed.
+    /// Approve the revision and, for visual pieces, the exact byte hashes you reviewed.
     Approve {
         piece_id: String,
         #[arg(long)]
         expected_revision: String,
+        #[arg(long, requires = "carousel_sha256")]
+        image_sha256: Option<String>,
+        #[arg(long, requires = "image_sha256")]
+        carousel_sha256: Option<String>,
     },
     /// Publish an approved piece (dispatched when SYNCLOOM_DELIVERY grants its platform,
     /// else a contained intent), or preview the payload with --dry-run.
@@ -46,6 +50,22 @@ enum Command {
         expected_revision: String,
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Render revision-bound PNG and PDF assets using the pinned local browser.
+    Render {
+        piece_id: String,
+        #[arg(long)]
+        expected_revision: String,
+        #[arg(long, default_value = "midnight")]
+        template: String,
+        #[arg(long = "slide", required = true)]
+        slides: Vec<String>,
+    },
+    /// Write verified PNG or PDF bytes to stdout (redirect to a local file).
+    View {
+        piece_id: String,
+        #[arg(long, value_parser = ["image", "carousel"])]
+        kind: String,
     },
     /// The LinkedIn connection: sign in through the browser, show it, or sign out.
     Linkedin {
@@ -92,6 +112,8 @@ async fn run(cli: Cli) -> i32 {
         Command::Approve {
             piece_id,
             expected_revision,
+            image_sha256,
+            carousel_sha256,
         } => studio
             .review(
                 &piece_id,
@@ -99,6 +121,12 @@ async fn run(cli: Cli) -> i32 {
                     status: Some(Status::Approved),
                     text: None,
                     expected_revision,
+                    expected_assets: image_sha256.zip(carousel_sha256).map(
+                        |(image_sha256, carousel_sha256)| syncloom_core::AssetHashes {
+                            image_sha256,
+                            carousel_sha256,
+                        },
+                    ),
                 },
             )
             .map(to_json),
@@ -116,6 +144,23 @@ async fn run(cli: Cli) -> i32 {
             )
             .await
             .map(to_json),
+        Command::Render {
+            piece_id,
+            expected_revision,
+            template,
+            slides,
+        } => studio
+            .render(
+                &piece_id,
+                syncloom_core::RenderRequest {
+                    expected_revision,
+                    template,
+                    slides,
+                },
+            )
+            .await
+            .map(to_json),
+        Command::View { piece_id, kind } => return view(&studio, &piece_id, &kind),
         Command::Linkedin { command } => linkedin(&studio, command).await,
     };
     match result {
@@ -138,6 +183,23 @@ async fn linkedin(studio: &Studio, command: LinkedinCommand) -> Result<Value, St
         }
         LinkedinCommand::Status => studio.linkedin_connection().map(to_json),
         LinkedinCommand::SignOut => studio.linkedin_sign_out().map(to_json),
+    }
+}
+
+/// Binary output bypasses the JSON result printer.
+fn view(studio: &Studio, piece_id: &str, kind: &str) -> i32 {
+    use std::io::Write;
+    let kind = if kind == "image" {
+        syncloom_core::AssetKind::Image
+    } else {
+        syncloom_core::AssetKind::Carousel
+    };
+    match studio.view_asset(piece_id, kind) {
+        Ok((bytes, _)) => match std::io::stdout().lock().write_all(&bytes) {
+            Ok(()) => 0,
+            Err(error) => failed(error.into()),
+        },
+        Err(error) => failed(error),
     }
 }
 

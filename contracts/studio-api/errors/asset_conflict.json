@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "asset_conflict",
+      "message": "The expected asset hashes do not match the piece's current rendered assets.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}
