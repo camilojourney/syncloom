@@ -2,6 +2,7 @@
 mod support;
 use serde_json::json;
 use std::collections::BTreeSet;
+use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).

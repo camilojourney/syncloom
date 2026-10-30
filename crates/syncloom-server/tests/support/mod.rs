@@ -4,15 +4,13 @@
 #[path = "../../../syncloom-core/tests/support/scripted.rs"]
 pub mod scripted;
 
+use scripted::Scripted;
 use serde_json::{Value, json};
 use std::{net::SocketAddr, sync::Arc};
 use syncloom_core::{FixedClock, Settings, Store, Studio};
 use tempfile::TempDir;
 use time::macros::datetime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-#[allow(unused_imports)]
-pub use scripted::{Reply, Scripted, text};
 
 pub const FIXTURE_ID: &str = "fixture-request-id";
 pub const CANARY: &str = "zebrafish";

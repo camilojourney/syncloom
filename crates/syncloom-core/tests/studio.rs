@@ -2,7 +2,8 @@
 //! dispatch-outbox and provenance-log requirements, through the same functions the API and
 //! the CLI call.
 mod support;
-use support::{CANARY, FIXED_AT, NORMALIZED, Reply, Scripted, THOUGHT, fast, studio, text};
+use support::scripted::{Reply, Scripted, text};
+use support::{CANARY, FIXED_AT, NORMALIZED, THOUGHT, fast, studio};
 use syncloom_core::{
     Channel, Piece, PublishRequest, ReviewRequest, Settings, Status, Store, Studio, StudioError,
     ThoughtRequest, Verdict,

@@ -3,6 +3,7 @@
 mod support;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
+use support::scripted::{Scripted, text};
 use support::*;
 
 #[derive(Clone, Default)]

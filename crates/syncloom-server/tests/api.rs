@@ -1,6 +1,7 @@
 //! The HTTP boundary (studio-api) and the operations it exposes over the core.
 mod support;
 use serde_json::{Value, json};
+use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 // studio-api: Host check, Rebinding host refused and Every path is guarded

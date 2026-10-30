@@ -256,10 +256,7 @@ impl Studio {
     pub fn review(&self, piece_id: &str, request: ReviewRequest) -> Result<Piece, StudioError> {
         let action = review_action(&request)?;
         let lock = self.store.lock()?;
-        let mut piece = self.load(&lock, piece_id)?;
-        if request.expected_revision != piece.revision {
-            return Err(StudioError::RevisionConflict);
-        }
+        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         let event = match action {
             ReviewAction::Status(next) => {
                 if !piece.status.can_move_to(next) {
@@ -299,10 +296,7 @@ impl Studio {
         request: PublishRequest,
     ) -> Result<PublishResponse, StudioError> {
         let lock = self.store.lock()?;
-        let mut piece = self.load(&lock, piece_id)?;
-        if request.expected_revision != piece.revision {
-            return Err(StudioError::RevisionConflict);
-        }
+        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         if request.dry_run {
             let payload = payload_for(&piece);
             return Ok(publish_response(
@@ -369,6 +363,20 @@ impl Studio {
             true,
             intent.payload,
         ))
+    }
+
+    /// The piece at the revision the caller saw; any other revision is a conflict.
+    fn load_at(
+        &self,
+        lock: &Lock<'_>,
+        piece_id: &str,
+        expected_revision: &str,
+    ) -> Result<Piece, StudioError> {
+        let piece = self.load(lock, piece_id)?;
+        if expected_revision != piece.revision {
+            return Err(StudioError::RevisionConflict);
+        }
+        Ok(piece)
     }
 
     fn load(&self, lock: &Lock<'_>, piece_id: &str) -> Result<Piece, StudioError> {

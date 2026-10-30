@@ -8,9 +8,6 @@ use syncloom_core::{FixedClock, ModelProvider, Settings, Store, Studio};
 use tempfile::TempDir;
 use time::macros::datetime;
 
-#[allow(unused_imports)]
-pub use scripted::{Reply, Scripted, text};
-
 /// 2026-10-30T18:00:00Z, the fixed instant of every test.
 pub fn fixed_clock() -> Arc<FixedClock> {
     Arc::new(FixedClock(datetime!(2026-10-30 18:00:00 UTC)))
