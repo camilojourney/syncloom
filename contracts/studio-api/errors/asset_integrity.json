@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "asset_integrity",
+      "message": "The visual asset bytes do not match their recorded hashes.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

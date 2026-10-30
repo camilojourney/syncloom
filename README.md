@@ -81,6 +81,20 @@ python3 -I scripts/test_check_research_records.py   # the check's own tests
 | `SYNCLOOM_LINKEDIN_AUTH_BASE_URL` | `https://www.linkedin.com` | authorization and token endpoints; `https` or `http://127.0.0.1:<port>` only |
 | `SYNCLOOM_LINKEDIN_API_BASE_URL` | `https://api.linkedin.com` | `userinfo` and Posts endpoints; `https` or `http://127.0.0.1:<port>` only |
 
+## Local images and carousels
+
+[Visual assets](docs/visual-assets.md) documents the pinned local browser/font, operations and failure codes. No browser is downloaded or bundled.
+
+```sh
+cargo run -p syncloom-cli -- render <piece_id> --expected-revision <revision> --template midnight \
+  --slide "Build with evidence." --slide "Review the exact bytes."
+cargo run -p syncloom-cli -- view <piece_id> --kind image > /tmp/piece.png
+cargo run -p syncloom-cli -- view <piece_id> --kind carousel > /tmp/piece.pdf
+cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <rendered_revision>
+```
+
+The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Text/template changes and every rerender clear approval; visual publish stays contained, even with a delivery grant. Uploads wait for the first live text post.
+
 ## Going live with LinkedIn
 
 Nothing in this repository has talked to LinkedIn. No developer app, client id or secret exists on the build machine. The one-time steps are the captain's (vision 3.4):

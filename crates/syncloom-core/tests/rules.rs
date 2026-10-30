@@ -152,6 +152,13 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "sign_in_state_mismatch",
         "sign_in_timed_out",
         "sign_in_rejected",
+        "renderer_missing",
+        "renderer_version_mismatch",
+        "renderer_font_mismatch",
+        "renderer_timeout",
+        "renderer_failed",
+        "assets_required",
+        "asset_integrity",
         "internal_error",
     ]
     .into_iter()

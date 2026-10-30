@@ -114,7 +114,7 @@ pub async fn start_with(provider: Arc<Scripted>, settings: Settings) -> TestServ
     start_studio(provider, settings, |studio| studio).await
 }
 
-async fn start_studio(
+pub async fn start_studio(
     provider: Arc<Scripted>,
     settings: Settings,
     shape: impl FnOnce(Studio) -> Studio,

@@ -21,6 +21,11 @@ pub enum EventKind {
     IntentReserved,
     DispatchAttempted,
     DispatchFinished,
+    VisualConfigured,
+    AssetsRendered,
+    AssetsInvalidated,
+    AssetsViewed,
+    RenderFailed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,4 +49,8 @@ pub struct Event {
     /// The platform's post id, only when the outcome is `posted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carousel_sha256: Option<String>,
 }

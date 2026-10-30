@@ -36,8 +36,14 @@ impl Store {
     /// Open or create the store directories.
     pub fn open(root: impl Into<PathBuf>) -> io::Result<Store> {
         let root = root.into();
-        for sub in [PIECES, OUTBOX, PROVENANCE] {
+        for sub in [PIECES, OUTBOX, PROVENANCE, "assets"] {
             fs::create_dir_all(root.join(sub))?;
+            if fs::symlink_metadata(root.join(sub))?
+                .file_type()
+                .is_symlink()
+            {
+                return Err(io::Error::other("store directory is a symlink"));
+            }
         }
         Ok(Store { root })
     }
@@ -85,6 +91,34 @@ impl Lock<'_> {
     pub fn save_intent(&self, key: &str, intent: &DispatchIntent) -> io::Result<()> {
         write_json(&self.intent_path(key), intent)
     }
+    /// Content-addressed assets share the store lock and atomic-write policy.
+    pub fn save_asset(&self, bytes: &[u8]) -> io::Result<String> {
+        let hash = crate::visual::digest(bytes);
+        atomic_write(&self.store.root.join("assets").join(&hash), bytes)?;
+        Ok(hash)
+    }
+
+    pub fn load_asset(&self, hash: &str) -> Result<Vec<u8>, crate::StudioError> {
+        use crate::StudioError;
+        if hash.len() != 64
+            || !hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(StudioError::AssetIntegrity);
+        }
+        let path = self.store.root.join("assets").join(hash);
+        let meta = fs::symlink_metadata(&path).map_err(|_| StudioError::AssetIntegrity)?;
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            return Err(StudioError::AssetIntegrity);
+        }
+        let bytes = fs::read(path).map_err(|_| StudioError::AssetIntegrity)?;
+        if crate::visual::digest(&bytes) != hash {
+            return Err(StudioError::AssetIntegrity);
+        }
+        Ok(bytes)
+    }
+
     /// Append one event line and flush it to disk. Earlier lines are never touched.
     pub fn append_event(&self, event: &Event) -> io::Result<()> {
         let mut line = serde_json::to_vec(event).map_err(io::Error::other)?;
