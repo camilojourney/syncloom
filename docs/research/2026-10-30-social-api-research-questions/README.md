@@ -20,7 +20,7 @@ Read-only scout by a crewmate agent over the old Social API repository (README, 
 
 ## Status
 
-Open: all eight questions are written and none has run. Each answer gets its own study folder, card and index row when it arrives; the "Pending studies" table of the index lists Q1-Q8.
+Open: all eight questions are written. Q2, Q3, Q7 and Q8 ran through Phrona on 2026-10-30 and have their own study folders, cards and index rows ([q2](../2026-10-30-q2-linkedin-publishing/README.md), [q3](../2026-10-30-q3-meta-facebook-instagram/README.md), [q7](../2026-10-30-q7-render-images-carousels-rust/README.md), [q8](../2026-10-30-q8-local-first-auth-and-scheduling/README.md)); Q1 ran the same day and is not imported yet; Q4, Q5 and Q6 have not run. The "Pending studies" table of the index lists what remains.
 
 ## Decision
 

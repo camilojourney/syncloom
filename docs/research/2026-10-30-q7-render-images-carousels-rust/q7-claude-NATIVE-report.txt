@@ -1,0 +1,140 @@
+Rendering 1080×1350 PNGs and PDF Carousels from a Rust App: Chromium vs Typst vs resvg vs WKWebView (October 2026)
+
+Keep headless Chromium (R1) as the production renderer for now, and run a short Typst (R2) spike against a subset of your 49 rendering tests. Drop Chromium only if Typst handles your actual gradient, font and chart designs within a pixel tolerance you accept. resvg-only (R3) and WKWebView (R4) should not be the main path. Your templates are already HTML/CSS with conic or radial gradients, web fonts and inline SVG charts. Chromium is the only option that renders all of that today without redesigning the templates. Typst is the only realistic replacement: it is pure Rust, its CPU rendering can be made byte-reproducible, and its PDFs have subset fonts and tags by default. But it has documented gaps in exactly your areas (conic gradients that differ between PDF and PNG, no CSS-style blend modes or filters, slow blur-filtered SVG in PDF).
+
+TL;DR
+
+
+Recommendation: R1 now, R2 as a gated migration. Drive a pinned chrome-headless-shell (Chrome for Testing) from Rust with chromiumoxide 0.9.1. Print all slides into one multi-page PDF using CSS @page sizing rather than merging per-slide PDFs. In parallel, port about 10 of the 49 tests to Typst 0.15.x. Switch to Typst only if every ported slide passes a perceptual diff and the PDF keeps real, selectable text.
+Determinism: Typst (0.15 made floating-point calculations “consistently deterministic across platforms”) and resvg (tiny-skia CPU rasterizer) can give byte-identical output once you pin fonts and the PDF date. Chromium is stable on one pinned binary and machine with software rendering and --font-render-hinting=none, but snapshot tests need a tolerance rather than byte equality, and PDF metadata has to be normalized.
+LinkedIn: upload one PDF up to 100 MB and 300 pages, every page the same size. 1080×1350 (4:5) is an industry convention, not an official LinkedIn spec. LinkedIn displays each page as an image, with a text layer in at least its 2019 viewer design. Links officially work only after download. A 10-slide carousel should be well under 1 MB if text and gradients stay vector.
+
+
+Key Findings
+
+Comparison table
+
+CriterionR1 Headless ChromiumR2 Typst (library)R3 SVG + resvg / krilla-svgR4 WKWebView (wry/Tauri)Template migrationNone (reuse HTML/CSS)Rewrite every template in Typst markupRewrite as SVG; you build text layout yourselfReuse HTML/CSSFonts / OpenTypeFull browser shaping, font-feature-settings, variable fontsStrong shaping; variable fonts added in 0.15resvg 0.48 moved to skrifa + harfrust; no auto text wrapping in SVG githubFull WebKitGradientsLinear, radial, conic nativeLinear, radial, conic; conic PDF vs PNG mismatch since krilla switch (issue #7890)Linear/radial only; SVG has no conic gradientFull WebKitFilters / blend modesFull CSS/SVGNo CSS-like blend/filter primitives; SVG filters slow in PDF (#6244)resvg renders SVG filters; PDF output rasterizes filtersFull WebKitColor emojiYes (system/web fonts)Yes (color fonts)COLRv0/v1, sbix, CBDT, SVG since resvg 0.42YesPixel stabilityGood on a pinned binary + software rendering; tolerance neededBest (CPU, deterministic float in 0.15)Best (CPU tiny-skia)Poor: changes with macOS/WebKit updatesPDF textSelectable, tagged by defaultSelectable, tagged by default, PDF/A & PDF/UA typstSelectable via krilla-svgSearchable text (per Apple WWDC20) applePackaging+~86 MB headless-shell download (mac-arm64) positPure Rust, in-binaryPure Rust, smallNo extra binary, but no wry API for PDFMaintenancechromiumoxide 0.9.1 (Feb 2026) libtypst 0.15.1 (Jul 2026) Wikipediaresvg 0.49.0 (Oct 24 2026); svg2pdf archived githubgithubwry PDF export unaddressed since 2022 github
+
+Visual fidelity
+
+
+R1 Chromium is the reference: your current tests pass on it, and it supports conic gradients, mix-blend-mode, CSS/SVG filters and OpenType features natively. One PDF problem is documented: Chrome’s Skia backend turns CSS gradients into Type 4 shading functions plus soft masks. The peitho project measured macOS Preview taking 14.2 s to render one such slide, with some radial-gradient stars missing. Pre-rasterizing gradients cut page-1 render from 14,204 ms to 33 ms with identical visual output, and text stayed vector. github Your founder will review PDFs on a Mac and a phone, so this matters.
+R2 Typst has all three gradient types. But after the PDF backend moved to krilla, conic gradients in PDF adapt to the container aspect ratio differently from PNG/SVG. Issue #7890 says “the different export formats should be visually the same”, and there are fixes on main. github Typst has no general blur, drop-shadow or blend-mode primitives; shadows come from community packages such as shadowed. typst SVG charts embedded in Typst go through the resvg/krilla stack: blur-filtered SVG took about 600 ms to compile to PDF versus about 50 ms before the krilla switch (#6244). github Typst 0.14 fixed gradients with transparency in PDF. typst 0.15 added variable fonts and “Floating-point calculations are now consistently deterministic across platforms.” newreleases
+R3 resvg renders SVG accurately and includes color emoji (COLRv0, COLRv1 “mostly”, sbix, CBDT and SVG tables since 0.42). github But SVG has no conic gradients: typst Vercel’s Satori draws them “as thin wedges around the center”. github SVG also has no practical automatic text wrapping (inline-size is SVG 2 and widely unimplemented). w3 +2 You would be writing your own text-layout engine for multi-line slide copy. resvg 0.48 (July 2026) switched text to skrifa + harfrust and warns of “small rendering changes compared to older versions”. github 0.49.0 (24 Oct 2026) fixed text baselines, filters in rotated groups, and gradient and pattern transforms. github Expect re-baselining on every minor upgrade.
+R4 WKWebView has WebKit-level fidelity, but WebKit renders some things (conic and blend edge cases, font smoothing) differently from Chromium. Your 49 baselines are Chromium images.
+
+
+Determinism (byte/pixel stability)
+
+
+Typst: set document(date: …) or pass --creation-timestamp / SOURCE_DATE_EPOCH. Typst’s docs: “If you want to create byte-by-byte reproducible PDFs, set this to something other than auto.” typst Downstream projects report byte-identical repeated builds with a fixed timestamp. github Typst 0.14.1 fixed 32-bit vs 64-bit PDF differences. zread Bundle fonts into the World and never read system fonts, so output can’t drift between machines.
+resvg/krilla: the CPU rasterizer is deterministic for a fixed crate version and font set. sumi-diagram migrated to krilla 0.8.2 / krilla-svg 0.8.1 and verified “Linux/macOS・x64/arm64 PDF byte-identical” output, though built through the same WASM artifact. githubgithub
+Chromium: the recurring fixes are --font-render-hinting=none, --disable-gpu or forced SwiftShader (--use-angle=swiftshader), --force-device-scale-factor=1 and --force-color-profile. github Puppeteer issue reports show pixel-identical repeated runs on one macOS machine with the GPU disabled. github Across OSs, a Puppeteer determinism experiment concluded “It is impossible for the screenshots to be deterministic across OSs due to the different text rendering technologies”, and Puppeteer collaborator OrKoN confirmed in issue #5214 (Sep 2022): “Screenshots are already platform dependent (e.g., you would get slight differences on Mac vs Windows vs Linux) and different modes are not supposed to be identical.” Pin the exact Chrome for Testing build, use perceptual or threshold diffs, and strip /CreationDate, /ModDate and /ID from PDFs (e.g. with lopdf) before hashing. github
+WKWebView: not reproducible across macOS updates, and there is no way to pin WebKit. Disqualifying for snapshot tests.
+
+
+Packaging and binary size on macOS
+
+
+Chromium: since Chrome 132 the old headless mode exists only as the standalone chrome-headless-shell from Chrome for Testing. chrome The mac-arm64 zip is about 86.4 MB (v135, chromote log); full Chrome for Testing for mac-arm64 is about 150.7 MB. githubposit Ways to find it:
+
+the user’s system Chrome (unpinned, auto-updating: bad for snapshots);
+a runtime download via chromiumoxide_fetcher (0.9.1) or headless_chrome’s fetch feature; lib
+a pinned download cached in Application Support.
+
+
+Recommendation: pin a Chrome for Testing version in config, download it on first run, and verify the checksum. Browser-downloaded zips can trip Gatekeeper (“is damaged and can’t be opened”), so fetch it programmatically. github Chromium source is BSD-licensed, but check the redistribution terms for Google-built Chrome for Testing binaries before bundling them inside an app. Downloading on first run avoids most of the question.
+Typst / resvg: pure Rust, compiled into your binary. resvg 0.48’s font stack adds about 500 KB. github No external process, no Gatekeeper exposure.
+WKWebView: always present on macOS 11+. apple But wry has no PDF export API: wry issue #707 (“print webview to pdf silently”) has been open since 2022, and Tauri #12284 requests it. githubgithub A 30 Oct 2026 Tauri app bug reports window.print() “does nothing” in the macOS Tauri 2 webview. github You would call createPDF through objc2 yourself, and it needs an on-screen or hidden window plus an event loop.
+
+
+Latency
+
+No published head-to-head benchmark exists for this workload, so treat these as engineering expectations to measure in the spike:
+
+
+Chromium: cold start costs a process launch plus a browser context and web-font loading. Keep one browser alive per session and reuse a tab; per page, the cost is layout plus a screenshot.
+Typst: compiles in-process and incrementally (comemo), so repeated renders of the same template should be fast. Blur-heavy SVG can be slow in PDF (about 600 ms in #6244).
+resvg: a single 1080×1350 rasterization is in-process and CPU-bound.
+
+
+PDF size, text and accessibility
+
+
+Chromium printToPDF: fonts are subset and embedded, text is selectable, and output is tagged by default since Chrome 85. hexdocspdfa Gotenberg’s 8.2.2 release changed its Chromium default to untagged PDFs, “resolving the issue of significantly larger file sizes”, and Gotenberg issue #1058 later reported “the --disable-pdf-tagging has no effect anymore”; separately, one report says generateTaggedPdf: false is ignored by chrome-headless-shell 155. Print one HTML document with @page { size: 1080px 1350px; margin: 0 } and a page break per slide. This gives a single PDF with one font subset, instead of N per-slide PDFs that each embed their own subsets and then need lopdf merging.
+Typst: subset fonts, tagged by default since 0.14 (PdfOptions.tagged defaults to true), PDF/A-1…4 and PDF/UA-1, typst and multiple standards at once in 0.15. typst Native shadings for gradients. Transparency-group and filter content may be rasterized.
+krilla(-svg): tagged PDF, PDF/A and UA modes, an always-included ToUnicode map, and “embeds all fonts that are used”. githubdocs svg2pdf was archived on 10 Jul 2026 with “Use krilla with krilla-svg instead”. github Filters are rasterized in PDF, as in any SVG→PDF path. github
+printpdf (0.12.4) can emit CSS gradients as ShadingType 2/3. docs It is a lower-level option with no layout advantage for this use.
+WKWebView createPDF: Apple’s WWDC20 session says it shares content “in a searchable text form in one PDF document”. apple takeSnapshot returns a bitmap. apple There are no tagging or standards controls.
+
+
+Crate maintenance snapshot (as of Oct 2026)
+
+
+chromiumoxide 0.9.1 (25 Feb 2026), MIT/Apache, about 681k downloads/month, 41+ contributors. libgithub The feature flags changed between 0.7 and 0.9: in cicloid/printable PR #19 (Renovate, 18 Oct 2026) the 0.7→0.9 bump failed because the package “depends on chromiumoxide with feature tokio-runtime but chromiumoxide does not have that feature”, and stippi/code-assistant PR #202 notes “0.9 dropped async-std; tokio is the only runtime”.
+headless_chrome 1.0.21 (3 Feb 2026), with 1.0.22 later in 2026. cratesdocs Synchronous API, MIT. Described as “stable but slow-moving”. webscraping
+typst 0.15.1 (17 Jul 2026), after 0.15.0 (15 Jun 2026), on a roughly 7–8-month minor cadence. Wikipedia +2 Pin exact versions: the Rust API breaks between minors, e.g. Library lost its Default impl in 0.14 and typst-kit was reworked in 0.15. githubtypst
+resvg/usvg 0.49.0 (24 Oct 2026), 0.48.1 (2 Aug 2026), under the linebender org, MSRV 1.85. githubgithub
+krilla 0.8.2 (4 Jun 2026); built on pdf-writer 0.15. lib
+svg2pdf: archived 10 Jul 2026, so do not adopt it. github
+lopdf 0.46 (Oct 2026), 0.44.0 (10 Jul 2026); frequent releases, adequate for merging and metadata stripping. githubdocs
+wry/tauri: active, but PDF export from the webview remains an open feature request. github
+Open issue counts were not collected in this research. Check each repo’s issue tab before committing.
+
+
+Published examples
+
+
+Social-card generators: Vercel Satori (HTML/JSX → SVG) + resvg is the canonical OG-image stack. Its own changelog shows how much CSS has to be emulated in SVG (conic wedges, drop-shadow rebuilt from filter primitives because “resvg draws feDropShadow in the wrong color”). github
+Chromium-based renderers: Remotion’s docs say it “is automatically installing ‘Chrome Headless Shell’ into your node_modules in order to render videos” and pins that version; peitho’s slide-deck PDF pipeline documents the Preview gradient problem.
+Typst-embedded pipelines: writer_rs reports “fixed-time output is byte-identical across fresh/retained Worlds” (2 pages at about 50–90 kB). github
+There is no public Rust LinkedIn-carousel generator benchmark; the spike below fills that gap for your designs.
+
+
+LinkedIn and PDF gotchas
+
+
+Limits: LinkedIn Help: “The file size cannot exceed 100MB and 300 pages. The following file types are supported: PPT, PPTX, DOC, DOCX, and PDF.” linkedin The media help page adds a one-million-word limit and 36-megapixel images. linkedin One document per post, and a title is required. linkedin
+Page size: LinkedIn publishes no pixel spec for organic document posts. 1080×1350 (4:5) and 1080×1080 are tool conventions. taplio LinkedIn’s document-ads spec says “PDFs with multiple sized pages must be fit to the same page size” and that layered PDFs must be flattened. linkedin Keep every page identical; 1080×1350 pt/px pages are fine.
+Rendering: LinkedIn Engineering (2019) converts uploads to PDF and then “convert[s] each page of the document to images with a range of resolutions”, with “a selectable text layer rendered straight from the converted PDF” (PDF.js). linkedin So what members see is a raster of your page. Vector quality still matters for sharpness at high resolutions, and real text drives the text layer and screen-reader support. Whether today’s mobile feed exposes selectable text is unconfirmed; test it manually.
+Links: “Hyperlinks in the document will only be clickable if the member downloads the document.” Animations become static. linkedin Members can download your document as a PDF, so tags and selectable text do matter there. linkedin
+PDF/X: not required by LinkedIn; it’s a print standard. Use PDF/A-2b (Typst/krilla) only if you want archival guarantees. Its embedded-font requirement is the useful part, and all four options embed fonts anyway.
+Size: in a July 2026 hands-on test, MergeImages.net built a 10-slide 1080×1350 PDF that “measured 280 KB, well inside the 100 MB ceiling”. Raster-heavy pages (screenshots embedded as PNG) are what inflate files.
+
+
+Recommendation
+
+
+Ship R1 in Rust now. Use chromiumoxide 0.9.1 (async, maintained) over a pinned chrome-headless-shell, fetched once and checksummed, with a long-lived browser and fixed flags (--font-render-hinting=none, software GL, DPR 1, fixed color profile). Self-host web fonts (no Google Fonts user-agent sniffing) and await document.fonts.ready. Make PNGs with Page.captureScreenshot at a 1080×1350 viewport. Make the PDF with one printToPDF of an all-slides document. Normalize PDF metadata with lopdf, and pre-rasterize heavy gradients only if Preview or phone rendering is slow.
+Run a two-week Typst spike before deciding whether to drop Chromium.
+Reject R3 as the primary engine: no text wrapping and no conic gradients mean rebuilding a layout engine. Keep resvg for standalone SVG charts if useful.
+Reject R4: no wry API, non-pinnable WebKit, and windowing requirements.
+
+
+Migration and validation plan
+
+
+Freeze baselines: export the current Python+Chromium PNGs and PDFs for all 49 tests as golden files, and record the Chrome version.
+Port the harness to Rust (R1): reproduce all 49 tests through chromiumoxide. Gate: pixel diff ≤ a small threshold (e.g. under 0.1% of pixels with ΔE above a small bound) against the Python goldens. Repeat-run PNGs must be byte-identical on the same Mac, and PDF text must extract via a text-extraction check.
+Typst spike: pick about 10 tests covering the hardest features: conic and radial gradients, gradient on text, web font with ligatures and alternates, an inline SVG chart with a filter, color emoji, and a blend-mode element. Port them to Typst 0.15.1 with bundled fonts and a fixed date. Gates:
+
+(a) perceptual match to the Chromium goldens that the founder accepts on phone and Mac;
+(b) byte-identical PNG and PDF across two runs and two Macs (Intel/Apple Silicon if available);
+(c) no PDF/PNG divergence on conic gradients;
+(d) selectable text and tags present;
+(e) per-slide latency measured.
+
+
+
+Decide: if all gates pass, migrate templates and remove Chromium. If (a) or (c) fails on core designs, keep R1, consider Typst only for text-heavy templates, and treat Chromium packaging as a maintained task (version bump plus a golden refresh every quarter).
+
+
+Caveats
+
+
+The figures for chrome-headless-shell size, Chromium determinism and latency come from third-party projects and older Chrome versions (v135). Measure them on your own builds.
+LinkedIn’s help pages were read via search snippets, not fetched directly. The 2019 engineering post describes LinkedIn Learning’s viewer, which shares infrastructure with feed documents, linkedin so current feed behavior may differ.
+Typst conic-gradient fixes are on main and may already have shipped after 0.15.1. zread Re-test against the latest release.
+Open-issue counts and exact wry/tauri release dates were not gathered.
+

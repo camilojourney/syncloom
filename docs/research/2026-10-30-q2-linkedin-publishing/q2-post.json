@@ -1,0 +1,74 @@
+{
+ "study": "main969-q2-linkedin",
+ "phase": "incomplete",
+ "outcome": {
+  "reason": "original-limits",
+  "details": "Original coordinator call limit reached: 40 of 40 calls used"
+ },
+ "usage": {
+  "coordinatorCalls": 40,
+  "nativeCalls": 0,
+  "knownMicroUsd": 157827,
+  "ceilingMicroUsd": 157827,
+  "costKnown": true
+ },
+ "trace": {
+  "id": "c3897eab73af8b6cd97d9cd6720f314d",
+  "received": 213,
+  "pending": 0
+ },
+ "defaultEligible": false,
+ "primary": "claude",
+ "chatgpt": {
+  "label": "HAND",
+  "bytes": 10114,
+  "chars": 9996,
+  "sha256": "ba56b1f5a9e117e6790fac4a52efa7237faceecfd5204420d10589ca5f490fe5",
+  "path": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q2-chatgpt-HAND-report.txt",
+  "url": "https://chatgpt.com/c/6ae4dcd1-8908-83ea-ad95-841df8b1cbf3",
+  "panelText": "Sources\nActivity \u00b7 8m\n\nCitations\n\nNo sources detected\n\nSources scanned \u00b7 0\n\nNo sources scanned\n\nConnector sources scanned\n\nNo connector sources scanned",
+  "sourcesScanned": 0,
+  "citationsNoSources": true,
+  "inReportLinks": [
+   {
+    "text": "oauth2",
+    "href": "https://crates.io/crates/oauth2"
+   },
+   {
+    "text": "reqwest",
+    "href": "https://crates.io/crates/reqwest"
+   }
+  ],
+  "busy": 0,
+  "h1": [
+   "LinkedIn Publishing Options (Oct 2026)"
+  ],
+  "inputEvents": 0,
+  "clicks": 0,
+  "assoc": {
+   "associated": true,
+   "turns": 1,
+   "url": "https://chatgpt.com/c/6ae4dcd1-8908-83ea-ad95-841df8b1cbf3"
+  },
+  "tail": "All usage must comply with LinkedIn\u2019s guidelines.\n\nSources: LinkedIn\u2019s official docs and changelogs."
+ },
+ "claude": {
+  "label": "NATIVE",
+  "path": "/Users/camiloslaptop/.local/state/phrona/durable-study-5.0.12-candidate/studies/main969-q2-linkedin/reports/claude-d7482cd4daaaf2025f6871642133a24c47bd6b8368380281960ee179d864954e.txt",
+  "copy": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q2-claude-NATIVE-report.txt",
+  "bytes": 26525,
+  "chars": 25901,
+  "sha256": "d7482cd4daaaf2025f6871642133a24c47bd6b8368380281960ee179d864954e",
+  "citations": 123,
+  "url": "https://claude.ai/chat/fbfdf97a-0d29-4dda-a4ff-4568946a45bf",
+  "method": "complete-loaded-claude-document"
+ },
+ "failures": {
+  "chatgpt": {
+   "report-document-changed": 2,
+   "report-model-only-no-sources": 1,
+   "report-unfinished-or-ambiguous": 7
+  },
+  "claude": {}
+ }
+}

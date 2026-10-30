@@ -1,0 +1,82 @@
+{
+ "study": "main969-q7-render",
+ "phase": "incomplete",
+ "outcome": {
+  "reason": "original-limits",
+  "details": "Original coordinator call limit reached: 40 of 40 calls used"
+ },
+ "usage": {
+  "coordinatorCalls": 40,
+  "nativeCalls": 0,
+  "knownMicroUsd": 119526,
+  "ceilingMicroUsd": 119526,
+  "costKnown": true
+ },
+ "trace": {
+  "id": "6653da1959815016f5886aee4b92fd38",
+  "received": 208,
+  "pending": 0
+ },
+ "defaultEligible": false,
+ "primary": "claude",
+ "chatgpt": {
+  "label": "HAND",
+  "bytes": 10075,
+  "chars": 9965,
+  "sha256": "4d5b4b7e7d814c05f220de9c01844215770ce9d87c0096782edc119cf0fd7e0b",
+  "path": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q7-chatgpt-HAND-report.txt",
+  "url": "https://chatgpt.com/c/6ae4dcc6-6cf4-83ea-90aa-f0d0a8b57610",
+  "panelText": "Sources\nActivity \u00b7 5m\n\nCitations\n\nNo sources detected\n\nSources scanned \u00b7 0\n\nNo sources scanned\n\nConnector sources scanned\n\nNo connector sources scanned",
+  "sourcesScanned": 0,
+  "citationsNoSources": true,
+  "inReportLinks": [
+   {
+    "text": "chromiumoxide",
+    "href": "https://docs.rs/chromiumoxide/0.9.1"
+   },
+   {
+    "text": "Typst issue #2988",
+    "href": "https://github.com/typst/typst/issues/2988"
+   },
+   {
+    "text": "printpdf",
+    "href": "https://docs.rs/printpdf/latest/printpdf/"
+   }
+  ],
+  "busy": 0,
+  "h1": [
+   "Rendering Options",
+   "Comparison",
+   "PDF and LinkedIn Notes",
+   "Summary & Recommendation"
+  ],
+  "inputEvents": 0,
+  "clicks": 0,
+  "assoc": {
+   "associated": true,
+   "turns": 1,
+   "url": "https://chatgpt.com/c/6ae4dcc6-6cf4-83ea-90aa-f0d0a8b57610"
+  },
+  "tail": "cial docs and release notes of chromiumoxide, resvg, printpdf, and LinkedIn\u2019s published size limits."
+ },
+ "claude": {
+  "label": "NATIVE",
+  "path": "/Users/camiloslaptop/.local/state/phrona/durable-study-5.0.12-candidate/studies/main969-q7-render/reports/claude-2cb770179892784949e8d77444a7c3eefdfd433c72da36e91dcf60b41f050093.txt",
+  "copy": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q7-claude-NATIVE-report.txt",
+  "bytes": 18734,
+  "chars": 18393,
+  "sha256": "2cb770179892784949e8d77444a7c3eefdfd433c72da36e91dcf60b41f050093",
+  "citations": 77,
+  "url": "https://claude.ai/chat/6ff2a228-1b2e-408e-9571-5d34c0f9218c",
+  "method": "complete-loaded-claude-document"
+ },
+ "failures": {
+  "chatgpt": {
+   "report-model-only-no-sources": 1,
+   "report-unfinished-or-ambiguous": 7
+  },
+  "claude": {
+   "research-not-finished": 1
+  }
+ }
+}

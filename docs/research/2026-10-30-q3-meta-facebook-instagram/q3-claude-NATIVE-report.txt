@@ -1,0 +1,234 @@
+Meta Publishing APIs for a Single-Founder Rust Content Studio (as of October 30, 2026)
+
+You can build this without App Review or business verification. Meta’s Instagram Platform Overview says that if the app serves only your own Instagram professional account, “Standard Access is all your app needs”. Advanced Access, which needs App Review and Business Verification, applies only to accounts you don’t own or manage. facebook Use Facebook Login for Business with long-lived Page tokens, keep scheduling in your local app, and first move off Graph API v20.0, which Meta removed on September 24, 2026. facebook
+
+TL;DR
+
+
+Option A, login path: use Facebook Login for Business with Page tokens (Instagram API with Facebook Login). One login covers your Facebook Pages and your linked Instagram account. Page tokens derived from a long-lived user token “do not have an expiration date”, so you don’t need to log in again on a schedule. Uploading a local video file in resumable chunks (upload_type=resumable) works only on this path. Carousels are fully supported, with images and videos mixed. Meta’s docs disagree on the maximum: the version with v25.0 examples says “Carousels are limited to 10 images, videos, or a mix of the two”, while the version with v26.0 examples says up to 20. Design for 10.
+Option B, access level: stay on Standard Access and don’t submit for App Review. Business Verification and the annual Data Use Checkup aren’t required at that level. Meta says data created in Development mode, “such as test posts”, is visible only to role users. So check that your posts are publicly visible before relying on Development mode. If they aren’t, switching to Live mode needs a Data Use Checkup but no App Review.
+Option C, scheduling: keep the schedule and the approval queue local. The Instagram Content Publishing API has no scheduling parameter (not found in the docs), and containers expire after 24 hours. Facebook’s native scheduled_publish_time (10 minutes to 30 days ahead) is an optional fallback for Page feed and photo posts when your laptop may be off. Before adding features, migrate to v25.0 or v26.0 and remove the deprecated insights metrics.
+
+
+Key Findings
+
+Corrections to the March 2026 evidence
+
+March 2026 claimStatus (Oct 30, 2026)Primary source and datePython client on Graph API v20.0Obsolete. v20.0 expired on Sept 24, 2026. Current versions: v26.0 (released July 29, 2026, expiry TBD), v25.0 (Feb 18, 2026, expires July 29, 2028), v24.0 (Oct 8, 2025, expires Feb 18, 2028), v23.0 (expires Oct 8, 2027), v22.0 (expires May 20, 2027), v21.0 (expires Jan 21, 2027) facebookfacebookGraph API “Versions” changelog page; v26.0 launch blog post, July 29, 2026Page text and photo via /feed and /photos; Reels via /video_reelsConfirmed. These endpoints are unchanged in the v26.0 docs facebookfacebookPages API “Posts” guide (v26.0 examples); Reels Publishing API guide (v26.0 examples) facebookInstagram single image, Reels and Stories via create container → poll → publishConfirmed facebookInstagram “Content Publishing” guide (v26.0 examples)Carousel not availableWrong. Carousels are supported. The Mar 15, 2022 changelog entry (all versions) says: “You can now use the Instagram API to publish posts containing multiple images and videos (carousel posts).” The v25.0-example guide caps carousels at 10 items (“up to 10 container IDs”); the v26.0-example guide says “up to 20 images, videos, or a mix of the two”Instagram Platform / Graph API changelog (Mar 15, 2022 entry); Content Publishing guide (both versions)Insights sometimes returned HTTP 400Most likely caused by deprecated metrics. See “Likely causes of the insights HTTP 400” belowInstagram Platform changelog (Oct 2, 2024 and Jan 21, 2025 entries); v25.0 changelog facebookApp Review takes 2–8 weeksNot found in Meta’s docs. Meta’s App Review “Introduction” page (developers.facebook.com/docs/resp-plat-initiatives/app-review/introduction) says: “It typically takes us less than one week to process your submission, and often takes only 2–3 days, but may take longer during peak periods.” Other figures come only from vendors (see Review section)App Review “Introduction” (no date shown)350 scheduled posts per PageNot found in any Meta source. The only documented limit is a time window of 10 minutes to 30 days. The 350 figure probably comes from Hootsuite’s bulk-scheduler limit socialrails +2Pages API “Posts” guide; secondary blogs (see Caveats)
+
+What could change this answer
+
+
+Can you publish to your own accounts without review? Yes. The Instagram Platform Overview says: “If your app only serves your Instagram professional account or an account you manage, Standard Access is all your app needs.” facebook Meta’s App Modes doc says Development-mode apps can request permissions only from role users, at Standard or Advanced access. The catch: the same doc says “Any data generated while an app is in Development mode, such as test posts, can only be seen by role users.” facebook Meta’s “Build and Test” doc adds that app modes “apply to non-business apps”. facebook In a Business-type app the visibility risk may not apply. In a Consumer-type or Development-mode app, check every first post from a logged-out browser.
+Is carousel missing from the API? No. media_type=CAROUSEL plus children is documented. facebook
+Do Page tokens need you to log in again periodically? No, unless something invalidates them. Meta’s long-lived token guide says Page tokens from long-lived user tokens “do not have an expiration date and only expire or are invalidated under certain conditions”. facebook Common triggers include a password change, losing your Page role, removing the app, or new security requirements on the Page. A GitHub gist (lucnap) says the Page token “has no expiration unless you change your password or not more admin of the target page or deauthorize FB page”. Outstand.so (2026) maps a password change to error 190/460 and a lost Page role to error 492. Instagram Login tokens last 60 days but can be refreshed automatically without a login. facebook
+
+
+Details
+
+Option A: Instagram Login vs Facebook Login for Business
+
+FactorInstagram API with Instagram LoginInstagram API with Facebook Login (Page tokens)Hostgraph.instagram.com facebookgraph.facebook.com and rupload.facebook.com facebook facebookfacebookFacebook PageNot required facebookRequired (IG account must be linked to a Page) facebook facebookCovers Facebook Page publishing tooNo. You’d need a second login flowYes. One flow, one token familyPublishing permissionsinstagram_business_basic, instagram_business_content_publish facebookinstagram_basic, instagram_content_publish, pages_read_engagement (plus ads_management/ads_read if your Page role comes through Business Manager) facebook facebookToken lifetimeShort-lived 1 h → long-lived 60 days. facebook Refresh with GET graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token. The token must be ≥24 h old and unexpired, and refreshing gives another 60 days (Refresh Access Token reference, updated July 17, 2025) facebookfacebookLong-lived user token about 60 days. Page token derived from it has no expiry date facebook facebookfacebookResumable upload of a local videoNot available (“Only for apps that have implemented Facebook Login for Business”) facebookAvailableHashtag search, product tagging, partnership label, polls/comment prompts, Audio APINot availableAvailable facebookInsights, comment moderation, publishingYes (insights added Jan 21, 2025) facebookYes facebookAI label (is_ai_generated)YesYes facebook
+
+Recommendation: Facebook Login for Business with Page tokens. It meets all three constraints in one integration. Your Facebook Pages need Page tokens anyway, so a single login covers both platforms. Page tokens don’t expire on a timer, which suits a local app that may sit unused for weeks. The resumable rupload protocol lets you upload Reels and video carousel items from local disk, with no hosting needed.
+
+Instagram Login is the fallback only if the Instagram account isn’t linked to a Page.
+
+Watch for “Instagram API with Unified Login”. Meta’s Instagram Platform landing page (updated Sept 16, 2026) calls it “the recommended setup for new integrations”. facebook It uses a “Business Integration System User access token”. facebook It is new and I haven’t tested it here. Re-evaluate it once it is stable, because system-user tokens remove the human user from the token chain entirely.
+
+The Overview also says that for own-account apps “you do not need to implement a login flow”. You can generate tokens in the App Dashboard instead. facebookfacebook For a single founder, a one-time token mint plus a local OAuth loopback flow for recovery is enough.
+
+Option B: Development mode vs Standard vs Advanced access
+
+
+Standard Access is the default for every permission. It works only for people with a role on the app (admin, developer, tester) or on a business portfolio that has claimed the app. No App Review, no Business Verification (Instagram Platform Overview, current). postgatefacebook
+Advanced Access is for accounts you don’t own or manage. It “requires App Review and Business Verification” (Overview). facebookfacebook You don’t need it.
+Development vs Live mode (App Modes doc): new apps start in Development mode. Live mode needs App Review only for permissions requested from non-role users. In Live mode, Standard-Access permissions can still be requested from role users. facebook The Data Use Checkup doc says you don’t need a checkup in Development mode, but you do “before the app can be switched to Live mode”. Apps with only Standard Access don’t need the annual checkup. facebook
+Recommendation: create a Business-type app and stay on Standard Access. Never submit for App Review. If a test post turns out to be visible only to role users, switch to Live mode, which needs a privacy-policy URL and a Data Use Checkup but no App Review.
+2FA and Page Publishing Authorization (PPA): publishing fails if the linked Page requires PPA and you haven’t completed it. It also fails if the Page requires two-factor authentication and the Facebook user hasn’t done 2FA (IG User Media reference). facebook Complete PPA upfront.
+
+
+Option C: Native vs local scheduling
+
+
+Facebook Page native scheduling is supported. On /feed and /photos, set published=false and scheduled_publish_time (Unix time, ISO 8601, or a strtotime string). The time must be “between 10 minutes and 30 days from the time of the API request” (Pages API Posts guide). facebook
+
+Scheduled multi-photo posts need each photo uploaded with published=false and temporary=true, then a /feed call with attached_media, published=false, scheduled_publish_time and unpublished_content_type=SCHEDULED. Unpublished uploads are deleted after about 24 h if not used (Page Photos reference v26.0). facebook
+Page Reels: the video_reels reference lists video_state {DRAFT, PUBLISHED, SCHEDULED} and scheduled_publish_time. facebook A vendor blog (bundle.social) says Reels can’t be scheduled. facebookbundle That’s a conflict, so test it before relying on it.
+
+
+
+Instagram native scheduling is not found. The Content Publishing API has no scheduling parameter, and containers expire after 24 h. Meta tells apps to “enforce the publishing rate limit… if your app allows app users to schedule posts”. facebookfacebook In other words, Meta expects the app to do the scheduling.
+Recommendation: run all scheduling locally, behind your human-approval gate. That gives one queue, one audit log, and identical behavior on both platforms. Use Facebook native scheduling only for Page feed or photo posts you want published while the app is offline, and record the returned post ID so you can cancel it. The scheduled-post cap is not documented, so don’t design around 350.
+
+
+Capability matrix
+
+FeaturePlatformEndpointPermission / featureStatusText postFB PagePOST /{page-id}/feed (message) facebookpages_manage_posts, pages_read_engagement (+ pages_manage_engagement, pages_read_user_engagement per guide). Tasks: CREATE_CONTENT, MANAGE, MODERATE facebookSupportedLink postFB PagePOST /{page-id}/feed (link) facebooksameSupportedSingle photoFB PagePOST /{page-id}/photos (url) facebooksameSupported. Reference lists 4 MB max (Page Photos) facebook vs “less than 10MB” (Photo node), a conflict facebookMulti-photo postFB Page/photos with published=false, then /feed with attached_media[n]={"media_fbid":…} postpeerfacebooksameSupportedVideoFB PageVideo API publishing guide (/{page-id}/videos) posteverywherefacebook+ publish_video facebookSupported (guide not fetched) githubReelsFB PagePOST /{page-id}/video_reels upload_phase=start → upload to rupload.facebook.com → upload_phase=finish&video_state=PUBLISHED posteverywherefacebookPage token from a user with CREATE_CONTENTSupported. 30 API-published Reels / 24 h facebookgithubSingle imageIGPOST /{ig-id}/media (image_url) → POST /{ig-id}/media_publish facebookFB path: instagram_basic, instagram_content_publish, pages_read_engagement facebookSupported. JPEG only facebookCarouselIGchildren with is_carousel_item=true → parent media_type=CAROUSEL&children=… → media_publish facebooksameSupported, images and videos mixed. Max is 10 per the v25.0-example guide (“Carousels are limited to 10 images, videos, or a mix of the two”) but 20 per the v26.0-example guide. Design for 10. Reels can’t be carousel itemsReelsIGmedia_type=REELS (video_url or upload_type=resumable) facebooksameSupported. 3 s–15 min, ≤300 MB facebook facebookStoriesIGmedia_type=STORIES facebooksameSupported. Stickers (link/poll/location) not supported. User tags supported since July 9, 2025 facebookAlt textFB Page photoalt_text_custom on /photos facebooksame as photoSupported facebookAlt textIGalt_text (≤1000 chars) on image or image carousel child facebooksameSupported since Mar 24, 2025. Not for Reels or Stories facebook facebookLocation tagFBplace on photos and Reels facebookfacebooksameSupported facebookfacebookLocation tagIGlocation_id (a Page with location data; find it via Pages Search) facebooksameSupported on images, Reels and the carousel parent. Not on carousel children facebookFirst commentFBPOST /{page-post-id}/commentspages_manage_engagementSupported (comments guide linked, not fetched)First commentIGPOST /{ig-media-id}/commentsinstagram_manage_comments / instagram_business_manage_commentsSupported per comment-moderation docs (reference page not fetched)Reply / hide / delete / disable commentsIGIG Comment endpointssameSupported (“get, reply, delete, hide/unhide, disable/enable”, Overview) facebookDelete own mediaIGDELETE /{ig_media_id}instagram_manage_contentsSupported since Dec 3, 2025 facebookUpdate or delete postFBPOST / DELETE /{page-post-id} facebookPage tokenSupported. Update works only for posts made by the same app facebookPage / post insightsFB/{page-id}/insights, /{post-id}/insightsread_insights + pages_read_engagement (not verified in this research)Supported. Legacy reach/impressions metrics removed (see timeline)Media / account insightsIG/{ig-media-id}/insights, /{ig-user-id}/insightsFB path: instagram_manage_insightsSupported. User insights need ≥100 followers facebookNative schedulingFBpublished=false + scheduled_publish_time facebooksameSupported (10 min–30 days) facebookNative schedulingIGnonenoneNot foundAI disclosureIGis_ai_generated=true on the container (carousel parent only) facebookpublish permissionsSupported since June 22, 2026 facebookAI disclosureFB Reelsis_ai_generated on video_reels facebooksameSupported (reference v26.0)AI disclosureFB feed / photosnonenoneNot foundRead other Pages’ public postsFBPage feed endpointsPage Public Content Access feature (doc says “approved for”, which implies review) facebookRequires feature approval facebookHashtag searchIGig_hashtag_search, /top_media, /recent_mediaInstagram Public Content Access feature. FB Login only facebookRequires feature. Platform rate limits facebook facebookBusiness discoveryIG?fields=business_discovery.username(…)FB Login pathSupported (review requirement for own-app Standard Access not confirmed) facebook
+
+Aspect ratio for 1080×1350: the IG User Media reference requires feed images to be “JPEG… 8 MB maximum… Aspect ratio: Must be within a 4:5 to 1.91:1 range… Maximum width: 1440”. facebook 1080×1350 is exactly 4:5 (0.8), so it passes, but only just. The native app’s newer 3:4 (0.75) portrait would be rejected. A secondary source (RecurPost) confirms this. recurpost
+
+Carousel images “are all cropped based on the first image in the carousel, with the default being a 1:1 aspect ratio” (Content Publishing guide). facebook Make every slide 4:5 and export them identically. Convert to sRGB JPEG locally: no PNG, and no MPO/JPS. facebookfacebook
+
+Local-first constraint: Instagram fetches images by URL (“must be hosted on a publicly accessible server at the time of the attempt”). facebook Your Rust app needs a short-lived public URL for each image, such as a pre-signed object-storage URL that expires after publishing. Videos can skip this through rupload with a local file. facebook
+
+Token lifecycle
+
+TokenLifetimeRenewalHuman re-login?SourceFB short-lived user token~1–2 h facebookExchange via oauth/access_token?grant_type=fb_exchange_token githubOnly to startAccess Token GuideFB long-lived user token~60 days (“may change without warning”) facebookCan’t be extended once expired. Requires new login facebookYes, every ~60 days, if you depend on it directlyLong-lived token guideFB Page token from a long-lived user tokenNo expiry date. Invalidated only under certain conditions facebookRe-derive via GET /{user-id}/accounts if invalidated githubNo (unless invalidated)Long-lived token guideSystem user token (Business Manager)Doesn’t expire on time alone facebookn/aNoAccess Token GuideIG User token (Instagram Login)Short-lived 1 h → long-lived 60 daysrefresh_access_token once ≥24 h old and unexpired facebookNo, if your app refreshes before expiry. “Tokens that have not been refreshed in 60 days will expire” facebookBusiness Login for Instagram; Access Token reference (updated Mar 9, 2026) facebookfacebook
+
+For the IG Login fallback: refresh on every launch once the token is more than 24 h old. If the app might stay closed for more than 60 days, plan on one manual login.
+
+Review, verification and annual requirements for owned accounts
+
+
+App Review: not needed. It is only for Advanced Access or Live-mode permissions for non-role users. facebook +2
+Business Verification: not needed. It is “required if your app requires Advanced Access” (Overview). facebookfacebook
+Data Use Checkup: not required for Standard-Access-only apps or Development mode. It is required before switching to Live mode and then every year for Live apps with a use case or Advanced Access (Data Use Checkup doc). facebook
+App Review timing, for reference only: Meta’s App Review introduction says “typically… less than one week… often 2–3 days, but may take longer during peak periods.” facebook A vendor blog (bundle.social) says the dashboard showed a 20-day estimate in mid-2026. bundle That is unverified marketing content. “2–8 weeks” is not found in Meta’s docs.
+Features that do need review: Page Public Content Access and Instagram Public Content Access. facebookfacebook Avoid them unless you need competitor monitoring.
+
+
+Rate limits
+
+LimitValueSource and notesIG API-published posts100 per 24 h moving window. A carousel counts as 1 facebookThe Content Publishing guide conflicts with itself. Its Rate Limit section says “Instagram accounts are limited to 100 API-published posts within a 24-hour moving period”. Its carousel Limitations say “Accounts are limited to 50 published posts within a 24-hour period.” Read GET /{ig-id}/content_publishing_limit and trust that valueIG containers400 created per rolling 24 h. Each expires after 24 h facebookIG User Media referenceIG call budget (BUC)4800 × impressions per 24 h, per app–user pair facebookInstagram Platform Overview perengetphylloFB Page Reels30 API-published per 24 hReels Publishing API guide facebookfacebookFB Pages API (Page or system-user token)BUC: 4800 × engaged users. The current doc says “within 24 hours”; socialrails older copies said “within one hour”Graph API Rate Limits. Read the X-Business-Use-Case-Usage header. Error 80001 facebook facebook +2Scheduled posts per PageNot found (350 unsupported) socialrails—
+
+At single-founder volumes you won’t get near any of these limits. Track the publishing limit locally anyway, as Meta recommends. facebook
+
+Terms obligations
+
+
+Developer Policies (current): you must “Obtain consent from people before publishing content or taking any other action on their behalf”, make sure content “meets our Community Standards”, and “Follow any instructions we include in our Developer Docs”. facebook Your per-post human approval step meets the consent requirement, since you are the account owner. I found no specific ban on automated posting to your own accounts.
+AI labeling: the API now supports self-disclosure. On Instagram, set is_ai_generated=true on the container (carousel parent only; setting it on a child “will result in an error”; available since June 22, 2026). facebookfacebook On Facebook Reels, use is_ai_generated. facebook For Facebook feed and photo posts, no parameter was found. A third-party claim (Ayrshare) says embedded IPTC DigitalSourceType metadata triggers Facebook’s label; Meta hasn’t confirmed this. ayrshare
+
+Meta’s user-facing policy comes from Nick Clegg, President of Global Affairs, in “Labeling AI-Generated Images on Facebook, Instagram and Threads” (Meta Newsroom, Feb 6, 2024): “We’ll require people to use this disclosure and label tool when they post organic content with a photorealistic video or realistic-sounding audio that was digitally created or altered, and we may apply penalties if they fail to do so.” Make an AI-disclosure toggle a required field in your approval screen and send it on every Instagram post and Facebook Reel.
+
+
+
+Data use: a permission “only allows access to data created by the app user who granted the permission” (Overview). facebook Data Use Checkup certifies compliance with the Platform Terms and Developer Policies. facebook
+
+
+Breaking changes timeline, 2024–2026
+
+DateChangeImpact on youDec 4, 2024Instagram Basic Display API shut down; all requests error upload-postNone, unless legacy code uses it facebookJan 8, 2025IG video_views facebook and user metrics email_contacts, get_direction_clicks, profile_views, text_message_clicks, website_clicks, phone_call_clicks (time series) removed on all versionsRequesting these returns errors facebookJan 21 / Apr 21, 2025IG impressions, plays, clips_replays_count, ig_reels_aggregated_all_plays_count deprecated (v22+, then all versions Apr 21, 2025). views added facebookfacebookMain suspect for your 400s facebookJan 27, 2025Old IG Login scope names (business_basic etc.) retiredUse instagram_business_* facebookMar 24, 2025IG alt_text added facebookUse it facebookJuly 9, 2025IG Stories support user_tags facebookOptionalDec 3, 2025IG media delete API, trial Reels, reposts and crossposted_views/facebook_views metrics facebookOptional facebookFeb 18, 2026v25.0 released. metadata=1 ignored (removed May 2026). Page viewer metrics (page_total_media_view_unique, post_total_media_view_unique) announced to replace reach by the end of June 2026 facebookMigrate Page insightsApr 22, 2026IG total_likes/comments/views, saved_count, shares_count, partnership label, Like APIOptional facebookMay 21, 2026v19.0 removed facebook—June 2026 / v26.0 launchPage and post reach (page_impressions_unique, post_impressions_unique, etc.), video impressions, story impressions and 3-second viewer metrics removed for all versions. Replacements: *_total_media_view_unique (viewers) and *_media_view (views, paid/organic breakdown) facebookfacebookThe Facebook “Reach → Viewers” change. Second suspect for 400sJune 22, 2026IG is_ai_generated; Story link_clicksImplement the AI label facebookJuly 29, 2026v26.0 released. On v26: pretty, debug, date_format, root GET /?ids=, and ETag/If-None-Match removed. Legacy New Pages Experience fields blocked facebookDon’t use date_format or ?ids=July 30, 2026IG media_url omitted for videos with copyrighted or licensed audio, including your own facebookTreat media_url as optional facebookSept 24, 2026v20.0 removed facebookYour March 2026 client is past its version’s end dateOct 27, 2026v26 legacy-protocol removals apply to all versions facebookAlready in effectJan 21, 2027v21.0 removed facebookDon’t target v21
+
+For Instagram, I found no announcement replacing reach with “viewers”. IG reach remains in the media insights reference.
+
+Meta’s carousel limit is inconsistent across doc versions. The Content Publishing guide with v25.0 examples says “Carousels are limited to 10 images, videos, or a mix of the two” and allows “up to 10 container IDs”. The version with v26.0 examples says 20. socialrails says 20 applies only in the Instagram app. I found no dated changelog entry raising the API limit. Treat 10 as the limit, and validate 11+ items with a real call before relying on them.
+
+Likely causes of the insights HTTP 400
+
+
+Requesting impressions, plays or video_views on Instagram media or user insights (removed April 21, 2025 and January 8, 2025). facebook +2
+Requesting Page *_impressions_unique or reach metrics after June 2026. facebook
+Combining a metric with an unsupported breakdown or metric_type. The IG User Insights doc warns that this returns an error. facebook
+Asking for user insights on an account with fewer than 100 followers, or for media with too few viewers (“(#10) Not enough viewers”). facebookfacebook
+Requesting Story metrics after the 24 h Story window, or using the wrong period.
+
+
+Log the error.code, error_subcode and message on every 400.
+
+Rust implementation approach
+
+
+Crates found:
+
+facebook_api_rs v0.1.2: targets Graph v23.0, about 692 downloads. cratesdocs
+instagram-graph-api v0.1.1: about 3 years since its last release. crates
+instagram-graph-api-client 0.0.1: docs build dated July 19, 2026, 0% documented. docs
+fb_poster v0.1.9, plus older fb-api v0.1.3 (about 5 years old). cratescrates
+
+
+None track v25/v26 or the 2025–2026 deprecations. Don’t depend on them.
+Recommended stack (my recommendation; crate versions not verified here):
+
+reqwest (rustls, multipart, streaming body) with serde/serde_json typed request and response structs.
+A typed GraphError { code, error_subcode, message, fbtrace_id }.
+The oauth2 crate with a loopback redirect for the occasional Facebook login.
+OS keychain storage for tokens (e.g. the keyring crate).
+tokio for container-status polling.
+
+
+
+Polling: Meta recommends querying container status “once per minute, for no more than 5 minutes”. The states are EXPIRED, ERROR, FINISHED, IN_PROGRESS and PUBLISHED. facebook
+Version: pin a single GRAPH_VERSION const (v25.0 now; v26.0 once you have tested it). Read X-Business-Use-Case-Usage and x-app-usage headers into your log.
+Idempotency: a publish that times out may already be live. After any timeout, check GET /{container}?fields=status_code before retrying, so you never post twice.
+
+
+Recommendations: what to build first
+
+
+Version migration and token health check (day 1).
+
+Set Graph v25.0 and run debug_token on stored tokens.
+Re-derive Page tokens from a long-lived user token and confirm the Page token shows “Expires: Never”.
+Complete PPA and 2FA on the Pages.
+
+
+
+Make a test post and check visibility.
+
+Publish one Page post and one Instagram image as the app.
+Check from a logged-out browser that the public can see them.
+If they’re visible only to role users, switch to Live mode (privacy policy plus Data Use Checkup, no review).
+
+
+
+Build the core publish path: the local approval queue, then the Instagram carousel.
+
+Approval queue: draft → approve → publish, stored in SQLite.
+IG carousel of 4:5 sRGB JPEGs with alt_text per slide, location_id and is_ai_generated on the parent.
+Short-lived public image URLs; status polling; content_publishing_limit check.
+
+
+
+Add Facebook Page photo and multi-photo posts. Use alt_text_custom and attached_media, then add text and link posts.
+Add the first comment and moderation. Post the first comment straight after media_publish or the /feed response, then add comment fetch, hide and delete.
+Add insights, using current metrics only.
+
+IG: views, reach, total_interactions, saved, shares.
+FB: page_media_view and page_total_media_view_unique.
+Store raw JSON, because metrics keep changing.
+
+
+
+Add Reels and Stories. Use resumable rupload from local files for both Instagram and Facebook Reels. Track the 30/24 h Facebook Reels cap.
+Optional: Facebook native scheduling for offline windows; evaluate Unified Login or system-user tokens; Page Public Content Access only if you need competitor reading.
+
+
+Caveats
+
+
+Dates: most Meta developer pages I read show no “Updated” date. I’ve identified them by the API version in their examples (v26.0) or by changelog entry dates. Explicit dates: Refresh Access Token (July 17, 2025), Access Token (Mar 9, 2026), Instagram Platform landing page (Sept 16, 2026). facebook +2
+Conflicts in Meta’s own docs:
+
+Instagram post limit: 100 vs 50 per 24 h on the same page. facebook
+Facebook photo size: 4 MB vs 10 MB.
+Pages BUC window: 24 h vs 1 h. facebookperen
+Carousel size: 10 (Content Publishing guide with v25.0 examples: “Carousels are limited to 10 images, videos, or a mix of the two”; also vendor blogs) vs 20 (guide with v26.0 examples). Design for 10.
+Facebook Reels scheduling: the reference lists SCHEDULED; a vendor blog says it isn’t supported. facebook +2
+
+
+
+Secondary sources and why I used them:
+
+The “350 scheduled posts” claim appears only on vendor blogs (adaptlypost, postplanify). socialrails disputes it, and multiplegroupposter traces it to Hootsuite’s bulk scheduler. adaptlypost +3 I couldn’t read Meta’s Help Center because robots.txt blocked it.
+App Review wait reports (bundle.social, getphyllo) are used only to show the reported range. bundlegetphyllo
+Token-invalidation triggers come from a GitHub gist (lucnap) and Outstand.so (2026).
+The AI-label policy is quoted from Meta’s own Newsroom post (Nick Clegg, Feb 6, 2024).
+Rust crate details come from crates.io, docs.rs and lib.rs listings.
+
+
+
+Not found or not verified:
+
+A documented scheduled-post cap.
+Instagram native scheduling.
+An AI flag for Facebook feed and photo posts.
+Test users and test-app behavior for Pages (only role types were confirmed: Administrator, Developer, Tester, Analytics User). facebook
+Exact Page insights permission names.
+Whether Business Discovery needs review at Standard Access.
+Instagram “viewers” replacing reach.
+
+
+
+

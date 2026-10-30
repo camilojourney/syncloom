@@ -1,0 +1,55 @@
+LinkedIn Publishing Options (Oct 2026)
+
+LinkedIn’s self-serve APIs let an app post on its own authenticated profile or page using the new Posts API (v2). The Share on LinkedIn product (scope w_member_social) covers member profiles (no review). The Community Management API (scope w_organization_social, etc.) covers organization pages but requires vetting as a “company” (see App Review below). The Posts API supports almost all content types in organic posts: text, single image, video, document (PDF/PPT), multi-image, link preview (article), and polls. (Multi-image posts allow 2–20 images. Polls allow 2–4 options, 30-character max each, open 1–14 days.) Document posts (PDF carousel) are supported: use the Documents API to upload (≤100 MB, ≤300 pages) and attach the URN. Videos use the Videos API (upload MP4, ≤30 min, ≤500 MB for feed video; up to 5 GB with appropriate client-side multipart upload). Links (“article” posts) are supported via the Posts API (provide title, thumbnail, URL fields). Editing and deleting posts is supported (Posts API “lifecycleState” update). Scheduling is not natively supported for organic posts (no “schedule” field).
+
+Personal profile (w_member_social): A self-serve app can post text, images, multi-image, videos, PDFs, polls, or link-shares on behalf of the authenticated user. These use author: urn:li:person:{me} in the Posts API. All content above is allowed.
+Company Page (w_organization_social): If granted Community-API access, the app (with an admin role) can similarly post to the org page using author: urn:li:organization:{orgID}. The same content types (images, multi-image, polls, docs, video, etc.) are allowed for org posts. (Analytics and metadata for org posts also require Community scopes – see below.)
+
+Examples: To post text or images, you upload assets (image or document) via the Assets API, then call POST /v2/posts with content.media: {id: urn:li:image:{X}} or content.document: {id: urn:li:document:{Y}}. Polls are created via POST /v2/posts with a content.poll structure (2–4 options, durations 1/3/7/14 days). Multi-image posts require uploading each image, then using the MultiImage API (in Posts API, providing an array of image URNs, min 2, max 20). (LinkedIn’s documentation warns that only “API partners” can create sponsored multi-image or poll posts, but non-sponsored organic multi-image and polls are supported once the app has the product.) The API also supports first comments and replies via the Comments API (with w_member_social_feed or w_organization_social_feed scope), and toggling comments on/off via the Social Metadata API.
+
+Analytics, Reactions, Comments
+
+Read own post metrics: For an organization page, you can get analytics via the Social Metadata API and Share Statistics API. The Social Metadata endpoint (GET /v2/socialMetadata/{postUrn}) returns reaction counts by type and comment totals. You can also use the Batch Social Metadata endpoint to pull counts for multiple URNs. Page share metrics (impressions, clicks, etc.) are available via the organizationalEntityShareStatistics endpoint (requires rw_organization_admin, part of Ads API). For a member profile, LinkedIn closed the read scope (r_member_social_feed), so new apps cannot retrieve reaction/comment metrics on personal posts. (An approved partner app can use Social Metadata for the member’s own posts, but that permission isn’t open to self-serve apps.)
+
+Comments and replies: You can fetch and post comments on your own posts via the Comments API. Use GET /v2/socialActions/{postUrn}/comments to list comments, and POST /v2/socialActions/{postUrn}/comments to add a comment (first or a reply). Replying to a comment is done by supplying the parent comment’s URN. (Permissions: w_member_social_feed or w_organization_social_feed to post; r_organization_social_feed to read page comments.)
+
+Public posts: There is no general “feed” endpoint for arbitrary public posts. You can only retrieve posts by URN or by author (with Posts API’s “Find Posts by Authors” query). Reading other people’s content is heavily restricted: community APIs cannot be used to aggregate social feeds or scrape public profiles.
+
+Authentication & Tokens
+
+LinkedIn uses OAuth 2.0. Access tokens issued to a self-serve developer app are valid 60 days. No refresh token is provided by default, so users must re-authorize every 60 days. (LinkedIn’s docs confirm only approved MDP partner apps get a refresh token valid 365 days.) For testing, LinkedIn provides a Token Generator tool in the Developer Portal to obtain short-lived tokens for your account. In production you must go through the full OAuth flow (or use refresh tokens if your app is an approved partner). All API calls must include the LinkedIn-Version: YYYYMM header (monthly versioning) and X-Restli-Protocol-Version: 2.0.0.
+
+Long-lived tokens (partners): Only apps that join the Marketing Developer Program (MDP) / Community-API standard tier get programmatic refresh tokens (renewable for 365 days). Solo self-serve apps do not get refresh tokens.
+App Review and Permissions
+
+Personal Profile Posting: The “Share on LinkedIn” product is self-service. A developer can create an app in the portal, add the Share product, request w_member_social scope, and post on behalf of the signed-in member. No special approval or company vetting is needed for this.
+
+Company Page Posting: To post to an organization page, the app must add the Community Management API product and request w_organization_social (and r_organization_social for reads). Only organizations (not individual developers) qualify. LinkedIn’s docs explicitly state the app owner must be a registered legal organization, with a LinkedIn Page verified, business email, privacy policy, etc. LinkedIn reviews Community API applications and generally only approves commercial use cases; single-person/personal-page use is usually rejected. Review time can be weeks; on rejection you must create a new app and reapply. So for a solo founder, company-page API access is not guaranteed and often disallowed by policy. If Community API is approved, the developer also needs to assign the authenticated user an admin role on the Page.
+
+Approval tiers: After dev-tier, a standard-tier app must undergo more rigorous audit (privacy policy, etc.) to lift most limits. The highest MDP partner tier is even stricter and grants things like unlimited quotas and refresh tokens. Solo apps typically stay at dev-tier.
+
+Closed Scopes: Note that r_member_social (reading member posts/metrics) and r_member_social_feed are closed to new apps, so analytics on personal posts is essentially not available.
+
+Rate Limits
+
+LinkedIn imposes per-app and per-user quotas. On the Community Dev Tier, the limits are 500 calls per app and 100 calls per member (per day, or per rolling window). (These replaced earlier 100/10 limits.) So a single app can make ~500 API calls per day, and an individual member/token ~100. Other products have similar quotas. Excess usage is throttled. (Exact windows aren’t public, but these numbers guide design.)
+
+Restrictions & Terms
+
+LinkedIn’s API strictly forbids scraping or unauthorized automation. You must comply with the API Terms and Marketing API Terms. Key restrictions include: no replicating feeds (you cannot scrape or display a LinkedIn timeline outside the app) and no using member data for lead gen/CRM/ads. In short, the tool must only let the authenticated user (or their Page) manage their own content; it may not treat LinkedIn as a data source. For example, you cannot export comments or member lists, build audience targeting, or run mass messages with LinkedIn data. All content posted must follow LinkedIn’s Community Policies (no hate, harassment, illegal content, etc.), and even AI-generated content must adhere to those rules.
+
+API Changes & Migration
+
+LinkedIn’s APIs are date-versioned. The legacy UGC “Share” endpoints have been replaced by the unified Posts API. The old v2/ugcPosts and v2/shares endpoints are deprecated in favor of POST /v2/posts. For example, the Poll API notes “now create polls using the Posts API”. Developers must set LinkedIn-Version: YYYYMM on each request (e.g. “202610”), and monitor LinkedIn’s monthly changelog. (For instance, Marketing API v202511 was sunset Nov 2026.) See LinkedIn’s Migration Guide for details. Always use the latest version as new features (document posts, etc.) may not exist on older versions.
+
+Testing (Dev Tools)
+
+There is no separate sandbox – you test against real LinkedIn. Use the Developer Portal’s Token Generator (or LinkedIn’s Postman workspace) to get a test access token for your own account. The Development Tier of Community API lets you test posting with limited calls (as above). You must use a real LinkedIn account (dev/test account) in your app. LinkedIn provides a “Token Inspector” to view token TTL and scopes.
+
+Rust Libraries
+
+There is no official Rust SDK for LinkedIn. In Rust you would use an OAuth2 crate (e.g. oauth2) plus an HTTP client (e.g. reqwest) to call the REST endpoints. Uploading images, videos or documents just requires HTTP POST calls with the JSON payloads described above (and handling the upload URL for media). You may find some community wrappers, but most Rust devs implement the REST calls directly.
+
+Summary: For a single-user content app, the safest approach is (A) use Share on LinkedIn (w_member_social) to post from the user’s own profile (supporting all content types via Posts API). Posting to a Company Page (option B) requires Community API approval, which is difficult for an individual. Becoming a full partner (C) gives long-lived tokens but is even harder. If neither is feasible, option (D) manual pasting may be the fallback. In any case, LinkedIn’s API now supports multi-image and document (PDF carousel) posts, polls, etc., but reading analytics on personal posts is restricted. All usage must comply with LinkedIn’s guidelines.
+
+Sources: LinkedIn’s official docs and changelogs.

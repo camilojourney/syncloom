@@ -1,0 +1,84 @@
+{
+ "study": "main969-q3-meta",
+ "phase": "incomplete",
+ "outcome": {
+  "reason": "original-limits",
+  "details": "Original coordinator call limit reached: 40 of 40 calls used"
+ },
+ "usage": {
+  "coordinatorCalls": 40,
+  "nativeCalls": 0,
+  "knownMicroUsd": 107918,
+  "ceilingMicroUsd": 107918,
+  "costKnown": true
+ },
+ "trace": {
+  "id": "4498dca58af62f25674d89a658d0faa2",
+  "received": 217,
+  "pending": 0
+ },
+ "defaultEligible": false,
+ "primary": "claude",
+ "chatgpt": {
+  "label": "HAND",
+  "bytes": 9039,
+  "chars": 8954,
+  "sha256": "292af096c339f97c3b636e152d15615aa02b4aaba30e35e89722e38ad1035abc",
+  "path": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q3-chatgpt-HAND-report.txt",
+  "url": "https://chatgpt.com/c/6ae4dccd-4330-83ea-a952-ffde6ce84f30",
+  "panelText": "Sources\nActivity \u00b7 6m\n\nCitations\n\nNo sources detected\n\nSources scanned \u00b7 0\n\nNo sources scanned\n\nConnector sources scanned\n\nNo connector sources scanned",
+  "sourcesScanned": 0,
+  "citationsNoSources": true,
+  "inReportLinks": [
+   {
+    "text": "Facebook Platform Terms",
+    "href": "https://developers.facebook.com/terms/"
+   },
+   {
+    "text": "facebook-rs",
+    "href": "https://github.com/WF-Engineering/facebook-rs"
+   }
+  ],
+  "busy": 0,
+  "h1": [
+   "Instagram vs Facebook APIs",
+   "Authentication & Tokens",
+   "App Mode and Access Levels",
+   "Scheduling Posts",
+   "Key Limits and Policies",
+   "2025\u20132026 Changes to Watch For",
+   "Development & Testing",
+   "Rust Clients and Tools",
+   "Sources"
+  ],
+  "inputEvents": 0,
+  "clicks": 0,
+  "assoc": {
+   "associated": true,
+   "turns": 1,
+   "url": "https://chatgpt.com/c/6ae4dccd-4330-83ea-a952-ffde6ce84f30"
+  },
+  "tail": "e documented by Meta as well. All content must obey Facebook\u2019s platform terms and data-use policies."
+ },
+ "claude": {
+  "label": "NATIVE",
+  "path": "/Users/camiloslaptop/.local/state/phrona/durable-study-5.0.12-candidate/studies/main969-q3-meta/reports/claude-a8822295654e92188effbceccf4a0f8f2891a4f64f8e40027d992eb633256336.txt",
+  "copy": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q3-claude-NATIVE-report.txt",
+  "bytes": 31771,
+  "chars": 30933,
+  "sha256": "a8822295654e92188effbceccf4a0f8f2891a4f64f8e40027d992eb633256336",
+  "citations": 198,
+  "url": "https://claude.ai/chat/65c9c98f-6fca-4074-8259-5a3272c13c7c",
+  "method": "complete-loaded-claude-document"
+ },
+ "failures": {
+  "chatgpt": {
+   "report-document-changed": 1,
+   "report-unfinished-or-ambiguous": 10,
+   "report-model-only-no-sources": 1
+  },
+  "claude": {
+   "research-not-finished": 1
+  }
+ }
+}

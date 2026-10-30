@@ -1,0 +1,132 @@
+LinkedIn Publishing From a Single-Founder Local Rust App: Options, Capability Matrix and Verification (as of 30 Oct 2026)
+
+Bottom line: For the personal profile, use Option A: the self-serve “Share on LinkedIn” product with w_member_social, calling the versioned REST Posts API. LinkedIn’s own docs list w_member_social as sufficient to create text, image, multi-image (2–20), PDF document, poll, video and article posts. flaghand The company page is a different case. Every route to automated company-page posting (Option B, Community Management API) is gated: it is limited to “registered legal organizations for commercial use cases only”, needs a verified business email, and must sit on a dedicated app with no other products. microsoftmicrosoft So use D (manual paste) for the page today, and apply for B’s Development tier only if you have a registered entity. Option C (365-day refresh tokens) is not realistically available to you. microsoftmicrosoft The cost is a browser re-consent at least every 60 days, which takes only a few minutes a year.
+
+TL;DR
+
+
+Personal profile → A. The w_member_social scope can publish all the post formats you need, including PDF carousels (100 MB / 300 pages; PDF, PPT, PPTX, DOC, DOCX) and multi-image posts (2–20 images). flaghand +2 Analytics, reading comments and listing your own posts are not available on A: r_member_social is “closed”, and r_member_postAnalytics comes only with the vetted Community Management API. microsoftmicrosoft
+Company page → D now, B only if you have a registered business. The Community Management API is vetted. Its Development tier allows 500 calls per app and 100 calls per member per 24 h, which is enough for one user. It must be the only product on its app, and LinkedIn approves “at its discretion”. microsoftmicrosoft B is also the only official route to post analytics (personal or page).
+Tokens: access tokens last 60 days. Programmatic 365-day refresh tokens are for “a limited set of partners” and approved MDP partners. microsoftmicrosoft Plan on re-running the OAuth browser flow before expiry, about 6–7 times a year at 1–2 minutes each. On the version header: 202602 is still Active until 15 Feb 2027; target 202610 (Active until 15 Oct 2027). microsoft
+
+
+Recommendation (Options A–D)
+
+SurfaceRecommendedWhyPersonal profileA (Share on LinkedIn, w_member_social, REST /rest/posts + /rest/documents + /rest/images + /rest/videos)Self-serve with no review. LinkedIn’s Posts, Documents, MultiImage and Poll pages all list w_member_social as a permission [P]. A third-party vendor that verified against v202610 on 25 Oct 2026 reports production use of documents, polls and 2–20 photos with only openid profile w_member_social [S]. flaghandCompany pageD today; B (Development tier) only if you hold a registered legal entity, a business-domain email and super-admin on the pageB requires vetting of the legal entity, business email and page verification, and the product must be alone on a new app [P]. Rejection means creating a new app to reapply [P]. Identity vetting has auto-rejected even a legitimately registered but brand-new LLP [S]. microsoft +2Analytics (both)B or nonememberCreatorPostAnalytics needs r_member_postAnalytics (Community Management API only). Page share statistics need r_organization_social/rw_organization_admin (Community Management or Advertising API) [P]. microsoftRefresh tokensNot CProgrammatic refresh tokens are available to “a limited set of partners” or “approved Marketing Developer Platform (MDP) partners” [P]. microsoft +2 No self-serve application route was found.
+
+What would change the answer (flagged):
+
+
+Company-page posting needs an approval a one-person app may not get. This is confirmed [P]. Vetting requires a “registered legal organization”, a “commercial use case”, a verified business email (“Personal email addresses won’t pass”) and an app verified by a page super admin. microsoft A sole founder with a registered company and a domain email can plausibly pass Development-tier vetting. A founder without an entity cannot. PDF posting does not need that approval for the personal profile. The Documents API lists w_member_social, and a person URN may own the document [P]. microsoft However, no first-hand 403/success report for a Share-only app calling /rest/documents was found in Stack Overflow, Microsoft Q&A or GitHub. Only vendor claims and your own March 2026 test support it [S]. One forum report shows a Share-only app getting 403 on /rest reshare and reaction calls [S]. make So test each content type on your app before building on it.
+No refresh tokens for a solo developer. This is confirmed as the realistic case [P]. The cost: an interactive browser OAuth run every ≤60 days. If you re-run it while still logged in to linkedin.com and before the token expires, LinkedIn skips the consent screen and redirects straight back [P]. microsoftmicrosoft Estimated cost: ~6–7 runs per year × ~1–2 minutes ≈ 10–15 minutes per year, plus a reminder in the app. The real risk is a missed expiry during a scheduled run. Changing the requested scopes also invalidates all previous tokens [P]. microsoft
+
+
+Capability Matrix
+
+Legend: [P] = primary (Microsoft Learn LinkedIn docs, LinkedIn legal pages); [S] = secondary. “SS” = self-serve; “Gated” = vetted product. Dates are the page’s “Last updated” or the doc version viewed.
+
+(1) Personal member profile
+
+CapabilityProduct / scopeSS vs gatedDetails & limitsSource / dateText-only postShare on LinkedIn → w_member_social; POST /rest/postsSSPosts API “replaces the ugcPosts API”. Requires Linkedin-Version: YYYYMM and X-Restli-Protocol-Version: 2.0.0 microsoftPosts API, view 202608/202609, last updated 2026-05-13 [P]Single imagew_member_social + Images API (/rest/images?action=initializeUpload)SSUpload the image, get urn:li:image:{id}, then post microsoftPosts API 2026-05-13; Images API view 202606 [P]Multi-imagew_member_social (listed)SSMin 2, max 20 images; < 36,152,320 pixels; JPG/GIF/PNG; GIF ≤ 250 frames; organic only ayrsharemicrosoftMultiImage API, view 202608, last updated 2026-04-30 [P]PDF document carouselw_member_social (listed) + Documents APISS (docs); verify on your app≤100 MB and ≤300 pages; PPT, PPTX, DOC, DOCX, PDF; title required on the media object; SYNCHRONOUS_UPLOAD not supported; for person owners “the caller must match the document owner” ayrsharemicrosoftDocuments API, view 202607, last updated 2026-06-24 [P]; vendor production claim (Flaghand, checked 2026-10-25) [S]Videow_member_social + Videos APISS3 s–30 min; 75 KB–500 MB; MP4 flaghand (the same page also says “Maximum allowed Videos size is 5GB”, an internal inconsistency); multipart 4 MB chunks microsoftVideos API, view 202605 [P]Pollw_member_social (listed)SS2–4 options; durations ONE_DAY, THREE_DAYS, SEVEN_DAYS, FOURTEEN_DAYS; organic only. microsoftmicrosoft Character limits (question 140, option 30): not found in primary docs, only in third-party SDK docs [S] docsPoll API, view 202602 [P]; late crate docs [S]Article / link previeww_member_socialSSNo URL scraping. You must supply source, title, description and a thumbnail (an uploaded image URN) yourself microsoftPosts API 2026-05-13 [P]Organic “carousel” (swipe of images)n/aNot available“Organic carousel is currently not supported.” Carousels are sponsored-only. microsoft Use a PDF document for swipeable slidesPosts API 2026-05-13 [P]Native schedulingnoneNot foundNo scheduled-publish field documented. lifecycleState is PUBLISHED on create. The app must schedule locallyPosts API 2026-05-13 (absence) [P]Edit postw_member_socialSSX-RestLi-Method: PARTIAL_UPDATE; only listed fields such as commentary are editable microsoftPosts API 2026-05-13 [P]Delete postw_member_social (“Post, comment, and like posts on behalf of an authenticated member”)SSDELETE /rest/posts/{encoded ugcPostUrn|shareUrn} with X-Restli-Protocol-Version: 2.0.0 and X-RestLi-Method: DELETE. “Post deletions are idempotent”, so deleting an already-deleted post returns 204 No Content. “Batch delete of Posts is not supported.”Posts API, view 202608, last updated 2026-05-13 [P]First comment on own postw_member_social (Comments API lists “Comment on posts on behalf of an authenticated member”)SS on paper; verifyThe June 2023 permission migration maps /socialActions/comments writes to w_member_social_feed (Community Management only). microsoft A Share-only app got 403 on /rest/reactions in Jul 2025 [S]. flaghandmake A 1-minute comment-creation throttle exists microsoftComments API (legacy view) [P]; Social Metadata API view 202603 [P]; Make Community thread 2025-07-29 [S]Own post metricsr_member_postAnalytics → GET /rest/memberCreatorPostAnalytics (q=me / q=entity; IMPRESSION, MEMBERS_REACHED, REACTION, COMMENT, RESHARE)Gated (Community Management API)Launched in 202506 microsoftIncreasing Access, last updated 2026-10-19; Recent changes 202506 [P]List own posts / read comments & reactionsr_member_socialClosedCommunity Management Overview: “r_member_social is a closed permission. We’re not accepting access requests at this time due to resource constraints.” microsoftmicrosoft Posts API: “This permission is restricted and is available to approved users only.”Community Management Overview, last updated 2026-05-15 [P]; Posts API, last updated 2026-05-13 [P]Reply to commentsw_member_social_feedGated (Community Management)Nested comments via /socialActions/{commentUrn}/commentsIncreasing Access 2026-10-19 [P]Read others’ public postsnoneNot possibleNo documented endpoint. A Microsoft Q&A answer (Apr 2026) confirms there is no network-wide public-post API [S] microsoftmicrosoft—
+
+(2) Company / organization page
+
+CapabilityProduct / scopeSS vs gatedDetails & limitsSource / dateText, image, multi-image, document, video, poll, articleCommunity Management API → w_organization_social (role ADMINISTRATOR, DIRECT_SPONSORED_CONTENT_POSTER or CONTENT_ADMIN)GatedSame content limits as the personal table. Document owner = organization URN; caller needs ADMIN or DSC role microsoftmicrosoftPosts / Documents / MultiImage API pages 2026 [P]; Increasing Access 2026-10-19 [P]SchedulingnoneNot foundSchedule locally—Edit / deletew_organization_socialGatedPARTIAL_UPDATE as abovePosts API 2026-05-13 [P]First comment / reply / reactionsw_organization_social / w_organization_social_feedGated—Increasing Access 2026-10-19 [P]Post analyticsr_organization_social / rw_organization_admin: organizationalEntityShareStatistics, socialMetadata, video analyticsGatedDevelopment tier: no BATCH_GET calls microsoftCommunity Management Overview 2026-05-15; Increasing Access 2026-10-19 [P]Read comments/reactions on page postsr_organization_social(_feed)Gated—Increasing Access 2026-10-19 [P]Read others’ public postsnoneNot possible——Via Advertising API insteadAlso grants w_organization_social, r_organization_socialGated (vetted)Not a shortcut: it is also vetted and intended for ad campaign managementIncreasing Access 2026-10-19 [P]
+
+Authentication & Tokens
+
+
+Access token lifetime: 60 days. “Currently, all access tokens are issued with a 60-day lifespan” microsoft (expires_in 5184000). Source: 3-legged OAuth page, ms.date 2025-11-10, last updated 2026-05-15 [P]. microsoft
+Refresh tokens: “Programmatic refresh tokens are available for a limited set of partners” [P]. microsoftmicrosoft The Programmatic Refresh Tokens page says LinkedIn “supports programmatic refresh tokens for all approved Marketing Developer Platform (MDP) partners”. Refresh tokens last 365 days, and refreshing does not extend that TTL [P, page date not captured]. microsoft A Microsoft Q&A answer from Aug 2026 also says approval is required and refresh is not a portal toggle [S]. microsoft
+Re-consent without refresh tokens: “To refresh an access token, go through the authorization process again.” microsoft If the member is logged in to linkedin.com and the current token has not expired, “the authorization screen is bypassed” [P]. Requesting a different scope invalidates all previous tokens [P]. microsoft
+PKCE / native desktop: LinkedIn documents a separate native flow at /oauth/native-pkce/authorization with S256 and a loopback redirect (example http://127.0.0.1:3000). It requires the system browser, not a webview. It is not self-serve: “please reach out to your point of contact at LinkedIn, and we will enable PKCE OAuth 2 flow for your app” [P, page date not captured]. microsoft Developers report that the standard /oauth/v2/authorization endpoint rejects a code_verifier with a confidential client (“invalid_client”) and returns “Not enough permissions to access Native PKCE protocol” when native PKCE isn’t enabled [S: GitHub PRs/issues, 2025–2026]. github +2
+Practical local-app pattern: use the standard confidential authorization-code flow with client_secret stored in the OS keychain (single user, own app). Note the risk: anyone with your binary/config could extract the secret. The docs say the redirect URL is added “via HTTPS” and must be absolute, without # [P]. microsoft Whether http://localhost is accepted on the standard flow is not found in primary docs. Native PKCE explicitly uses http://127.0.0.1 loopback [P]. microsoft Fallbacks: the Developer Portal Token Generator (manual token, 60 days) [P], or an https:// redirect you control that hands the code back to the local app. microsoft
+
+
+App Review / Vetting
+
+ProductReview?Who qualifiesSource / dateShare on LinkedIn (w_member_social)No (self-serve “Open Permission”)Any developer app; every app must be associated with a LinkedIn Page [S] schedulenchillmicrosoftShare on LinkedIn, last updated 2025-02-05 [P] microsoftCommunity Management API – Development tierYes“Registered legal organizations for commercial use cases only”; verified business email (“Personal email addresses won’t pass”); org legal name, registered address, website, privacy policy; app verified by a page super admin; app name must not contain LinkedIn/Microsoft marks microsoftCM App Review, last updated 2026-02-11 [P]Community Management API – Standard tierYesDevelopment tier approved and integration complete; downloadable, high-resolution screencast of every use case (e.g., OAuth, posting to page, how commenter data is displayed); test credentials; valid privacy policy; data-storage compliance microsoftCM App Review 2026-02-11 [P]r_member_postAnalytics, r_member_profileAnalyticsPart of the Community Management APIAs aboveIncreasing Access 2026-10-19 [P]r_member_social (Member Post Management)ClosedNot accepting requests microsoftCM Overview 2026-05-15 [P]Programmatic refresh tokens / MDPPartner-only“Limited set of partners” microsoftOAuth page 2026-05-15 [P] microsoftmicrosoft
+
+
+Exclusivity rule: “The Community Management API requires that it be the only product associated with a developer application due to legal and security constraints.” With any other product (e.g., Share) or a pending request, the request button is greyed out [P, Partner Support Guide]. microsoft Implication: run two apps, one Share app for personal posting and one Community Management app. The Community Management API itself also bundles w_member_social, so an approved Community Management app could serve both surfaces plus analytics. microsoft
+Development tier limits: 500 calls/app/24 h; 100 calls/member/24 h; BATCH_GET not allowed; social-action webhooks disabled. You are “expected to build core business use cases … within twelve (12) months” [P, Increasing Access 2026-10-19]. microsoft What happens after 12 months on the Development tier is not found.
+Discretion: “LinkedIn reserves the right to review applications and select partners at its discretion and a partner might not be upgraded even if they meet these minimum requirements” [P]. Restricted APIs have “no fixed timeline” [P]. microsoft
+Typical time to approval: not found in primary sources for the Community Management API. The “2–16 weeks” estimate is unverified.
+Rejection reasons: documented review criteria are approved use case, verified business email, verified organization, website/domain, and page verification [P]. microsoft A reported failure mode is “Identity vetting failed — unable to verify that your organization is a legally registered, active entity” for an LLP incorporated 2 June 2026 and not yet in third-party databases, with appeals auto-rejected [S, Microsoft Q&A 2026]. microsoft Rejected applicants must create a new app to reapply [P]. microsoft
+Own-page-only app: the review screencast criteria are written for a “Page Management” use case (a user posting to their LinkedIn page), so a single-company self-management tool fits the use-case list [P]. microsoft No doc says single-user apps are excluded or approved. Not found.
+
+
+Rate Limits
+
+
+Share on LinkedIn: Member 150 requests/day; Application 100,000/day (UTC) flaghand [P, Share on LinkedIn page, last updated 2025-02-05]. This table sits on the legacy ugcPosts page; microsoft per-endpoint limits for /rest/posts and /rest/documents are not published.
+General: “Standard rate limits are not published in documentation.” Look them up per endpoint in Developer Portal → app → Analytics, after making at least one call [P, Rate Limiting page]. linkedin Since 202509 an email alert fires at 75% of the daily app quota [P, Recent changes]. microsoft
+Community Management Development tier: 500/app and 100/member per 24 h [P, 2026-10-19]. microsoft
+Comments: a short-term 1-minute creation throttle (HTTP 429 “Comment create throttled”) [P]. microsoft
+Per-endpoint daily limits for documents and images: not found.
+
+
+Terms / Policy
+
+
+User Agreement §8.2 (Don’ts): “Use bots or other unauthorized automated methods to access the Services, … create, comment on, like, share, or re-share posts, or otherwise drive inauthentic engagement” [P, User Agreement, effective date not captured]. linkedin Using LinkedIn’s official API through an approved product is authorized automation. Browser automation or scraping of linkedin.com is not. profilespiderlinkedin
+Developer AI Policy (last updated 2026-01-14) [P]: developers should “Restrict automated posting of AI-generated content to external sites (including LinkedIn) … without end user involvement”. If generated content is attributed to the user, “the end user should be provided tools to first edit the generated content”. Users must be told when they interact with AI (“AI-powered” label) and that output may be inaccurate. microsoft Your human-approval-before-publish design satisfies the core requirement. The policy formally covers Marketing APIs (e.g., Community Management), but it is good practice for A as well. microsoft
+AI labeling / C2PA: Fortune (Jeremy Kahn, 26 Nov 2024) reports that “LinkedIn applies a visible ‘CR’ label in the upper lefthand corner of any content uploaded to its platform that has C2PA content credentials.” Clicking the label shows the creation tool, the signer, and a date and time stamp [S]. LinkedIn Help, as quoted by a secondary source, says: “If you post image or video content that contains C2PA credentials, we will indicate its presence with the C2PA icon.” LinkedIn also says it cannot yet label all AI content [S]. No API field for AI disclosure was found in the Posts schema. Text posts carry no label. lilachbullock If your PDF or images come from AI tools that embed C2PA, expect the badge.
+Data storage / use: member social activity data may be stored only 48 h, and most member profile data 24 h. Data may be used only to manage Pages or Profiles. No social-feed use cases [P, Restricted Uses page, older version view 202306; current-version text not re-verified]. microsoft Scraping of LinkedIn is prohibited outside written permission [P, User Agreement / Service Terms]. linkedin
+Local single-user relevance: the API Terms say you must not require users to obtain their own access credentials. unt For your own use this is moot.
+
+
+Breaking Changes & Version Sunset (as of 30 Oct 2026)
+
+From the Migrations page (last updated 2026-10-15) [P]:
+
+VersionSunsetStatus202610 (latest)15 Oct 2027Active202609 / 202608 / 202607 / 202606 / 202605 / 202604 / 20260315 Sep 2027 … 16 Mar 2027Active20260215 Feb 2027Active20260115 Jan 2027Active20251116 Nov 2026Active (sunsets in ~2 weeks)202510 and older15 Oct 2026 and earlierDeprecated
+
+
+Versions are monthly and “supported … for a minimum of one (1) year”. The latest version is not applied by default. Every call must send Linkedin-Version [P, Versioning]. microsoft
+The Posts API replaces ugcPosts. The legacy Shares and UGC APIs and unversioned APIs were sunset on 30 Jun 2023. microsoft +2 The Videos and Images APIs replace the Assets API [P]. microsoft The self-serve “Share on LinkedIn” page still shows v2/ugcPosts (last updated 2025-02-05), so its examples are outdated [P]. microsoftmicrosoft
+2025–2026 changes relevant to you: 202506 added memberCreatorPostAnalytics and member video analytics; microsoft 202507 added member follower/profile analytics (r_member_profileAnalytics); 202509 added the rate-limit alert emails; microsoft 202602 added Videos templateName/linkbackContext; microsoftmicrosoft 202610 added boost permissions (r_member_boost etc., Advertising API) [P, Recent Marketing API Changes]. microsoftmicrosoft No 2025–2026 deprecation of member or organization posting, polls or documents was found.
+
+
+Test Mode / Sandbox
+
+
+No sandbox or test-page provisioning was found in LinkedIn docs [P, absence; subagent search]. Quick Start says to “Create a LinkedIn Page” and test with the Token Generator or Postman; page access “cannot be granted or updated through the API” [P]. microsoftmicrosoft
+The Community Management Development tier is the de facto test tier (500/100 call limits, 12-month build window) [P]. The Advertising API alone offers “1 test Ad Account” [P]. microsoft Practical workaround: a separate, unpublicized company page you create yourself [S]. zernio
+
+
+Rust Ecosystem
+
+
+gen-linkedin v0.1.36 (crates.io) [S]: “Minimal LinkedIn Posts API client”. The default posts feature targets the REST Posts API, with optional ugc (legacy) and oauth2 features. It focuses on simple text posts for CI release announcements, so no documents/images/polls were shown. crates Maintenance status beyond the version number was not verified.
+late crate [S]: a generated client for a third-party SaaS (Zernio), not LinkedIn’s API. docs Not suitable for local-first use.
+Recommended generic stack: oauth2 5.0.0 (released 21 Jan 2025; supports PKCE; reqwest + rustls defaults) [S, crates.io API], crates reqwest for multipart and PUT uploads, serde/serde_json, and keyring for token and secret storage. Disable PKCE on the standard flow (see Auth). Hand-write thin typed wrappers for /rest/posts, /rest/images, /rest/documents, /rest/videos and pin Linkedin-Version.
+No Rust crate was found that supports the versioned Documents/MultiImage/Poll REST surface.
+
+
+Confirm / Correct: March 2026 Evidence
+
+March 2026 claimVerdictEvidenceText, image, PDF document, poll and video posted to personal profile via self-serve accessConsistent / plausible; not independently confirmedAll relevant API pages list w_member_social [P]. A vendor reports the same in production as of Oct 2026 [S]. flaghand No independent first-hand report of Share-only /rest/documents success was found.Poll: 2–4 optionsConfirmedPoll API [P] microsoftmicrosoftPoll: 30 characters per optionNot found in primary; corroborated only by third-party SDK docs (question 140, option 30) [S] docs—Poll durations 1/3/7/14 daysConfirmedONE_DAY/THREE_DAYS/SEVEN_DAYS/FOURTEEN_DAYS [P] microsoftLinkedIn-Version 202602Confirmed still valid; Active until 15 Feb 2027Migrations 2026-10-15 [P]. microsoft Recommend moving to 202610.Analytics blocked because r_member_social is closedPartly correct / correct the reasonr_member_social is indeed closed [P]. microsoft But post metrics come from r_member_postAnalytics (memberCreatorPostAnalytics), part of the vetted Community Management API, not r_member_social [P]. microsoftmicrosoft Analytics are gated, not closed.Company-page posting never builtNot a factual claim; note it requires the gated Community Management API[P]Access tokens last 60 daysConfirmedOAuth page 2026-05-15 [P]365-day refresh tokens need partner approvalConfirmed“limited set of partners”; “approved MDP partners” [P] microsoft +2Approval 2–16 weeksNot found in primary sources; unverifiedRestricted APIs: “no fixed timeline” [P] microsoft
+
+Not Found (explicit)
+
+
+Native scheduling field or endpoint in the Posts API.
+Primary-source character limits for poll questions and options.
+Typical Community Management approval time; published approval or rejection statistics for single-user apps.
+Whether http://localhost redirect URIs are accepted on the standard (non-PKCE) flow.
+Whether native PKCE can be enabled for a self-serve app without a LinkedIn “point of contact”.
+Per-endpoint daily rate limits for /rest/posts, /rest/documents, /rest/images under Share on LinkedIn.
+A first-hand (non-vendor) success or 403 report for a Share-only app on /rest/documents, multiImage or polls.
+A LinkedIn sandbox or test-page environment.
+What happens to Community Management Development-tier access after the 12-month build window.
+An API field for AI-content disclosure or C2PA on posts.
+
+
+Caveats
+
+
+Several primary pages are versioned views (e.g., view 202607) whose “last updated” date can be earlier than the view month. Dates are given as shown.
+Vendor blogs that say “it works with w_member_social” have a commercial interest. Treat them as corroboration only.
+The Share on LinkedIn product docs still describe legacy v2/ugcPosts. Whether LinkedIn will eventually restrict /rest/* media endpoints for Share-only apps is unknown. Build feature flags per content type and run a smoke test on each new version.
+
