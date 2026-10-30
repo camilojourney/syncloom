@@ -3,10 +3,10 @@
 **Date:** 2026-10-30
 **Status:** Accepted
 **Supersedes:** none
-**OpenSpec changes:** [add-studio-slice-1](../../openspec/changes/add-studio-slice-1/) (slice 1; D4, D6 and D7 shape it). D1 lands in the review-screen change and D2 in the first platform-integration change when they are proposed
+**OpenSpec changes:** [add-studio-slice-1](../../openspec/changes/archive/2026-10-30-add-studio-slice-1/) (slice 1, archived into `openspec/specs/`; D4, D6 and D7 shape it). D1 lands in the review-screen change and D2 in the first platform-integration change when they are proposed
 **Agreed:** yes - the captain, 2026-10-30, in [the captain's words](sources/captain-words.md): "yes to all. start building it." after "Let's work on this decision give you you recommendation and I'll accept it"
 **Recommended:** none outstanding
-**Built:** partly: the repository foundation and slice 1 (one text thought, one model-drafted LinkedIn text, revision-bound approval, contained publish intent) are built in this branch; slices 2-5 are not built
+**Built:** partly: the repository foundation and slice 1 (one text thought, one model-drafted LinkedIn text, revision-bound approval, contained publish intent, loopback API and CLI over one core) are built and their seven specs archived into `openspec/specs/`; slices 2-5 are not built
 **Live-proven:** no - the one live check (a real Claude draft, plan criterion 13) has not run because using a key needs the captain's word; no platform integration exists yet
 
 ## Context
