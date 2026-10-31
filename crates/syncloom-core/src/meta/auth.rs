@@ -19,11 +19,11 @@ impl Meta {
     }
     pub async fn sign_in_wait(&self) -> Result<Connection, StudioError> {
         self.config.require()?;
-        let (code, _) = self.session.wait().await?;
+        let (code, _, generation) = self.session.wait().await?;
         let token = tokio::time::timeout(self.session.deadline(), self.derive_token(&code))
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
-        self.session.save_token(&token)?;
+        self.session.save_token(generation, &token)?;
         self.connection()
     }
     async fn derive_token(&self, code: &str) -> Result<Token, StudioError> {

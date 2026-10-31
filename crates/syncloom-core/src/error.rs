@@ -31,6 +31,8 @@ pub enum StudioError {
     AssetConflict,
     MastodonNotConfigured,
     MetaNotConfigured,
+    PlatformNotConfigured,
+    CostConfirmationRequired,
     Internal,
 }
 
@@ -42,7 +44,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 28] = [
+const ROWS: [Row; 30] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -145,11 +147,19 @@ const ROWS: [Row; 28] = [
         "meta_not_configured",
         "Meta needs a client id, client secret, business login configuration, Page id and a free loopback callback port.",
     ),
+    row(
+        "platform_not_configured",
+        "This platform needs its documented app settings before sign-in.",
+    ),
+    row(
+        "cost_confirmation_required",
+        "Preview the X cost estimate and confirm its exact micro-USD amount before publishing.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 28] = [
+    pub const ALL: [StudioError; 30] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -177,6 +187,8 @@ impl StudioError {
         StudioError::AssetConflict,
         StudioError::MastodonNotConfigured,
         StudioError::MetaNotConfigured,
+        StudioError::PlatformNotConfigured,
+        StudioError::CostConfirmationRequired,
         StudioError::Internal,
     ];
 

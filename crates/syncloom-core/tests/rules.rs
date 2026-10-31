@@ -163,6 +163,8 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "linkedin_not_configured",
         "mastodon_not_configured",
         "meta_not_configured",
+        "platform_not_configured",
+        "cost_confirmation_required",
         "sign_in_in_progress",
         "sign_in_not_started",
         "sign_in_denied",

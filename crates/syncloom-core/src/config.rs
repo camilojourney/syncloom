@@ -83,6 +83,7 @@ pub struct StudioConfig {
     pub linkedin: LinkedinConfig,
     pub mastodon: crate::mastodon::MastodonConfig,
     pub meta: crate::meta::MetaConfig,
+    pub social: crate::social::SocialConfig,
     pub renderer: crate::visual::RendererConfig,
 }
 
@@ -121,12 +122,15 @@ pub fn delivery_grant(value: Option<&str>) -> Result<BTreeSet<String>, String> {
             Channel::Mastodon,
             Channel::FacebookPage,
             Channel::Instagram,
+            Channel::Bluesky,
+            Channel::X,
+            Channel::Threads,
         ]
         .iter()
         .any(|channel| channel.platform() == name);
         if !known {
             return Err(format!(
-                "{DELIVERY_ENV} names an unknown platform; known platforms: linkedin, mastodon, facebook, instagram"
+                "{DELIVERY_ENV} names an unknown platform; known platforms: linkedin, mastodon, facebook, instagram, bluesky, x, threads"
             ));
         }
         granted.insert(name.to_owned());
@@ -160,6 +164,7 @@ pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfi
             get(crate::mastodon::REDIRECT_ENV).as_deref(),
         )?,
         meta: crate::meta::MetaConfig::parse(&get)?,
+        social: crate::social::SocialConfig::parse(&get)?,
         renderer: crate::visual::renderer_config(&get),
     })
 }
@@ -183,6 +188,12 @@ pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Stud
         clock.clone(),
         settings.sign_in_deadline,
     ));
+    let social = Arc::new(crate::social::SocialPlatforms::new(
+        config.social,
+        credentials.clone(),
+        clock.clone(),
+        settings.sign_in_deadline,
+    ));
     let meta = Arc::new(crate::meta::Meta::new(
         config.meta,
         credentials,
@@ -192,6 +203,7 @@ pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Stud
     ));
     let mut studio = Studio::new(store, Arc::new(provider), clock, settings)
         .with_meta(meta.clone())
+        .with_social(social.clone())
         .with_mastodon(mastodon.clone())
         .with_linkedin(linkedin.clone())
         .with_renderer(config.renderer);
@@ -207,6 +219,18 @@ pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Stud
     ] {
         if config.delivery.contains(name) {
             studio = studio.with_delivery(name, meta.target(target));
+        }
+    }
+    for (name, adapter) in [
+        (
+            "bluesky",
+            social.bluesky.clone() as Arc<dyn crate::Platform>,
+        ),
+        ("x", social.x.clone()),
+        ("threads", social.threads.clone()),
+    ] {
+        if config.delivery.contains(name) {
+            studio = studio.with_delivery(name, adapter);
         }
     }
     Ok(studio)

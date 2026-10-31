@@ -2,6 +2,7 @@
 //!
 //! Results print as JSON on stdout with exit 0. A failed command prints the core's
 //! `{"error":{"code","message"}}` on stderr with exit 1. Configuration errors exit 2.
+mod social_connection;
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use syncloom_core::{
@@ -53,6 +54,9 @@ enum Command {
         expected_revision: String,
         #[arg(long)]
         dry_run: bool,
+        /// Exact estimate from --dry-run, in integer micro-USD. Required for X delivery.
+        #[arg(long)]
+        accepted_cost_microusd: Option<u64>,
     },
     /// Render revision-bound PNG and PDF assets using the pinned local browser.
     Render {
@@ -79,6 +83,13 @@ enum Command {
     Mastodon {
         #[command(subcommand)]
         command: ConnectionCommand,
+    },
+    /// Manage Bluesky, X or Threads credentials. No publishing occurs here.
+    Connect {
+        #[arg(value_parser = ["bluesky", "x", "threads"])]
+        platform: String,
+        #[command(subcommand)]
+        command: social_connection::Command,
     },
     /// Export approved copy and visual files locally. This never posts.
     Export {
@@ -154,7 +165,17 @@ async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, St
             piece_id,
             expected_revision,
             dry_run,
-        } => publish(studio, &piece_id, expected_revision, dry_run).await,
+            accepted_cost_microusd,
+        } => {
+            publish(
+                studio,
+                &piece_id,
+                expected_revision,
+                dry_run,
+                accepted_cost_microusd,
+            )
+            .await
+        }
         Command::Render {
             piece_id,
             expected_revision,
@@ -169,6 +190,9 @@ async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, St
         }
         Command::Mastodon { command } => {
             connection(studio, command, ConnectionPlatform::Mastodon).await
+        }
+        Command::Connect { platform, command } => {
+            social_connection::run(studio, &platform, command).await
         }
         Command::Export {
             piece_id,
@@ -222,6 +246,7 @@ async fn publish(
     piece_id: &str,
     expected_revision: String,
     dry_run: bool,
+    accepted_cost_microusd: Option<u64>,
 ) -> Result<Value, StudioError> {
     studio
         .publish(
@@ -229,6 +254,7 @@ async fn publish(
             PublishRequest {
                 expected_revision,
                 dry_run,
+                accepted_cost_microusd,
             },
         )
         .await

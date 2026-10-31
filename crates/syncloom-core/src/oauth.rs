@@ -108,6 +108,7 @@ struct Callback {
     error: Option<String>,
 }
 struct Pending {
+    generation: u64,
     state: Secret,
     verifier: Option<Secret>,
     deadline: Instant,
@@ -131,10 +132,8 @@ impl Drop for Pending {
 pub(crate) struct Session {
     pending: Mutex<Option<Arc<Pending>>>,
     redirect: RedirectUrl,
-    clock: Arc<dyn Clock>,
+    credentials: Arc<crate::credential_session::CredentialSession>,
     deadline: Duration,
-    store: Arc<dyn crate::TokenStore>,
-    account: String,
 }
 impl Session {
     pub fn new(
@@ -144,12 +143,23 @@ impl Session {
         clock: Arc<dyn Clock>,
         deadline: Duration,
     ) -> Self {
+        Self::with_credentials(
+            redirect,
+            Arc::new(crate::credential_session::CredentialSession::new(
+                account, store, clock,
+            )),
+            deadline,
+        )
+    }
+    pub fn with_credentials(
+        redirect: RedirectUrl,
+        credentials: Arc<crate::credential_session::CredentialSession>,
+        deadline: Duration,
+    ) -> Self {
         Self {
             pending: Mutex::new(None),
             redirect,
-            store,
-            account,
-            clock,
+            credentials,
             deadline,
         }
     }
@@ -157,29 +167,23 @@ impl Session {
         self.deadline
     }
     pub fn now(&self) -> time::OffsetDateTime {
-        self.clock.now()
+        self.credentials.clock.now()
     }
     pub fn now_rfc3339(&self) -> String {
-        self.clock.now_rfc3339()
+        self.credentials.clock.now_rfc3339()
     }
-    pub fn save_token(&self, token: &Token) -> Result<(), StudioError> {
-        self.store.save(&self.account, token).map_err(Into::into)
+    pub fn save_token(&self, generation: u64, token: &Token) -> Result<(), StudioError> {
+        self.credentials.commit_token(generation, token)
     }
     pub fn usable_token(&self) -> Result<Token, crate::PostFailure> {
-        self.store
-            .usable_token(&self.account, &self.clock.now_rfc3339())
+        self.credentials.usable()
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
-        Ok(Connection::from_token(
-            self.store.load(&self.account)?,
-            &self.clock.now_rfc3339(),
-            self.active(),
-        ))
+        self.credentials.connection(self.active())
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.cancel();
-        self.store.delete(&self.account)?;
-        self.connection()
+        self.credentials.clear()
     }
     pub fn cancel(&self) {
         if let Some(pending) = self.pending.lock().unwrap().take() {
@@ -224,7 +228,9 @@ impl Session {
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
         });
+        self.credentials.invalidate();
         *slot = Some(Arc::new(Pending {
+            generation: self.credentials.generation(),
             state,
             verifier,
             deadline: Instant::now() + deadline,
@@ -234,10 +240,10 @@ impl Session {
         Ok(SignInStart {
             status: ConnectionStatus::AwaitingConsent,
             authorization_url: url.to_string(),
-            expires_at: crate::clock::rfc3339(self.clock.now() + deadline),
+            expires_at: crate::clock::rfc3339(self.now() + deadline),
         })
     }
-    pub async fn wait(&self) -> Result<(String, Option<Secret>), StudioError> {
+    pub async fn wait(&self) -> Result<(String, Option<Secret>, u64), StudioError> {
         let pending = self
             .pending
             .lock()
@@ -269,7 +275,7 @@ impl Session {
         if slot.as_ref().is_some_and(|p| Arc::ptr_eq(p, &pending)) {
             *slot = None;
         }
-        result.map(|code| (code, pending.verifier.clone()))
+        result.map(|code| (code, pending.verifier.clone(), pending.generation))
     }
 }
 /// One owner of callback routing, Host validation and fixed error responses.
@@ -319,7 +325,7 @@ async fn callback(
     }
     ([(header::CONTENT_TYPE,"text/html; charset=utf-8")],"<!doctype html><html><head><title>Syncloom</title></head><body><p>Sign-in answer received. Return to the studio.</p></body></html>").into_response()
 }
-fn random_token() -> Secret {
+pub(crate) fn random_token() -> Secret {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("OS randomness");
     Secret::new(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
@@ -329,6 +335,22 @@ fn s256(verifier: &str) -> String {
 }
 
 /// Bounded JSON answers shared by adapters; never include provider bodies in errors.
+pub(crate) async fn exchange_json<T: serde::de::DeserializeOwned>(
+    builder: reqwest::RequestBuilder,
+) -> Result<T, StudioError> {
+    let response = builder
+        .send()
+        .await
+        .map_err(|_| StudioError::SignInRejected)?;
+    let value: serde_json::Value = read_json(response)
+        .await
+        .ok_or(StudioError::SignInRejected)?;
+    if value.get("error").is_some() {
+        return Err(StudioError::SignInRejected);
+    }
+    serde_json::from_value(value).map_err(|_| StudioError::SignInRejected)
+}
+
 pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
 ) -> Option<T> {
@@ -338,6 +360,7 @@ pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
     read_json_body(response).await
 }
 
+/// Bounded body decoding for APIs whose documented errors are JSON, too.
 pub(crate) async fn read_json_body<T: serde::de::DeserializeOwned>(
     mut response: reqwest::Response,
 ) -> Option<T> {

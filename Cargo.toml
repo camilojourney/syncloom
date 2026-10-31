@@ -12,6 +12,8 @@ publish = false
 syncloom-core = { path = "crates/syncloom-core" }
 syncloom-server = { path = "crates/syncloom-server" }
 apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }
+atrium-api = { version = "=0.26.0", default-features = false, features = ["namespace-appbsky"] }
+unicode-segmentation = "1"
 axum = "0.8"
 base64 = "0.22"
 bytes = "1"
@@ -27,6 +29,7 @@ keyring-core = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rpassword = "7"
 sha2 = "0.10"
 subtle = "2"
 tempfile = "3"

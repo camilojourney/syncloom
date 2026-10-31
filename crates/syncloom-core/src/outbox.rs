@@ -85,6 +85,8 @@ pub struct DispatchIntent {
     pub post_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_estimate: Option<crate::social::CostEstimate>,
 }
 
 /// Hex SHA-256 of the compact sorted JSON of `operation`, `piece_id` and `revision`; the

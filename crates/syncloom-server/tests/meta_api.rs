@@ -201,6 +201,7 @@ async fn http_consent_page_text_photo_instagram_image_carousel_and_restart_repea
                 syncloom_core::PublishRequest {
                     expected_revision: p["revision"].as_str().unwrap().into(),
                     dry_run: false,
+                    accepted_cost_microusd: None,
                 },
             )
             .await

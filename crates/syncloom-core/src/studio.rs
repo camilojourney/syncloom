@@ -83,6 +83,8 @@ pub struct PublishRequest {
     pub expected_revision: String,
     #[serde(default)]
     pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_cost_microusd: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +97,8 @@ pub struct PublishResponse {
     pub post_id: Option<String>,
     pub post_url: Option<String>,
     pub attempts: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_estimate: Option<crate::social::CostEstimate>,
 }
 
 /// A bounded discovery page; the cursor is the last returned piece id.
@@ -115,6 +119,7 @@ pub struct Studio {
     linkedin: Option<Arc<Linkedin>>,
     mastodon: Option<Arc<crate::mastodon::Mastodon>>,
     meta: Option<Arc<crate::meta::Meta>>,
+    social: Option<Arc<crate::social::SocialPlatforms>>,
     renderer: crate::visual::RendererConfig,
 }
 
@@ -195,8 +200,20 @@ impl Studio {
             linkedin: None,
             mastodon: None,
             meta: None,
+            social: None,
             renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
         }
+    }
+
+    pub fn with_social(mut self, adapters: Arc<crate::social::SocialPlatforms>) -> Self {
+        self.social = Some(adapters);
+        self
+    }
+    /// Integration service API, not credential or configuration state.
+    pub fn social(&self) -> Result<&crate::social::SocialPlatforms, StudioError> {
+        self.social
+            .as_deref()
+            .ok_or(StudioError::PlatformNotConfigured)
     }
 
     pub fn with_renderer(mut self, config: crate::visual::RendererConfig) -> Self {
@@ -436,6 +453,7 @@ impl Studio {
                 finished_at: Some(now),
                 post_id: None,
                 post_url: None,
+                cost_estimate: None,
             };
             self.record_export(&lock, &key, &mut piece, &intent)?;
         }
@@ -669,7 +687,12 @@ impl Studio {
                     && (piece.visual.is_none()
                         || matches!(
                             piece.channel,
-                            Channel::Mastodon | Channel::FacebookPage | Channel::Instagram
+                            Channel::Mastodon
+                                | Channel::FacebookPage
+                                | Channel::Instagram
+                                | Channel::Bluesky
+                                | Channel::X
+                                | Channel::Threads
                         ))
             })
             .cloned()
@@ -690,6 +713,7 @@ impl Studio {
         let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         if request.dry_run {
             let payload = payload_for(&piece);
+            let cost_estimate = cost_for(&piece);
             return Ok(Reserved::DryRun(PublishResponse {
                 piece,
                 status: "dry_run".to_owned(),
@@ -699,11 +723,14 @@ impl Studio {
                 post_id: None,
                 post_url: None,
                 attempts: 0,
+                cost_estimate,
             }));
         }
         self.require_approval(&lock, &piece)?;
         let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
-        let (intent, created) = match lock.load_intent(&key)? {
+        let existing = lock.load_intent(&key)?;
+        self.require_cost_confirmation(&piece, existing.as_ref(), request.accepted_cost_microusd)?;
+        let (intent, created) = match existing {
             Some(existing) => (existing, false),
             None => (self.reserve_intent(&lock, &key, &mut piece)?, true),
         };
@@ -713,6 +740,22 @@ impl Studio {
             intent,
             created,
         })
+    }
+
+    fn require_cost_confirmation(
+        &self,
+        piece: &Piece,
+        existing: Option<&DispatchIntent>,
+        accepted: Option<u64>,
+    ) -> Result<(), StudioError> {
+        if self.delivery.contains_key(&piece.platform)
+            && existing.is_none_or(|i| i.status.allows_new_attempt())
+            && let Some(cost) = cost_for(piece)
+            && accepted != Some(cost.microusd)
+        {
+            return Err(StudioError::CostConfirmationRequired);
+        }
+        Ok(())
     }
 
     /// Record the one intent for this piece revision as contained. Whether it is dispatched
@@ -741,6 +784,7 @@ impl Studio {
             finished_at: None,
             post_id: None,
             post_url: None,
+            cost_estimate: cost_for(piece),
         };
         lock.save_intent(key, &intent)?;
         piece.publish_status = Some(IntentStatus::Contained.as_str().to_owned());
@@ -825,6 +869,7 @@ impl Studio {
         intent: &mut DispatchIntent,
     ) -> Result<(), StudioError> {
         let now = self.clock.now_rfc3339();
+        intent.cost_estimate = cost_for(piece);
         intent.status = IntentStatus::Posting;
         intent.attempts += 1;
         intent.attempted_at = Some(now.clone());
@@ -1100,5 +1145,11 @@ fn response_from(piece: Piece, intent: &DispatchIntent, created: bool) -> Publis
         post_id: intent.post_id.clone(),
         post_url: intent.post_url.clone(),
         attempts: intent.attempts,
+        cost_estimate: intent.cost_estimate.clone(),
     }
+}
+
+fn cost_for(piece: &Piece) -> Option<crate::social::CostEstimate> {
+    (piece.channel == Channel::X)
+        .then(|| crate::social::estimate(&piece.text, piece.visual.is_some()))
 }

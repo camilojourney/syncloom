@@ -10,6 +10,7 @@ Decision records for syncloom.v2, one file per decision: `NNNN-<topic>.md`, numb
 | [0004 Mastodon API add-on and manual handoff target](0004-mastodon-manual-export.md) | Proposed |
 
 | [0005 Owned Facebook Page and linked Instagram delivery](0005-meta-integration.md) | Proposed |
+| [0006 Bluesky, X and Threads publishing](0006-social-platform-integrations.md) | Proposed |
 
 ## Rules
 

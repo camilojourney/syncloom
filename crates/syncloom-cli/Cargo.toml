@@ -11,6 +11,7 @@ name = "syncloom"
 path = "src/main.rs"
 
 [dependencies]
+rpassword.workspace = true
 syncloom-core.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -18,6 +19,7 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+time.workspace = true
 syncloom-server.workspace = true
 axum.workspace = true
 reqwest.workspace = true

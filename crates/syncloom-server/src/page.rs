@@ -189,12 +189,26 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     } else {
         ""
     };
-    let publish_disabled = if piece.status != Status::Approved {
+    let unavailable_image =
+        piece.channel == syncloom_core::Channel::Threads && piece.visual.is_some();
+    let delivery_note = delivery_note(piece, unavailable_image);
+    let publish_disabled = if piece.status != Status::Approved || unavailable_image {
         " disabled"
     } else {
         ""
     };
     let approval_note = approval_note(piece);
+    let cost_confirmation = if piece.channel == syncloom_core::Channel::X {
+        let cost = syncloom_core::social::estimate(&piece.text, piece.visual.is_some());
+        format!(
+            r#"<p class="hint">X estimated cost: <strong>{}</strong>. Pricing as of {}. This is not an actual charge; URL-like text uses the link rate.</p><label class="cost-confirmation"><input type="checkbox" name="accepted_cost_microusd" value="{}" required> I accept this estimated cost for this revision.</label>"#,
+            cost.usd(),
+            cost.pricing_as_of,
+            cost.microusd
+        )
+    } else {
+        String::new()
+    };
     let receipt = receipt.map(publish_receipt).unwrap_or_default();
     let last_outcome = piece
         .publish_status
@@ -209,17 +223,38 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. LinkedIn visuals stay contained; granted Mastodon delivery can upload the approved PNG. Meta delivery needs an explicit public-media host; none is configured. Manual export stays local.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} {} / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Without a delivery grant, nothing leaves this laptop. {delivery_note}</p><form method="post" action="/review/{id}/publish">{fields}{cost_confirmation}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
             status(piece.status),
             escape(&piece.source.raw_input),
             escape(&piece.text),
             piece.fit.char_count,
+            piece.channel.count_unit(),
             piece.fit.max_chars,
             piece.fit.verdict,
             escape(&piece.revision),
             format_args!("{}{}", previews(piece), jpeg_previews(piece))
         ),
     )
+}
+
+fn delivery_note(piece: &Piece, unavailable_image: bool) -> &'static str {
+    use syncloom_core::Channel;
+    if unavailable_image {
+        return "Image delivery is unavailable for Threads until a public URL host is selected. Export or use a text-only piece.";
+    }
+    match piece.channel {
+        Channel::LinkedinText => {
+            "LinkedIn visuals stay contained; only text delivery is available."
+        }
+        Channel::Mastodon | Channel::Bluesky | Channel::X => {
+            "Granted delivery sends text and the approved PNG. PDF carousels stay local."
+        }
+        Channel::Threads => "Threads supports text only. Image hosting is not configured.",
+        Channel::ManualExport => "Manual export is a local handoff, never a remote post.",
+        Channel::FacebookPage | Channel::Instagram => {
+            "Meta media delivery needs an explicitly approved public host; none is configured."
+        }
+    }
 }
 
 fn previews(piece: &Piece) -> String {
@@ -267,8 +302,18 @@ fn publish_receipt(receipt: &PublishResponse) -> String {
         "unreachable" => "The platform was unreachable. Nothing is claimed as posted.",
         _ => "See the core outcome below. No delivery is assumed.",
     };
+    let cost = receipt
+        .cost_estimate
+        .as_ref()
+        .map(|c| {
+            format!(
+                "<p>Recorded estimate: {} (not an actual charge).</p>",
+                c.usd()
+            )
+        })
+        .unwrap_or_default();
     format!(
-        r#"<section class="receipt" aria-label="Publish receipt"><p class="eyebrow">Publish receipt</p><h2>{}</h2><p>{explanation}</p><p>Request: <code>{}</code> · Attempts: {}</p><p>Post id: {} · Post URL: {}</p></section>"#,
+        r#"<section class="receipt" aria-label="Publish receipt"><p class="eyebrow">Publish receipt</p><h2>{}</h2><p>{explanation}</p><p>Request: <code>{}</code> · Attempts: {}</p><p>Post id: {} · Post URL: {}</p>{cost}</section>"#,
         escape(&receipt.status),
         escape(receipt.request_id.as_deref().unwrap_or("none")),
         receipt.attempts,
@@ -315,6 +360,7 @@ pub(crate) struct PieceForm {
     image_sha256: Option<String>,
     carousel_sha256: Option<String>,
     slides_sha256: Option<String>,
+    accepted_cost_microusd: Option<u64>,
 }
 
 impl PieceForm {
@@ -379,6 +425,7 @@ fn submitted_action(action: &str, form: PieceForm) -> Result<SubmittedAction, Fa
         "render" => Ok(SubmittedAction::Render(form.rendering()?)),
         "publish" => Ok(SubmittedAction::Publish(PublishRequest {
             expected_revision: form.expected_revision,
+            accepted_cost_microusd: form.accepted_cost_microusd,
             dry_run: false,
         })),
         _ => Err(Failure::NotFound),

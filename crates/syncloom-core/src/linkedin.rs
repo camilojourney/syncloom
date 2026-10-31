@@ -158,7 +158,7 @@ impl Linkedin {
     }
 
     pub async fn sign_in_wait(&self) -> Result<Connection, StudioError> {
-        let (code, verifier) = self.session.wait().await?;
+        let (code, verifier, generation) = self.session.wait().await?;
         let issued = self.exchange(verifier.as_ref(), &code).await?;
         let member_id = self.member_id(&issued.access_token).await?;
         let now = self.session.now();
@@ -169,7 +169,7 @@ impl Linkedin {
             scope: issued.scope,
             obtained_at: rfc3339(now),
         };
-        self.session.save_token(&token)?;
+        self.session.save_token(generation, &token)?;
         self.connection()
     }
 
@@ -187,17 +187,15 @@ impl Linkedin {
             Some(verifier) => form.push(("code_verifier", verifier.expose())),
             None => form.push(("client_secret", client_secret.expose())),
         }
-        let response = self
-            .client
-            .post(format!(
-                "{}/oauth/v2/accessToken",
-                self.config.auth_base.as_str()
-            ))
-            .form(&form)
-            .send()
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
-        read_json(response).await.ok_or(StudioError::SignInRejected)
+        crate::oauth::exchange_json(
+            self.client
+                .post(format!(
+                    "{}/oauth/v2/accessToken",
+                    self.config.auth_base.as_str()
+                ))
+                .form(&form),
+        )
+        .await
     }
 
     /// `GET /v2/userinfo`: the member id (`sub`) the Posts API needs as author.

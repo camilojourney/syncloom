@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "cost_confirmation_required",
+      "message": "Preview the X cost estimate and confirm its exact micro-USD amount before publishing.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

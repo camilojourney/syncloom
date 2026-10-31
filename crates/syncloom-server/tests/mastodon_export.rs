@@ -112,6 +112,7 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
             id,
             syncloom_core::PublishRequest {
                 expected_revision: rev.into(),
+                accepted_cost_microusd: None,
                 dry_run: false,
             },
         )
