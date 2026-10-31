@@ -76,7 +76,11 @@ impl LinkedinEnv {
             .local_addr()
             .unwrap()
             .port();
-        let service = format!("syncloom-test-cli-{}-{}", std::process::id(), uuid_like());
+        let service = format!(
+            "syncloom-test-cli-{}-{}",
+            std::process::id(),
+            unique_suffix(std::time::SystemTime::now())
+        );
         // The Keychain lives under the real HOME; the data directory stays the temp one.
         let mut vars = vec![
             ("HOME".to_owned(), std::env::var("HOME").unwrap()),
@@ -144,14 +148,23 @@ impl Drop for LinkedinEnv {
     }
 }
 
-fn uuid_like() -> String {
+fn unique_suffix(now: std::time::SystemTime) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    // Wall-clock resolution is not uniqueness: parallel tests must never share a Keychain item.
     format!(
-        "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        "{:x}-{:x}",
+        now.duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
     )
+}
+
+#[test]
+fn separate_keychain_test_services_remain_unique_when_the_clock_repeats() {
+    let fixed = std::time::UNIX_EPOCH + std::time::Duration::from_secs(42);
+    assert_ne!(unique_suffix(fixed), unique_suffix(fixed));
 }
 
 fn syncloom_linkedin(dir: &TempDir, base: &str, env: &LinkedinEnv, args: &[&str]) -> Run {

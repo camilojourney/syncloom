@@ -29,6 +29,8 @@ Only the existing protected local HTTP client may start consent or change a piec
 
 Meta's general login security docs require HTTPS and the inspected manual-flow docs do not establish an HTTP loopback exception: fake callback proof is not evidence of real app eligibility. A real app/redirect decision must precede real use. Meta's rate-limit examples conflict, so do not infer a quota; return truthful throttling. Hosting remains deliberately unavailable.
 
+Final validation also exposed a pre-existing CLI test isolation defect: Keychain service ids used only pid and wall-clock nanoseconds, which repeat on this host. Add an atomic per-process suffix instead of serializing tests or retrying a missing credential; a fixed-clock regression proves distinct services. The observed missing credential is consistent with this race, though that failed run did not retain its two service ids.
+
 ## Migration Plan
 
 Existing records deserialize unchanged. New Meta visual records include JPEG hashes. Roll back by removing grants; do not delete credentials or historical intents.

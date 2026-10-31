@@ -12,6 +12,8 @@
 - [x] 2.4 Prove full HTTP consent, rendering, exact approval, delivery and restart/repeat against stateful fake Graph.
 - [x] 2.5 Test credential/permission/task failures, media processing, partial failure, malformed results and access guards; mutate added guards.
 
+- [x] 2.6 Repair the validation-discovered CLI test-service clock collision with a fixed-clock regression and atomic suffix; preserve the full Keychain E2E assertions.
+
 ## 3. Validation
 - [x] 3.1 Refactor protocol boundaries without changing behavior; update docs and run fmt, clippy, all tests, specs, research, links and secret scans.
 - [x] 3.2 Rebase onto then-current local main, rerun every gate and Code Verify including weakened checks; save verify.txt.
