@@ -14,4 +14,4 @@
 ## 3. End-to-end and landing gates
 
 - [x] 3.1 Prove thought-to-publish in chrome-devtools-axi against the running server with only fake providers; save wide/narrow screenshots including exact hashes, PDF, contained receipt and an approved edit that invalidates approval.
-- [ ] 3.2 Rebase onto then-current local main; run fmt, denied-warning clippy, full tests with hermetic status comparison, strict OpenSpec, change/research/link checks, gitleaks git and final Code Verify including weakened-check analysis; save verify.txt and Receipts-first report, commit and leave a clean branch.
+- [x] 3.2 Rebase onto then-current local main; run fmt, denied-warning clippy, full tests with hermetic status comparison, strict OpenSpec, change/research/link checks, gitleaks git and final Code Verify including weakened-check analysis; save verify.txt and Receipts-first report, commit and leave a clean branch.
