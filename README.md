@@ -40,6 +40,8 @@ cargo run -p syncloom-cli -- linkedin sign-out    # deletes the token
 
 HTTP clients first call `GET /v1/session` and pass its `token` once in `X-Syncloom-Token` for POST, PATCH and DELETE. `GET /v1/pieces?after=<last_piece_id>` discovers twenty saved pieces per page. All routes reject foreign Host/Origin and cross-site browser requests, with no CORS opening. The direct-core CLI needs no HTTP token.
 
+New pieces include a source-derived `routing` contract: EN/ES founder review destination, first-sentence `thesis` (up to 200 characters), `visual_hook` (up to 72), and whole-word mentions of Pilaster, Genpeli and Invoz. English maps to `@camiloexperience`, Spanish to `@camilojourney`; tied or unknown evidence defaults to English. Labels and common abbreviations are handled without mid-word cuts. These are review targets, not connected-account identities or permission to post; delivery still uses the explicitly authenticated platform connection. Older records may omit `routing`.
+
 The API has the same four LinkedIn operations: `POST /v1/linkedin/sign-in` (202, the URL), `GET /v1/linkedin/sign-in` (waits, 200 the connection), `GET /v1/linkedin/connection`, `DELETE /v1/linkedin/connection`.
 
 Development fake Claude provider, to drive success and every provider error without a key:

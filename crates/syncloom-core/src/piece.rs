@@ -48,6 +48,9 @@ pub struct Piece {
     pub publish_status: Option<String>,
     pub fit: Fit,
     pub source: Source,
+    /// Source-derived review target. Older records predate language routing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing: Option<crate::routing::ThoughtContract>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
