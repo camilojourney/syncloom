@@ -24,7 +24,7 @@ Open. Single-provider model research, reduced confidence; deciding platform fact
 
 ## Decision
 
-Slice 5a Mastodon/manual-export decision is pending; this study informs its OpenSpec change.
+[0004 Mastodon/manual-export](../../decisions/0004-mastodon-manual-export.md), proposed; this study informs its OpenSpec change, with approval still pending.
 
 ## Files
 

@@ -25,7 +25,7 @@ impl From<StudioError> for Failure {
 }
 
 /// One status per core error, in the order of the `StudioError` variants (`StudioError::ALL`).
-const STUDIO_STATUSES: [StatusCode; 26] = [
+const STUDIO_STATUSES: [StatusCode; 27] = [
     StatusCode::BAD_REQUEST,           // invalid_request
     StatusCode::UNPROCESSABLE_ENTITY,  // thought_too_short
     StatusCode::UNPROCESSABLE_ENTITY,  // unsupported_channel
@@ -51,6 +51,7 @@ const STUDIO_STATUSES: [StatusCode; 26] = [
     StatusCode::CONFLICT,              // assets_required
     StatusCode::CONFLICT,              // asset_integrity
     StatusCode::CONFLICT,              // asset_conflict
+    StatusCode::SERVICE_UNAVAILABLE,   // mastodon_not_configured
     StatusCode::INTERNAL_SERVER_ERROR, // internal_error
 ];
 

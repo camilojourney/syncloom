@@ -15,13 +15,28 @@ const REVISION: &str = "b0ca8c02601b2edcb612b47c88494925c5e5f9d92044e91bc510adf4
 
 // platform-rules: Channel table
 #[test]
-fn the_channel_table_knows_linkedin_text_and_nothing_else() {
+fn the_channel_table_knows_the_specified_channels_and_rejects_aliases() {
     let channel = Channel::parse("linkedin_text").expect("linkedin_text is in the table");
     assert_eq!(channel.platform(), "linkedin");
     assert_eq!(
         (channel.bounds().min_chars, channel.bounds().max_chars),
         (20, 3000)
     );
+    for (name, platform, maximum) in [
+        ("mastodon", "mastodon", 500),
+        ("manual_export", "manual", 40000),
+    ] {
+        let channel = Channel::parse(name).unwrap();
+        assert_eq!(channel.name(), name);
+        assert_eq!(channel.platform(), platform);
+        assert_eq!(fit(channel, "").verdict, Verdict::Review);
+        assert_eq!(fit(channel, "x").verdict, Verdict::Pass);
+        assert_eq!(fit(channel, &"x".repeat(maximum)).verdict, Verdict::Pass);
+        assert_eq!(
+            fit(channel, &"x".repeat(maximum + 1)).verdict,
+            Verdict::Review
+        );
+    }
     for unknown in [
         "linkedin",
         "LinkedIn_Text",
@@ -146,6 +161,7 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "provider_error",
         "provider_timeout",
         "linkedin_not_configured",
+        "mastodon_not_configured",
         "sign_in_in_progress",
         "sign_in_not_started",
         "sign_in_denied",
@@ -386,7 +402,7 @@ fn only_contained_and_retryable_failures_allow_a_new_attempt() {
     ] {
         assert!(status.allows_new_attempt(), "{status:?}");
     }
-    for status in [Posting, Posted, Unknown] {
+    for status in [Posting, Posted, Unknown, Exported] {
         assert!(!status.allows_new_attempt(), "{status:?}");
     }
     assert_eq!(Posted.as_str(), "posted");

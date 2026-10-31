@@ -7,6 +7,7 @@ Decision records for syncloom.v2, one file per decision: `NNNN-<topic>.md`, numb
 | [0001 syncloom.v2 is rebuilt in Rust as a separate repository, with decisions D1-D7](0001-syncloom-v2-rebuild-decisions.md) | Accepted |
 | [0002 LinkedIn personal-profile integration: self-serve Share on LinkedIn, Keychain tokens, loopback sign-in](0002-linkedin-integration-decisions.md) | Proposed |
 | [0003 Pinned headless Chromium for local images and document carousels](0003-visual-renderer.md) | Proposed |
+| [0004 Mastodon API add-on and manual handoff target](0004-mastodon-manual-export.md) | Proposed |
 
 ## Rules
 

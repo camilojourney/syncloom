@@ -47,6 +47,7 @@ fn request() -> PostRequest {
     PostRequest {
         request_id: "dispatch-904f4c443cf556d7f34c6c307a86dfe3".to_owned(),
         text: "A draft about zebrafish.".to_owned(),
+        image: None,
     }
 }
 
@@ -159,7 +160,7 @@ async fn consent_exchanges_the_code_once_reads_userinfo_and_stores_the_token() {
 
     let token = store.get("linkedin").expect("the token is stored");
     assert_eq!(token.access_token.expose(), "fake-access-token-zebrafish");
-    assert_eq!(token.expires_at, TOKEN_EXPIRES_AT);
+    assert_eq!(token.expires_at.as_deref(), Some(TOKEN_EXPIRES_AT));
     assert_eq!(token.member_id, support::fake_linkedin::MEMBER_ID);
     assert_eq!(token.obtained_at, FIXED_AT);
     let shown = serde_json::to_string(&connection).unwrap();

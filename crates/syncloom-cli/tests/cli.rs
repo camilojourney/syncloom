@@ -210,6 +210,89 @@ fn fixture_message(code: &str) -> String {
 // The fake endpoint lives in this runtime while the CLI process runs; the runtime must keep
 // serving while `Command::output` blocks, so these tests use worker threads.
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn manual_export_command_writes_a_bundle_and_mastodon_errors_are_explicit() {
+    let fake = fake_claude::start(Mode::Ok("A draft for manual handoff.".into())).await;
+    let dir = TempDir::new().unwrap();
+    let base = fake.base_url();
+    let created = syncloom(
+        &dir,
+        &base,
+        Some("sk-fake"),
+        &["thought", "--text", THOUGHT, "--channel", "manual_export"],
+    );
+    assert_eq!(created.status, 0, "{}", created.stderr);
+    let piece = created.json()["pieces"][0].clone();
+    let id = piece["piece_id"].as_str().unwrap();
+    let rev = piece["revision"].as_str().unwrap();
+    let denied = syncloom(
+        &dir,
+        &base,
+        None,
+        &[
+            "export",
+            id,
+            "--expected-revision",
+            rev,
+            "--target",
+            "reddit",
+        ],
+    );
+    assert_eq!(denied.status, 1);
+    assert_eq!(denied.error()["error"]["code"], "approval_required");
+    assert_eq!(
+        syncloom(
+            &dir,
+            &base,
+            None,
+            &["approve", id, "--expected-revision", rev]
+        )
+        .status,
+        0
+    );
+    let out = syncloom(
+        &dir,
+        &base,
+        None,
+        &[
+            "export",
+            id,
+            "--expected-revision",
+            rev,
+            "--target",
+            "reddit",
+        ],
+    );
+    assert_eq!(out.status, 0, "{}", out.stderr);
+    let receipt = out.json();
+    assert_eq!(receipt["status"], "exported");
+    assert_eq!(
+        std::fs::read_to_string(
+            std::path::Path::new(receipt["bundle"].as_str().unwrap()).join("text.txt")
+        )
+        .unwrap(),
+        "A draft for manual handoff."
+    );
+    let again = syncloom(
+        &dir,
+        &base,
+        None,
+        &[
+            "export",
+            id,
+            "--expected-revision",
+            rev,
+            "--target",
+            "reddit",
+        ],
+    );
+    assert_eq!(again.json()["created"], false);
+    assert_eq!(again.json()["request_id"], receipt["request_id"]);
+    let status = syncloom(&dir, &base, None, &["mastodon", "status"]);
+    assert_eq!(status.status, 1);
+    assert_eq!(status.error()["error"]["code"], "mastodon_not_configured");
+}
+
 // studio-cli: The four commands
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn thought_show_approve_and_publish_work_end_to_end() {

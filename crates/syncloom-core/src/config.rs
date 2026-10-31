@@ -63,6 +63,8 @@ pub(crate) fn plain_url(raw: &str) -> Option<reqwest::Url> {
 pub(crate) fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("Syncloom/0.1")
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("TLS client configuration is valid")
@@ -79,6 +81,7 @@ pub struct StudioConfig {
     pub delivery: BTreeSet<String>,
     pub keychain_service: String,
     pub linkedin: LinkedinConfig,
+    pub mastodon: crate::mastodon::MastodonConfig,
     pub renderer: crate::visual::RendererConfig,
 }
 
@@ -112,12 +115,12 @@ pub fn delivery_grant(value: Option<&str>) -> Result<BTreeSet<String>, String> {
         .map(str::trim)
         .filter(|n| !n.is_empty())
     {
-        let known = [Channel::LinkedinText]
+        let known = [Channel::LinkedinText, Channel::Mastodon]
             .iter()
             .any(|channel| channel.platform() == name);
         if !known {
             return Err(format!(
-                "{DELIVERY_ENV} names an unknown platform; known platforms: linkedin"
+                "{DELIVERY_ENV} names an unknown platform; known platforms: linkedin, mastodon"
             ));
         }
         granted.insert(name.to_owned());
@@ -146,27 +149,42 @@ pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfi
         delivery: delivery_grant(get(DELIVERY_ENV).as_deref())?,
         keychain_service: keychain_service(get(KEYCHAIN_SERVICE_ENV).as_deref()),
         linkedin: linkedin_config(&get)?,
+        mastodon: crate::mastodon::MastodonConfig::parse(
+            get(crate::mastodon::INSTANCE_ENV).as_deref(),
+            get(crate::mastodon::REDIRECT_ENV).as_deref(),
+        )?,
         renderer: crate::visual::renderer_config(&get),
     })
 }
 
-/// A studio over the Claude provider, the system clock, the Keychain and LinkedIn; LinkedIn
-/// delivers only when the grant names it.
+/// One studio over shared provider, clock and credential storage. Each platform delivers
+/// only when its explicit grant is present.
 pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Studio> {
     let store = Store::open(config.data_dir)?;
     let provider = ClaudeProvider::new(config.key, config.base, config.model);
     let clock = Arc::new(SystemClock);
+    let credentials = Arc::new(KeychainStore::new(config.keychain_service));
     let linkedin = Arc::new(Linkedin::new(
         config.linkedin,
-        Arc::new(KeychainStore::new(config.keychain_service)),
+        credentials.clone(),
+        clock.clone(),
+        settings.sign_in_deadline,
+    ));
+    let mastodon = Arc::new(crate::mastodon::Mastodon::new(
+        config.mastodon,
+        credentials,
         clock.clone(),
         settings.sign_in_deadline,
     ));
     let mut studio = Studio::new(store, Arc::new(provider), clock, settings)
+        .with_mastodon(mastodon.clone())
         .with_linkedin(linkedin.clone())
         .with_renderer(config.renderer);
     if config.delivery.contains(crate::linkedin::PLATFORM) {
         studio = studio.with_delivery(crate::linkedin::PLATFORM, linkedin);
+    }
+    if config.delivery.contains("mastodon") {
+        studio = studio.with_delivery("mastodon", mastodon);
     }
     Ok(studio)
 }
