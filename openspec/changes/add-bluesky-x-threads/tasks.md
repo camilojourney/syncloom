@@ -16,5 +16,5 @@
 ## 3. Final integration gates
 
 - [x] 3.1 Mutate each newly added security/cost/refresh guard and observe selected tests fail, restore code and save receipts.
-- [ ] 3.2 Rebase onto then-current local main; rerun fmt, denied-warning clippy, full tests, strict OpenSpec, change/research checkers, checker tests and gitleaks git; record hermetic before/after status.
-- [ ] 3.3 Run Code Verify including weakened-check analysis against pre-change main on the final rebased tree; save verify.txt, write Receipts-first report, commit and leave branch clean.
+- [x] 3.2 Rebase onto then-current local main; rerun fmt, denied-warning clippy, full tests, strict OpenSpec, change/research checkers, checker tests and gitleaks git; record hermetic before/after status.
+- [x] 3.3 Run Code Verify including weakened-check analysis against pre-change main on the final rebased tree; save verify.txt, write Receipts-first report, commit and leave branch clean.

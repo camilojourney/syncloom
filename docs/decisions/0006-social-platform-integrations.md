@@ -6,7 +6,7 @@
 **OpenSpec changes:** [add-bluesky-x-threads](../../openspec/changes/add-bluesky-x-threads/)
 **Agreed:** no - implementation brief authorizes building; artifact review remains pending
 **Recommended:** ATrium typed Bluesky APIs, X v2 with explicit cost confirmation, Threads text only
-**Built:** partly - implementation and fake proof complete; integration rebase and final Verify pending
+**Built:** yes - implemented and independently fake-proven on the rebased tree; final committed-tree receipt is recorded in the task report
 **Live-proven:** no - real sign-in, posting and paid calls are not authorized
 
 ## Context
@@ -32,7 +32,7 @@ Text and one approved PNG for Bluesky/X; Threads text only. No language routing,
 
 ## Identities
 
-OpenSpec CLI 1.15.0, config blob `8f976f578610adeefde25096a98101b9f9c2c12c`; Code 5.0.0 (security, data, integrations, ui). Initial base `8a3e01b788d52e18369d637372cbb5b9d2966632`; integration base `1fc1785` includes parallel Meta slice 5c. Build commit: implementation checkpoint on `fm/syncloom-v2-slice5b-bluesky-x-threads-20261031`; final head and gates are recorded in the task receipt.
+OpenSpec CLI 1.15.0, config blob `8f976f578610adeefde25096a98101b9f9c2c12c`; Code 5.0.0 during implementation and 5.1.0 at final review (security, data, integrations, ui). Initial base `8a3e01b788d52e18369d637372cbb5b9d2966632`; integration base `1fc1785` includes parallel Meta slice 5c. Build commit: implementation checkpoint on `fm/syncloom-v2-slice5b-bluesky-x-threads-20261031`; final head and gates are recorded in the task receipt.
 
 ## Evidence and gaps
 
@@ -53,6 +53,10 @@ These are implementation notes, not edits to the imported research. Public docs 
 | [Threads posts](https://developers.facebook.com/documentation/threads/posts) | Testers can publish without advanced access; public image/video server required. POST /v1.0/{user}/threads and /threads_publish; 500 characters with emoji UTF-8 counting. Image capability stays unimplemented. |
 | [Threads troubleshooting](https://developers.facebook.com/documentation/threads/troubleshooting), [retrieve](https://developers.facebook.com/documentation/threads/retrieve-and-discover-posts/retrieve-posts) | Check container status FINISHED before publication; retrieve id/permalink afterwards. Missing permalink gives unknown, not an invented URL. |
 | [AT Protocol createSession lexicon](https://raw.githubusercontent.com/bluesky-social/atproto/main/lexicons/com/atproto/server/createSession.json), [maintained ATrium SDK](https://docs.rs/atrium-api/0.26.0/atrium_api/) and [Bsky SDK](https://docs.rs/bsky-sdk/0.2.0/bsky_sdk/) | App-password login and access/refresh JWTs; typed createSession, refreshSession, uploadBlob, createRecord operations. Installed 0.26.0 source inspected before choosing the SDK. SDK documents grapheme counting; conservative image cap is 1 MB pending a primary-source check of the reported 2 MB increase. |
+
+### Local verification
+
+The rebased implementation passed full Rust tests, formatting, denied-warning clippy, strict OpenSpec, proposal/research checks, offline links and `gitleaks git`. Code Verify on implementation checkpoint `78958c7` returned `ACCEPT_WITH_ADVISORIES`, with zero blocking findings and no static-check waivers. Seven weakened-check candidates mistake Rust's channel `fit()` function for a focused test; two are test-only fixture `dead_code` allowances because each integration test compiles a different subset of shared helpers. No tests are skipped or weakened. Final committed-tree output and the reviewed candidates are retained as task receipts.
 
 Doc retrieval receipts: web fetch ids `mvvq0wz34ucqf0`, `mvvq2v2cjt9hzm`, `mvvq5laplihg58`. Bluesky rendered posting page was not extractable and raw guessed document paths returned 404; no claim of having verified those pages. SDK source and createSession lexicon were available. No real account or payment call occurred.
 

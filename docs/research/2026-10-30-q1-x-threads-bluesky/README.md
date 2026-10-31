@@ -20,11 +20,11 @@ Phrona 5.0.12 study `main969-q1-xtb`, Claude Research only, collected natively w
 
 ## Status
 
-Open: slice 5b records its choices and primary-source verification in decision 0005. Unresolved: real X loopback registration, Threads HTTPS non-localhost redirect host, public image hosting, and policy clearance for unattended automation. No real sign-in or post is authorized.
+Open: slice 5b records its choices and primary-source verification in decision 0006. Unresolved: real X loopback registration, Threads HTTPS non-localhost redirect host, public image hosting, and policy clearance for unattended automation. No real sign-in or post is authorized.
 
 ## Decision
 
-[0005 X/Threads/Bluesky publishing](../../decisions/0006-social-platform-integrations.md), including separate primary-source verification notes.
+[0006 X/Threads/Bluesky publishing](../../decisions/0006-social-platform-integrations.md), including separate primary-source verification notes.
 
 ## Files
 
