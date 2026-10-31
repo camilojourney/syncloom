@@ -1,0 +1,10 @@
+{
+  "status": 503,
+  "body": {
+    "error": {
+      "code": "platform_not_configured",
+      "message": "This platform needs its documented app settings before sign-in.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

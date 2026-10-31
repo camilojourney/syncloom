@@ -86,6 +86,39 @@ pub(crate) fn usable_token(
     Ok(token)
 }
 
+/// Serializes credential commits with sign-out. Network operations hold only a generation,
+/// never this lock, so an old exchange cannot resurrect deleted credentials.
+#[derive(Default)]
+pub(crate) struct CredentialWrites(std::sync::Mutex<u64>);
+impl CredentialWrites {
+    pub fn generation(&self) -> u64 {
+        *self.0.lock().unwrap()
+    }
+    pub fn invalidate(&self) {
+        *self.0.lock().unwrap() += 1;
+    }
+    pub fn save(
+        &self,
+        generation: u64,
+        store: &dyn TokenStore,
+        account: &str,
+        token: &Token,
+    ) -> Result<(), crate::StudioError> {
+        let current = self.0.lock().unwrap();
+        if *current != generation {
+            return Err(crate::StudioError::SignInRejected);
+        }
+        store.save(account, token)?;
+        Ok(())
+    }
+    pub fn delete(&self, store: &dyn TokenStore, account: &str) -> Result<(), crate::StudioError> {
+        let mut current = self.0.lock().unwrap();
+        *current += 1;
+        store.delete(account)?;
+        Ok(())
+    }
+}
+
 /// The macOS Keychain: one generic-password item per account under `service`, holding the
 /// token bundle as JSON. Read for this store: `keyring-core` 1.0.1 (`Entry`, `Error::NoEntry`)
 /// and `apple-native-keyring-store` 1.0.2 (`keychain::Store`, the login keychain).

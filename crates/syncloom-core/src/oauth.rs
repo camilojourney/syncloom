@@ -276,7 +276,7 @@ async fn callback(
     }
     ([(header::CONTENT_TYPE,"text/html; charset=utf-8")],"<!doctype html><html><head><title>Syncloom</title></head><body><p>Sign-in answer received. Return to the studio.</p></body></html>").into_response()
 }
-fn random_token() -> Secret {
+pub(crate) fn random_token() -> Secret {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("OS randomness");
     Secret::new(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
@@ -286,12 +286,35 @@ fn s256(verifier: &str) -> String {
 }
 
 /// Bounded JSON answers shared by adapters; never include provider bodies in errors.
+pub(crate) async fn exchange_json<T: serde::de::DeserializeOwned>(
+    builder: reqwest::RequestBuilder,
+) -> Result<T, StudioError> {
+    let response = builder
+        .send()
+        .await
+        .map_err(|_| StudioError::SignInRejected)?;
+    let value: serde_json::Value = read_json(response)
+        .await
+        .ok_or(StudioError::SignInRejected)?;
+    if value.get("error").is_some() {
+        return Err(StudioError::SignInRejected);
+    }
+    serde_json::from_value(value).map_err(|_| StudioError::SignInRejected)
+}
+
 pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
 ) -> Option<T> {
     if !response.status().is_success() {
         return None;
     }
+    read_json_body(response).await
+}
+
+/// Bounded body decoding for APIs whose documented errors are JSON, too.
+pub(crate) async fn read_json_body<T: serde::de::DeserializeOwned>(
+    mut response: reqwest::Response,
+) -> Option<T> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.ok()? {
         if bytes.len() + chunk.len() > 64 * 1024 {

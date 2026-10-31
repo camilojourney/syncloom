@@ -2,7 +2,7 @@
 //! https://docs.joinmastodon.org/methods/{apps,oauth,instance,media,statuses}/
 //! No status retries: the durable outbox owns uncertainty and operator-initiated attempts.
 use crate::oauth::{Connection, Session, SignInStart, read_json};
-use crate::platform::{http_failure, transport_failure};
+use crate::platform::{http_failure, request_json, transport_failure};
 use crate::{
     BaseUrl, Clock, Platform, PostFailure, PostFuture, PostRequest, Posted, Secret, StudioError,
     Token, TokenStore,
@@ -199,16 +199,6 @@ impl Mastodon {
         self.store.delete(&self.account())?;
         self.connection()
     }
-    async fn json<T: serde::de::DeserializeOwned>(
-        &self,
-        builder: reqwest::RequestBuilder,
-    ) -> Result<T, PostFailure> {
-        let response = builder.send().await.map_err(transport_failure)?;
-        if let Some(f) = http_failure(response.status()) {
-            return Err(f);
-        }
-        read_json(response).await.ok_or(PostFailure::Unknown)
-    }
     async fn upload_image(
         &self,
         token: &Secret,
@@ -222,14 +212,13 @@ impl Mastodon {
         let form = reqwest::multipart::Form::new()
             .part("file", part)
             .text("description", image.alt_text);
-        let media: Media = self
-            .json(
-                self.client
-                    .post(format!("{base}/api/v2/media"))
-                    .bearer_auth(token.expose())
-                    .multipart(form),
-            )
-            .await?;
+        let media: Media = request_json(
+            self.client
+                .post(format!("{base}/api/v2/media"))
+                .bearer_auth(token.expose())
+                .multipart(form),
+        )
+        .await?;
         if !valid_id(&media.id) {
             return Err(PostFailure::Unknown);
         }
@@ -279,7 +268,7 @@ impl Mastodon {
         ids: Vec<String>,
     ) -> Result<Posted, PostFailure> {
         let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
-        let status: Status = self.json(self.client.post(format!("{base}/api/v1/statuses"))
+        let status: Status = request_json(self.client.post(format!("{base}/api/v1/statuses"))
             .bearer_auth(token.expose()).header("Idempotency-Key", request.request_id)
             .json(&serde_json::json!({"status": request.text, "media_ids": ids, "visibility": "public"}))).await?;
         if !valid_id(&status.id) || status.url.is_empty() {
@@ -305,9 +294,8 @@ impl Platform for Mastodon {
                 &self.account(),
                 &self.clock.now_rfc3339(),
             )?;
-            let instance: Instance = self
-                .json(self.client.get(format!("{base}/api/v2/instance")))
-                .await?;
+            let instance: Instance =
+                request_json(self.client.get(format!("{base}/api/v2/instance"))).await?;
             instance.configuration.check_text(&request.text)?;
             let mut ids = Vec::new();
             if let Some(image) = request.image.take() {

@@ -8,7 +8,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 32] = [
+const ERROR_TABLE: [(u16, &str); 34] = [
     (403, "origin_not_allowed"),
     (403, "session_required"),
     (400, "invalid_request"),
@@ -31,6 +31,8 @@ const ERROR_TABLE: [(u16, &str); 32] = [
     (503, "provider_not_configured"),
     (503, "linkedin_not_configured"),
     (503, "mastodon_not_configured"),
+    (503, "platform_not_configured"),
+    (409, "cost_confirmation_required"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
     (503, "renderer_missing"),
@@ -91,6 +93,37 @@ async fn produce(code: &str) -> Answer {
                 client()
                     .get(server.url("/v1/health"))
                     .header("origin", "https://evil.invalid"),
+            )
+            .await
+        }
+        "platform_not_configured" => {
+            let server = start(Scripted::new(text("x"))).await;
+            with_id(client().get(server.url("/v1/x/connection"))).await
+        }
+        "cost_confirmation_required" => {
+            use syncloom_core::social::{SocialConfig, SocialPlatforms};
+            let q = SocialPlatforms::new(
+                SocialConfig::parse(|_| None).unwrap(),
+                MemoryStore::new(),
+                fixed_clock(),
+                fast().sign_in_deadline,
+            );
+            let server = start_studio(Scripted::new(text("A short test post.")), fast(), |s| {
+                s.with_delivery("x", q.x)
+            })
+            .await;
+            let created = post(
+                &server,
+                "/v1/thoughts",
+                json!({"text":THOUGHT,"channels":["x"]}),
+            )
+            .await;
+            let piece = &created.body["pieces"][0];
+            approve(&server, piece).await;
+            with_id(
+                client()
+                    .post(server.url(&format!("/v1/pieces/{}/publish", id_of(piece))))
+                    .json(&json!({"expected_revision":revision_of(piece)})),
             )
             .await
         }

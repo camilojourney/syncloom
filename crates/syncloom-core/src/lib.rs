@@ -2,13 +2,16 @@
 //!
 //! Behavior is owned by the OpenSpec capabilities `thought-drafting`, `platform-rules`,
 //! `draft-review`, `dispatch-outbox`, `platform-credentials`, `linkedin-integration` and
-//! `provenance-log` under `openspec/specs/`; Mastodon and manual export are specified in
-//! `openspec/changes/add-mastodon-manual-export/` until archive. Rules are plain functions over plain values;
+//! `provenance-log` under `openspec/specs/`; active integration deltas live under
+//! `openspec/changes/` until archive. Rules are plain functions over plain values;
 //! file access lives in [`store`], the Keychain in [`credentials`], and network access in
-//! [`provider::claude`], [`linkedin`] and [`mastodon`].
+//! [`provider::claude`], [`linkedin`], [`mastodon`] and the [`social`] adapters.
+mod bluesky;
+mod bluesky_transport;
 pub mod channel;
 pub mod clock;
 pub mod config;
+mod credential_session;
 pub mod credentials;
 pub mod error;
 pub mod html;
@@ -16,14 +19,21 @@ pub mod linkedin;
 pub mod manual_export;
 pub mod mastodon;
 pub mod oauth;
+mod oauth_context;
 pub mod outbox;
 pub mod piece;
 pub mod platform;
 pub mod provenance;
 pub mod provider;
+pub mod social;
+mod social_config;
 pub mod store;
 pub mod studio;
+mod threads;
+mod threads_publish;
 pub mod visual;
+mod x;
+mod x_media;
 pub use visual::{
     AssetHashes, AssetKind, Assets, RenderRequest, RendererConfig, VisualContent, renderer_config,
 };

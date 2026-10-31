@@ -9,6 +9,9 @@ pub enum Channel {
     LinkedinText,
     Mastodon,
     ManualExport,
+    Bluesky,
+    X,
+    Threads,
 }
 
 /// Inclusive character bounds a draft is checked against.
@@ -25,6 +28,9 @@ impl Channel {
             "linkedin_text" => Some(Channel::LinkedinText),
             "mastodon" => Some(Channel::Mastodon),
             "manual_export" => Some(Channel::ManualExport),
+            "bluesky" => Some(Channel::Bluesky),
+            "x" => Some(Channel::X),
+            "threads" => Some(Channel::Threads),
             _ => None,
         }
     }
@@ -33,6 +39,9 @@ impl Channel {
             Channel::LinkedinText => "linkedin_text",
             Channel::Mastodon => "mastodon",
             Channel::ManualExport => "manual_export",
+            Channel::Bluesky => "bluesky",
+            Channel::X => "x",
+            Channel::Threads => "threads",
         }
     }
     /// The platform the channel posts to.
@@ -41,6 +50,17 @@ impl Channel {
             Channel::LinkedinText => "linkedin",
             Channel::Mastodon => "mastodon",
             Channel::ManualExport => "manual",
+            Channel::Bluesky => "bluesky",
+            Channel::X => "x",
+            Channel::Threads => "threads",
+        }
+    }
+    pub fn count_unit(self) -> &'static str {
+        match self {
+            Channel::Bluesky => "graphemes",
+            Channel::X => "weighted units",
+            Channel::Threads => "UTF-8 bytes",
+            _ => "characters",
         }
     }
     /// Retained from the old pipeline for LinkedIn text: 20 to 3000 characters.
@@ -51,6 +71,18 @@ impl Channel {
                 max_chars: 3000,
             },
             Channel::Mastodon => Bounds {
+                min_chars: 1,
+                max_chars: 500,
+            },
+            Channel::Bluesky => Bounds {
+                min_chars: 1,
+                max_chars: 300,
+            },
+            Channel::X => Bounds {
+                min_chars: 1,
+                max_chars: 280,
+            },
+            Channel::Threads => Bounds {
                 min_chars: 1,
                 max_chars: 500,
             },
@@ -70,7 +102,7 @@ pub enum Verdict {
     Review,
 }
 
-/// How a draft fits its channel. Characters are Unicode scalar values.
+/// How a draft fits its channel. Counts use the channel-specific conservative unit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fit {
     pub verdict: Verdict,
@@ -85,8 +117,19 @@ pub fn fit(channel: Channel, text: &str) -> Fit {
         min_chars,
         max_chars,
     } = channel.bounds();
-    let char_count = text.chars().count();
-    let verdict = if (min_chars..=max_chars).contains(&char_count) {
+    use unicode_segmentation::UnicodeSegmentation;
+    let char_count = match channel {
+        Channel::Bluesky => text.graphemes(true).count(),
+        // Conservative bounds, not a promise that the remote service will accept a post.
+        Channel::X => text
+            .chars()
+            .map(|c| if (c as u32) <= 0x10ff { 1 } else { 2 })
+            .sum(),
+        Channel::Threads => text.len(),
+        _ => text.chars().count(),
+    };
+    let bytes_fit = channel != Channel::Bluesky || text.len() <= 3000;
+    let verdict = if bytes_fit && (min_chars..=max_chars).contains(&char_count) {
         Verdict::Pass
     } else {
         Verdict::Review

@@ -61,6 +61,24 @@ pub(crate) fn http_failure(status: reqwest::StatusCode) -> Option<PostFailure> {
     })
 }
 
+/// One owner for ordinary HTTP/JSON platform outcomes. Provider bodies never become errors.
+pub(crate) async fn request_empty(builder: reqwest::RequestBuilder) -> Result<(), PostFailure> {
+    let response = builder.send().await.map_err(transport_failure)?;
+    http_failure(response.status()).map_or(Ok(()), Err)
+}
+
+pub(crate) async fn request_json<T: serde::de::DeserializeOwned>(
+    builder: reqwest::RequestBuilder,
+) -> Result<T, PostFailure> {
+    let response = builder.send().await.map_err(transport_failure)?;
+    if let Some(failure) = http_failure(response.status()) {
+        return Err(failure);
+    }
+    crate::oauth::read_json(response)
+        .await
+        .ok_or(PostFailure::Unknown)
+}
+
 pub type PostFuture<'a> = Pin<Box<dyn Future<Output = Result<Posted, PostFailure>> + Send + 'a>>;
 
 /// A platform adapter. One status-creation request per call; media preparation may precede it.

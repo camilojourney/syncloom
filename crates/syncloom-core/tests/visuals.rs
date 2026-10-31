@@ -242,6 +242,7 @@ async fn text_and_template_revisions_and_approval_integrity_are_bound() {
             &original.piece_id,
             PublishRequest {
                 expected_revision: changed.revision.clone(),
+                accepted_cost_microusd: None,
                 dry_run: false,
             },
         )

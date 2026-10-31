@@ -46,6 +46,7 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         boundary: Boundary::new(address.to_string()),
     });
     let app = Router::new()
+        .merge(crate::social_routes::routes())
         .route("/", get(page::index))
         .route("/studio.css", get(page::css))
         .route("/review/{piece_id}", get(page::review))
@@ -116,7 +117,7 @@ async fn health() -> impl IntoResponse {
 
 /// A JSON body that must be exactly the documented object (unknown fields are refused by the
 /// request types). Any other body is `invalid_request`.
-struct Strict<T>(T);
+pub(crate) struct Strict<T>(pub(crate) T);
 
 impl<S, T> FromRequest<S> for Strict<T>
 where

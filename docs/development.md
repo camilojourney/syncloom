@@ -38,6 +38,10 @@ The fake Mastodon (`crates/syncloom-core/tests/support/fake_mastodon.rs`), fake 
 
 OAuth listener/state/JSON bounds are shared in `crates/syncloom-core/src/oauth.rs`; fixed platform errors and transport outcomes remain shared. An aborted callback listener is awaited before the waiting sign-in returns, so its port is actually free. Use the task's red, mutation and final-gate logs as receipts, not the presence of these instructions.
 
+## Q1 platform checks
+
+[Q1 platform guide](social-platforms.md) lists configuration and exact operations. `cargo test -p syncloom-server --test social_delivery --test social_channels` proves local HTTP journeys for Bluesky, X and Threads; `cargo test -p syncloom-core --test social_sessions --test social_boundaries --test social_rules` covers wire, refresh, state, media and price boundaries. ATrium API is pinned at 0.26.0 with a bounded custom transport; no SDK session file or DID-directed fetch is used. Each fake has its own loopback listener and only its platform endpoints.
+
 ## Lessons applied
 
 Every build task applies `data/v2-build-lessons-20261030.md` of the firstmate home (25 items: OpenSpec 1.15.0 with this config, Code 5.0.0 loaded first, test first, verbatim requests, research saved word for word, Receipts-first reports, no secrets or personal data in requests or files, `gitleaks git` mode, loopback-only servers with Host check and a fixed error envelope, hermetic tests, scratch under `/tmp/fm-<task>/`, Rust via nix, Rust for first-party code, rebase onto the current local `main` and re-run the gates before done, and the Code skill's Verify gate with the weakened-checks analysis run on the final tree with its output saved as `verify.txt` in the task's data folder). A worker that finds one of them wrong says so in its report.

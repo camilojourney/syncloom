@@ -38,6 +38,7 @@ fn edit(text: &str, revision: &str) -> ReviewRequest {
 fn publish(revision: &str, dry_run: bool) -> PublishRequest {
     PublishRequest {
         expected_revision: revision.to_owned(),
+        accepted_cost_microusd: None,
         dry_run,
     }
 }

@@ -333,6 +333,7 @@ async fn uncertain_status_is_never_retried_by_the_outbox() {
         .unwrap();
     let r = PublishRequest {
         expected_revision: p.revision,
+        accepted_cost_microusd: None,
         dry_run: false,
     };
     let first = s.publish(&p.piece_id, r.clone()).await.unwrap();
@@ -391,6 +392,7 @@ async fn concurrent_mastodon_publishes_make_only_one_uncertain_status_request() 
                 &p.piece_id,
                 PublishRequest {
                     expected_revision: p.revision,
+                    accepted_cost_microusd: None,
                     dry_run: false,
                 },
             )

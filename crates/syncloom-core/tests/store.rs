@@ -177,6 +177,7 @@ fn an_intent_survives_reopening_the_store() {
         finished_at: None,
         post_id: None,
         post_url: None,
+        cost_estimate: None,
     };
     {
         let store = Store::open(dir.path()).unwrap();

@@ -192,17 +192,15 @@ impl Linkedin {
             Some(verifier) => form.push(("code_verifier", verifier.expose())),
             None => form.push(("client_secret", client_secret.expose())),
         }
-        let response = self
-            .client
-            .post(format!(
-                "{}/oauth/v2/accessToken",
-                self.config.auth_base.as_str()
-            ))
-            .form(&form)
-            .send()
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
-        read_json(response).await.ok_or(StudioError::SignInRejected)
+        crate::oauth::exchange_json(
+            self.client
+                .post(format!(
+                    "{}/oauth/v2/accessToken",
+                    self.config.auth_base.as_str()
+                ))
+                .form(&form),
+        )
+        .await
     }
 
     /// `GET /v2/userinfo`: the member id (`sub`) the Posts API needs as author.

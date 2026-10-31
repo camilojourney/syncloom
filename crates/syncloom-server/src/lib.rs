@@ -5,6 +5,7 @@ mod failure;
 mod page;
 mod request_scope;
 mod server;
+mod social_routes;
 
 pub use config::{DEFAULT_ADDRESS, local_address};
 pub use request_scope::log_subscriber;

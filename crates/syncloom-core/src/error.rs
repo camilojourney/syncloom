@@ -30,6 +30,8 @@ pub enum StudioError {
     AssetIntegrity,
     AssetConflict,
     MastodonNotConfigured,
+    PlatformNotConfigured,
+    CostConfirmationRequired,
     Internal,
 }
 
@@ -41,7 +43,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 27] = [
+const ROWS: [Row; 29] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -140,11 +142,19 @@ const ROWS: [Row; 27] = [
         "mastodon_not_configured",
         "Mastodon needs an explicit SYNCLOOM_MASTODON_INSTANCE and a free loopback callback port.",
     ),
+    row(
+        "platform_not_configured",
+        "This platform needs its documented app settings before sign-in.",
+    ),
+    row(
+        "cost_confirmation_required",
+        "Preview the X cost estimate and confirm its exact micro-USD amount before publishing.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 27] = [
+    pub const ALL: [StudioError; 29] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -171,6 +181,8 @@ impl StudioError {
         StudioError::AssetIntegrity,
         StudioError::AssetConflict,
         StudioError::MastodonNotConfigured,
+        StudioError::PlatformNotConfigured,
+        StudioError::CostConfirmationRequired,
         StudioError::Internal,
     ];
 

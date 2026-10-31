@@ -19,6 +19,7 @@ const POST_URL: &str = "https://www.linkedin.com/feed/update/urn:li:share:700000
 fn publish(revision: &str) -> PublishRequest {
     PublishRequest {
         expected_revision: revision.to_owned(),
+        accepted_cost_microusd: None,
         dry_run: false,
     }
 }
@@ -286,6 +287,7 @@ async fn a_posting_or_unknown_intent_found_later_answers_unknown_and_sends_nothi
         finished_at: None,
         post_id: None,
         post_url: None,
+        cost_estimate: None,
     };
     Store::open(dir.path())
         .unwrap()
@@ -342,6 +344,7 @@ async fn a_dry_run_with_a_grant_sends_nothing() {
             &piece.piece_id,
             PublishRequest {
                 expected_revision: piece.revision.clone(),
+                accepted_cost_microusd: None,
                 dry_run: true,
             },
         )
