@@ -1,0 +1,261 @@
+Publishing to your own X, Threads and Bluesky accounts from a local Rust app: what to build on (as of Oct 30, 2026)
+
+Build on X’s pay-per-use API, a Threads app kept in development mode with only your own account as a tester, and Bluesky’s free XRPC API using an app password through a Rust SDK. None of the three blocks your plan. About 30 plain posts a month on X costs about $0.45. One that contains a link costs $0.20, x so 30 link posts cost about $6. Threads publishing to your own account works without Meta App Review. glamafacebook The real local-first problems are elsewhere: Threads only takes media from a public URL and needs an HTTPS, non-localhost redirect URI (Meta’s own sample app README says so), and X now restricts programmatic replies. x
+
+TL;DR
+
+
+X: Pay-per-use is the only option for a new developer. The Free tier closed to new sign-ups on Feb 6, 2026, and Basic/Pro are legacy plans. Budget $1–$10 a month and set a spending cap. Each post costs $0.015, or $0.20 if it contains a URL. Media upload uses the v2 endpoints, which pay-per-use includes. Use OAuth 2.0 PKCE with offline.access. Don’t build reply bots, likes, follows, quote-posts or a search/trends dashboard.
+Threads: Keep the app in development mode and add yourself as a Threads Tester. Meta’s docs say testers can grant every permission “at any time”. App Review is only needed for users without a role on the app, so business verification isn’t worth pursuing. Budget engineering time for a 60-day token refresh and for public URLs to host images and video.
+Bluesky: It’s free, needs no review, and the per-account write budget is generous. Start with an app password. Call createSession once and then refresh the session. Use bsky-sdk/atrium (pin 0.2.x/0.26.x, released Oct 27, 2026) or jacquard 0.12.x instead of raw XRPC, because rich-text facets and blob upload are fiddly. Treat atproto OAuth as a later upgrade: for a public, local-only client, the http://localhost client_id is a development exception, and sessions are capped at 2 weeks.
+
+
+Key Findings
+
+Recommendation per platform
+
+PlatformBuild onSkip (not worth building)XPay-per-use credits; OAuth 2.0 Authorization Code + PKCE (public client); POST /2/tweets, v2 chunked media upload, POST /2/media/metadata for alt text; owned reads for your own metricsFree/Basic/Pro paths; OAuth 1.0a; v1.1 media; automated replies to other people (self-serve only allows “summoned” replies); likes/follows/quote-posts (removed from self-serve Apr 20, 2026); search/trends features; Edit (Premium-only)ThreadsDevelopment-mode Meta app with the Threads use case, your account as Threads Tester; threads_basic, threads_content_publish, plus threads_manage_replies, threads_read_replies, threads_manage_insights, threads_delete as needed; long-lived token + refresh jobMeta App Review / business verification; native scheduling (doesn’t exist); local-file media upload (not supported, URL fetch only) facebookBlueskyApp password → createSession once → refreshSession; bsky-sdk (atrium) or jacquard; uploadBlob + app.bsky.feed.post records with facetsRe-logging in per post (createSession limit); analytics/impressions (no official endpoint found); full atproto OAuth on day one, unless you accept 2-week re-auth
+
+What would change the answer: neither of the two risks you flagged materialises.
+
+
+X cost. About 30 posts a month costs a few dollars at most: $0.45 for plain posts, $6.00 if every post has a link. New pay-per-use accounts can earn up to $70 in one-time free credits, so the first months are effectively free (X changelog, Oct 2, 2026). x Media upload doesn’t need a paid tier. X’s API overview says all v2 endpoints “are available on pay-per-use plans” (docs.x.com, accessed Oct 30, 2026). x
+Threads review. Publishing isn’t blocked. Meta’s Posts doc says that without advanced access “you can only post on behalf of Threads testers on your app”, and that is exactly your case (developers.facebook.com, accessed Oct 30, 2026). facebook
+
+
+Details
+
+1. Capability matrix (official API, single approved user)
+
+CapabilityX (pay-per-use)Threads (dev mode, tester)Bluesky (atproto)Publish textYes, POST /2/tweets; $0.015, or $0.20 with a URLYes, 500 chars (emojis count as UTF-8 bytes); two-step container → publish; auto_publish_text single call added Jul 2025 (secondary source)Yes, com.atproto.repo.createRecord (app.bsky.feed.post); 300 graphemes / 3,000 bytes per lexicon (secondary sources citing lexicon) facebook1–4 images with alt textYes: up to 4 photos, 1 GIF, or 1 video per post; alt text via POST /2/media/metadata (media.write, $0.005 “Media Metadata”)Yes: alt_text up to 1,000 chars on image/video containers; images JPEG/PNG ≤8 MB, fetched from a public URLYes: up to 4 images via uploadBlob + app.bsky.embed.images with alt facebook +2Multi-image / carousel4-image post (no carousel)Carousel of 2–20 images/videos, counts as 1 post4 images per post facebookVideoYes: v2 chunked upload; post video up to 20 min / 8 GB (default accounts)Yes: MOV/MP4, ≤5 min, ≤1 GB, via public URLYes (app.bsky.embed.video); TechCrunch (Aug 26, 2026) reports Bluesky’s announcement: “You can now post videos up to 10 minutes long… on top of the recent increase in maximum file size to 300MB”; Bluesky’s Sep 11, 2024 blog set a daily cap of “25 videos / 10 GB of video per day”Reply chains / threadsSelf-serve replies are only allowed when the original author “summoned” the replying account (since Feb 23, 2026). Whether self-replies to build your own thread count as summoned: not found. Test before relying on itYes: replies limited to 1,000/24h; threads_manage_repliesYes: reply ref (root + parent) in the post record facebookNative schedulingNot found (build it locally)None. Docs only advise enforcing quota “if your app allows app users to schedule posts”None found (build it locally) facebookDelete postsYes: DELETE /2/tweets/:id, $0.010 “Interaction: Delete”, 50/15 minYes: threads_delete, 100 deletions/24hYes: deleteRecord (1 point) facebookOwn post metrics & repliesYes: owned reads $0.001/resource (/2/users/{id}/tweets, /mentions); private metrics (impressions) for own postsYes: threads_manage_insights (views, likes, replies, reposts, quotes, clicks, shares per secondary source); threads_read_repliesCounts via AppView (getPosts/getPostThread); no official analytics/impressions API foundReply to othersOnly if summoned; AI-generated replies need X’s prior approvalYes (threads_manage_replies)Yes xRead public postsYes: $0.005/postLimited: own posts; public post discovery via search/profile discovery permissionsYes: free public AppViewSearchYes: recent search ($0.005/post read); moved to new index May 4, 2026threads_keyword_search (testers can grant; review only for others)Yes: app.bsky.feed.searchPosts (not verified against current docs) blotatoTrendsYes: $0.010/requestNot foundNot confirmed (only “unspecced” endpoints; not verified)
+
+2. Auth model and token lifetimes
+
+X (OAuth 2.0 Authorization Code with PKCE).
+
+
+Access token: valid “for two hours”. X staff confirm on the forum that this is intended, and that refreshes also return expires_in: 7200. x
+Refresh token: issued only when the offline.access scope is requested. x
+Authorization code: must be exchanged “within 30 seconds”. twitter
+Scopes: tweet.read tweet.write users.read media.write offline.access. A Feb 2025 forum token response shows exactly this set. x
+Client type: PKCE supports public clients, so no secret needs to ship in the binary. x
+Redirect URI: callback URLs have had to be pre-registered since Jun 12, 2018 (X changelog). x Explicit documentation of loopback (http://127.0.0.1:<port>) support was not found. Register a fixed-port loopback URL and test it.
+Refresh-token rotation: not found as a documented rule. Always persist the newest refresh token returned.
+Migration path: a token-exchange grant converts OAuth 1.0a tokens to OAuth 2.0 without re-consent (X changelog, Sep 21, 2026). x
+
+
+Threads (Meta OAuth).
+
+
+Endpoints: authorize at threads.com/oauth/authorize, exchange at graph.threads.com/oauth/access_token. facebookfacebook
+Authorization codes: valid 1 hour. facebook
+Tokens: short-lived tokens last 1 hour. Long-lived tokens last 60 days and can be refreshed when “at least 24 hours old but have not expired” (Meta long-lived-tokens doc, accessed Oct 30, 2026). facebookblotato
+Permission grants: for public profiles, grants last 90 days and are extended on refresh. facebook Meta’s pages conflict on private profiles. The Get Started page says private-profile grants “cannot be extended”. The long-lived-token page says private-profile tokens “can now be refreshed” and their grants last 90 days. facebookfacebook Assume re-consent every 90 days if your profile is private. blotato
+App secret: the code exchange needs the Threads app secret. facebookfacebook A desktop app therefore has to hold it. That’s acceptable for a personal app; keep it in the OS keychain.
+PKCE: not found in the Threads docs.
+Redirect URI: must exactly match a registered URI (Meta may add a trailing slash). facebookfacebook Meta’s developers.facebook.com reference pages don’t state the HTTPS/localhost rule, but Meta’s own sample repo does. The fbsamples/threads_api README says “Threads apps do not support redirect URLs with using localhost so you must map a domain to test locally” and “OAuth redirects are only supported over HTTPS so you must create an SSL certificate”. Plan for an HTTPS redirect, either a static page that displays the code or a tunnel. Since tokens live 60 days and refresh without a browser, this is a one-time annoyance.
+
+
+Bluesky.
+
+
+App password option: createSession with the app password returns access and refresh JWTs. Bluesky’s scopes guide says “There are currently no plans to deprecate either the transition scopes or the use of App Passwords” (atproto.com, accessed Oct 30, 2026). atproto An older OAuth roadmap discussion describes them as deprecated, so the official messaging is inconsistent. github
+OAuth requirements: the atproto OAuth spec (page states “As of October 2026”) mandates PKCE S256, PAR and DPoP with server nonces. Refresh tokens are “generally single-use”, so they rotate. atproto
+OAuth token lifetimes: access tokens should last under 30 minutes (15 minutes maximum if they can’t be revoked). Public clients get session and refresh-token lifetimes of up to 2 weeks. Confidential clients get unlimited sessions with 180-day refresh tokens, but that requires a hosted JWKS and signing key. atprotoatproto
+Localhost option: a desktop app can use the http://localhost client_id with a redirect http://127.0.0.1/... (port ignored), which is a public, native client. atprotopypi Authorization servers are “encouraged to support this exception - including in production environments - but it is optional.” atproto
+Scopes: atproto plus transition:generic. github Granular repo:/blob: permissions are rolling out. atprotogithub
+
+
+3. App review requirements
+
+
+X: no app review. You need a developer account, a Project/App, and prepaid credits. Commercial use “requires appropriate paid tier”, which pay-per-use satisfies. x
+Threads: no review for tester accounts. Meta’s Get Started page says Threads testers “can grant your app these permissions at any time”. Review plus a published app is needed only “for app users without a role on your app”. You invite your own profile under App roles → Threads Tester and accept the invite in Threads settings → Website permissions. facebooknpmjs Typical review duration and whether a solo developer passes business verification: not found in primary sources. It’s irrelevant to your use case, so don’t pursue it.
+Bluesky: no registration or review exists. upload-post A client_id metadata URL is only needed for non-localhost OAuth. pypiatproto
+
+
+4. Rate limits and costs
+
+X (pricing page and changelog, accessed Oct 30, 2026)
+
+
+Writes:
+
+Post: Create $0.015. x
+Post: Create with URL $0.200. x
+Summoned reply $0.010. x
+Interaction: Delete $0.010. x
+Media Metadata $0.005. x
+
+
+
+Reads:
+
+Posts: Read $0.005/resource. x
+User: Read $0.010. x
+Owned reads $0.001/resource (effective Apr 20, 2026). x
+Trends $0.010/request. x
+
+
+
+Media upload: no separate rate-card line for the upload itself was found.
+Deduplication and caps:
+
+Reads are deduplicated per 24-hour UTC day. x
+Post reads are capped at 3 million per billing cycle. A separate X docs page (post-cap) still says 2 million, so the docs conflict. xx
+Spending limits are configurable. x
+
+
+
+Rate limits: POST /2/tweets allows 200 requests/15 min per user, DELETE 50/15 min, plus 300 posts/3 h combined with reposts. x
+Worked example for 30 posts a month:
+
+Text-only: 30 × $0.015 = $0.45.
+With one image and alt text each: about $0.60, assuming metadata is billed per call.
+Every post with a link: $6.00.
+Daily metrics polling of your last 30 posts via owned reads: about 30 × 30 × $0.001 ≈ $0.90.
+
+
+
+Free credits: $20 for saving a first card plus a match of the first auto-recharge up to $50. These expire after 3 months (changelog, Oct 2, 2026). x
+
+
+Threads. No price is published. bundle Limits:
+
+
+250 API-published posts per 24 h. bundlefacebook
+1,000 replies, 100 deletions and 500 location searches per 24 h. facebook
+Calls are capped at 4,800 × impressions per 24 h, blotato with a floor of 10 impressions. facebook
+Publish about 30 s after creating a container. facebook
+At most 5 links per post; posts with more fail since Dec 22, 2025. facebook
+
+
+Bluesky (docs.bsky.app rate-limit page). Free.
+
+
+Writes cost 5,000 points/hour and 35,000/day per account (create = 3, update = 2, delete = 1). bsky
+createSession is limited to 30 per 5 min and 300 per day per handle. bsky
+There’s a global limit of 3,000 requests per 5 min per IP. bsky
+An open bsky-docs issue (Sep 13, 2024) reports the entryway actually enforcing 100 per day on createSession. github This is another reason to refresh instead of re-logging in.
+
+
+5. Policy constraints
+
+
+X (Developer Guidelines, accessed Oct 30, 2026):
+
+Automated accounts must enable the “Automated” label, disclose the operator in the bio and link to a human-managed account. x
+“AI-Generated Content & Replies” requires prior approval from X before deployment, and “Deploying AI-generated replies without approval is a violation.” x
+Prohibited outright: non-API automation (results in permanent suspension), training AI/ML on X data, identical cross-account posting, and unsolicited mentions. x
+Data handling: X content must be deleted within 24 hours when requested. x
+Your situation: in a Rules and Policies forum thread about AI-drafted, human-approved scheduled posts on a brand account, the reply said to enable the Automated label. x That’s a forum answer about one app, not policy text. My recommendation: publish at the moment you approve, which makes it a user-initiated post. That keeps your personal account clearly outside “automated account” territory. If you add delayed scheduling, file a Policy Support request. X’s rules require no per-post AI disclosure for text (not found in primary sources).
+Paid promotion: a paid_partnership flag exists for posts that contain paid promotion (Jun 3, 2026). x
+
+
+
+Threads: the API overview limits use to publishing on a person’s behalf and displaying “those posts within your app solely to the person who created it”. facebook That fits a personal studio. Threads-specific rules on AI-content labeling or automation for API posts: not found in primary sources reviewed.
+Bluesky: no developer terms on automation or AI labeling were reviewed in primary sources (not found). The documented constraints are rate limits and bot-like behaviour such as mass following and liking. bsky
+
+
+6. Breaking changes 2025–2026
+
+X
+
+
+Jan 16, 2025: v2 media upload launched. x
+Apr 30, 2025: dedicated initialize/append/finalize endpoints. x
+Jun 9, 2025: v1.1 media upload sunset. x
+Aug 22, 2025: likes and follows removed from Free. x
+Oct 3, 2025: post editing (Premium only, within 1 hour). x
+Oct 20, 2025: pay-per-use pilot at $0.01 per content create. x
+Jan 19, 2026: count operators removed from search. x
+Feb 6, 2026: pay-per-use launch; Free tier ends for new developers (Public Utility Apps excepted; recently active Free users got a $10 voucher). x
+Feb 23, 2026: replies restricted to “summoned” accounts. x
+Apr 20, 2026: post price raised to $0.015, URL posts $0.20, owned reads $0.001; follows, likes and quote-posts removed from self-serve. x
+May 4, 2026: new search index (retweets dropped from keyword search). x
+May 21, 2026: X Developers Community announcement that “All Basic subscribers will be automatically migrated to the new Pay-Per-Use plan after June 1, 2026”.
+Aug 14, 2026: X Developers Community announcement that “Our legacy Pro plans (both monthly and annual) are being deprecated”, with a spend cap of “$10000 per billing cycle”. Secondary sources put the Pro migration after Sep 1, 2026.
+Sep 1, 2026: documented video limits; chunked quickstart moved to /2/media/upload/{initialize,append,finalize}. x
+
+
+Threads
+
+
+Dec 22, 2025: posts with more than 5 links fail (primary). facebook
+Docs now prefer the graph.threads.com host (.net still works). facebook
+Secondary sources only:
+
+Jul 25, 2025: location tagging, auto_publish_text, webhooks. ppc
+Sep 23, 2025 and Jan 30, 2026: profiles without a linked Instagram account. bundle
+Mar 25, 2026: threads_share_to_instagram scope. blotatobundle
+Apr 14, 2026: ghost posts, token-less embeds, and search by media type and author. socialmediatoday
+
+
+
+
+
+Bluesky / atproto
+
+
+Jun 12, 2025: transition:email scope. bsky
+Aug 2025: granular auth scopes deployed on bsky.social; permission sets still in progress. github
+Apr 23, 2026: image limit raised to 2 MB (secondary). publishq
+Oct 27, 2026: breaking atrium release. atrium-api goes to 0.26.0 and atrium-oauth/bsky-sdk to 0.2.0, with breaking changes such as getServiceAuth.aud becoming a String and prioritizeFollowedUsers being removed. github
+
+
+7. Sandbox / test mode
+
+
+X: the X API Playground (Dec 23, 2025) is a local server that emulates v2 endpoints with mock data and rate-limit simulation. x It’s ideal for CI. Pair it with a spending limit and the free starter credits for live tests.
+Threads: development mode plus Threads Testers is the test mode. facebook Posts are real, so use a secondary tester profile for experiments.
+Bluesky: no official sandbox found. Use a throwaway account or a self-hosted PDS.
+
+
+8. Rust crates
+
+PlatformCrateLatest version / dateStatusXtwapi-v20.27.0, changelog dated 2026-06-15 (docs.rs header shows Oct 30, 2026, likely a rebuild)Maintained. Has /2/media/upload/initialize and status. Append/finalize not directly confirmed. Legacy v1.1 upload removed in 0.25.0Xtwapi-oauth20.4.1, Feb 16, 2026PKCE flow (split out of twapi-v2 in 0.23.0)Xxdk-rs0.3.0, Oct 28, 2026New and independent (“not affiliated with… X”); OAuth2 PKCE, auto-refresh, media uploadXtwitter-v20.1.8, Oct 25, 2022Unmaintained; avoid libThreadsthreads-rs0.4.0, Oct 19, 2026Maintained; posts, replies, insights, search, token exchangeThreadsthreads-api0.1.2, Jul 2023Reverse-engineered, unofficial; avoid githubBlueskyatrium-api / bsky-sdk / atrium-oauth0.26.0 / 0.2.0 / 0.2.0, Oct 27, 2026 (prior 0.25.8 / 0.1.24 / 0.1.7 on Mar 26, 2026)Maintained; RichText facets; just took a breaking bump github +2Blueskyjacquard family0.12.2, Sep 5, 2026 (per lib.rs for jacquard sub-crates)Maintained, pre-1.0; built-in OAuth loopback helper lib +2
+
+X publishes official XDKs only for Python and TypeScript. x For a small surface (one create endpoint, three media calls, one metadata call, owned reads), hand-written reqwest calls are a reasonable alternative to a third-party X crate.
+
+Recommendations
+
+
+X: build on pay-per-use now.
+
+Implement PKCE with a loopback redirect, offline.access, a 2-hour refresh, and storage of the newest refresh token.
+Use v2 chunked media upload plus /2/media/metadata.
+Set a $10 monthly spending limit.
+Avoid URLs in post bodies where possible, since each one costs $0.20. One option is to put the link in a later reply, but test first whether self-replies pass the “summoned” rule.
+Publish on approval, not on a timer, unless you get X policy clearance.
+
+
+
+Threads: stay in development mode forever.
+
+Register an HTTPS redirect once and refresh the long-lived token every 30–50 days, from a background task when the app is opened.
+For media, upload each file to a short-lived public URL (e.g. presigned object-storage URL) just before creating the container. This is the one unavoidable bit of hosted infrastructure. Text-only posts need none.
+
+
+
+Bluesky: app password + bsky-sdk 0.2.x pinned (or jacquard 0.12.x).
+
+Persist the session and refresh it, never re-login per post.
+Use the SDK’s RichText to generate link and mention facets.
+Revisit OAuth (jacquard’s loopback helper) once granular repo:app.bsky.feed.post scopes are standard.
+
+
+
+Not worth building: Meta App Review, X Basic/Pro, OAuth 1.0a, v1.1 media, reply or engagement automation on X, trends and search dashboards, and cross-platform analytics beyond your own post counts.
+
+
+Caveats: March 2026 claims, checked
+
+Claim (Mar 2026)StatusEvidence (date)X Free tier: 500 writes/month, no readsCorrected: Free tier closed to new developers; the 500-write figure is now mootX changelog, Feb 6, 2026X Basic $200/monthCorrected: legacy only, and no longer kept. The Feb 6, 2026 changelog left it available to existing subscribers. An X Developers Community announcement (May 21, 2026) says “All Basic subscribers will be automatically migrated to the new Pay-Per-Use plan after June 1, 2026”changelog Feb 6, 2026; devcommunity.x.com announcement May 21, 2026Pay-per-use since Feb 2026Confirmed: Feb 6, 2026X changelog~$0.01 per postCorrected: $0.015 since Apr 20, 2026; $0.20 with URL; $0.01 summoned replyX changelog Apr 16, 2026; pricing page~$0.005 per readConfirmed for posts; owned reads $0.001; user reads $0.010pricing page, accessed Oct 30, 2026Scopes tweet.write, media.write, offline.accessConfirmed (also need tweet.read, users.read)X OAuth docs; Create Media metadata specv1.1 media upload retired; v2 replaces itConfirmed: sunset Jun 9, 2025; v2 initialize/append/finalizedevcommunity announcement; changelog Sep 1, 2026Media upload on free/pay-per-useConfirmed for pay-per-use; separate upload price not foundX API overviewThreads 500-char limitConfirmed (emojis counted as UTF-8 bytes)Threads Posts doc facebookThreads 250 posts/24hConfirmed (plus 1,000 replies, 100 deletes)Threads overview facebookThreads 60-day refreshable tokensConfirmed (refresh after ≥24 h)Long-lived tokens doc blotatoThreads carousels up to 20Confirmed (minimum 2)Threads Posts doc facebookThreads 10,000-char text attachmentNot found: text attachments exist (doc updated Jul 2, 2026), but the 10,000 figure wasn’t confirmedText Attachments doc facebookBluesky 300 graphemesConfirmed via secondary sources citing the lexicon (300 graphemes / 3,000 bytes); primary lexicon not fetchedupload-post.com, opentweet.io (2026)Bluesky createSession rate limitsConfirmed: 30/5 min, 300/day per handle, with a reported 100/day entryway discrepancydocs.bsky.app; bsky-docs issue #183 (Sep 13, 2024)No official Bluesky analytics APINot contradicted: no analytics/impressions endpoint found—
+
+Other caveats:
+
+
+Several 2026 data points come from third-party blogs (Blotato, Outstand, opentweet, socialmediatoday) and are labeled secondary above.
+X prices “are subject to change”, x and X changed write pricing twice in six months, so make prices configurable.
+The Threads HTTPS/no-localhost redirect rule comes from Meta’s official fbsamples/threads_api README (“Threads apps do not support redirect URLs with using localhost”; “OAuth redirects are only supported over HTTPS”), not the developers.facebook.com reference pages. X loopback-redirect support is still unconfirmed in official docs. Verify both in your first spike.
+
