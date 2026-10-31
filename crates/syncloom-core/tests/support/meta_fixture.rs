@@ -1,3 +1,4 @@
+// Shared by core and HTTP test binaries, which use different subsets of these fixtures.
 #![allow(dead_code)]
 use super::{fake_meta, memory_store::MemoryStore};
 use std::{

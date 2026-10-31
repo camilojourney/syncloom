@@ -13,6 +13,6 @@
 - [x] 2.5 Test credential/permission/task failures, media processing, partial failure, malformed results and access guards; mutate added guards.
 
 ## 3. Validation
-- [ ] 3.1 Refactor protocol boundaries without changing behavior; update docs and run fmt, clippy, all tests, specs, research, links and secret scans.
-- [ ] 3.2 Rebase onto then-current local main, rerun every gate and Code Verify including weakened checks; save verify.txt.
-- [ ] 3.3 Commit clean local branch and report receipts, limitations and head; never push or open a PR.
+- [x] 3.1 Refactor protocol boundaries without changing behavior; update docs and run fmt, clippy, all tests, specs, research, links and secret scans.
+- [x] 3.2 Rebase onto then-current local main, rerun every gate and Code Verify including weakened checks; save verify.txt.
+- [x] 3.3 Commit clean local branch and report receipts, limitations and head; never push or open a PR.

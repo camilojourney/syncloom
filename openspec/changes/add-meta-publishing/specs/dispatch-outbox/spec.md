@@ -18,4 +18,3 @@
 #### Scenario: Unknown platform
 - **WHEN** `SYNCLOOM_DELIVERY` is `linkedin,tiktok`
 - **THEN** the process exits with an error naming `SYNCLOOM_DELIVERY` and binds no port
-

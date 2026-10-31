@@ -1,4 +1,5 @@
 //! Stateful Graph boundary, reachable only on loopback. All credentials/content are synthetic.
+// Shared by core and HTTP test binaries, which inspect different subsets of the recorded calls.
 #![allow(dead_code)]
 use axum::{
     Router,
