@@ -54,13 +54,9 @@ impl Channel {
     pub fn platform(self) -> &'static str {
         match self {
             Channel::LinkedinText => "linkedin",
-            Channel::Mastodon => "mastodon",
             Channel::ManualExport => "manual",
             Channel::FacebookPage => "facebook",
-            Channel::Instagram => "instagram",
-            Channel::Bluesky => "bluesky",
-            Channel::X => "x",
-            Channel::Threads => "threads",
+            _ => self.name(),
         }
     }
     pub fn count_unit(self) -> &'static str {

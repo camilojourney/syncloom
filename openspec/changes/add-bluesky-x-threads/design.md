@@ -22,8 +22,8 @@ Keep the existing approval/outbox/grant owners; no scheduling, language routing,
 - One X pricing function owns integer micro-USD estimates (no rounding). URL-like tokens conservatively use the higher link rate, including bare domains; the estimate is never called a bill and requires explicit matching acceptance before dispatch.
 - Record estimates in intents and responses with defaults for old records. Repeated terminal intents keep their original quote; no parallel cost ledger or migration is needed.
 - Centralize channel limits and conservative counting in Channel/fit rather than duplicating validation in adapters; server rules may still reject text that our conservative checks permit.
-- Kept: `bluesky.rs`, `x.rs`, `threads.rs`, because separate platform wire specifications change independently; shared credential commit, HTTP and validation policies stay centralized. Shared HTTP outcome, callback, JSON bounds, credential and intent rules remain their existing owners.
-- Split new connection handlers into a module rather than growing routing and handlers together; extend CLI connection parsing without a second configuration owner.
+- Platform wire types stay in separate modules, while OAuthLifecycle implements X/Threads refresh and connection once. CredentialSession also backs the existing loopback Session, reusing slice 5c's lifecycle and TokenStore dispatch guard. Consent generation travels with each callback so sign-out fences delayed token exchanges. No static-check waiver is retained.
+- Separate handler and route-table modules. Meta and social tables call one typed connection-route registrar and one accepted-consent response formatter; application middleware still owns every guard. CLI connection parsing shares configuration and lifecycle owners.
 
 ## Security boundaries
 

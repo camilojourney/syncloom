@@ -1,25 +1,26 @@
 //! Meta transport handlers inherit the application boundary and fixed error envelope.
-use crate::{failure::Failure, server::AppState};
+use crate::{
+    connection_routes::{AppRouter, register},
+    failure::Failure,
+    server::AppState,
+};
 use axum::{
-    Router,
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use std::sync::Arc;
-pub(crate) fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/v1/meta/sign-in", post(begin).get(wait))
-        .route("/v1/meta/connection", get(connection).delete(sign_out))
-        .route("/v1/pieces/{piece_id}/assets/slides/{index}", get(slide))
+pub(crate) fn routes() -> AppRouter {
+    register([
+        ("/v1/meta/sign-in", post(begin).get(wait)),
+        ("/v1/meta/connection", get(connection).delete(sign_out)),
+        ("/v1/pieces/{piece_id}/assets/slides/{index}", get(slide)),
+    ])
 }
 async fn begin(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
-    Ok((
-        StatusCode::ACCEPTED,
-        axum::Json(state.studio.meta()?.sign_in_begin()?),
-    )
-        .into_response())
+    Ok(crate::connection_routes::started(
+        state.studio.meta()?.sign_in_begin()?,
+    ))
 }
 async fn wait(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
     Ok(axum::Json(state.studio.meta()?.sign_in_wait().await?).into_response())

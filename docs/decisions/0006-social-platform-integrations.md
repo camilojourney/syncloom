@@ -32,11 +32,11 @@ Text and one approved PNG for Bluesky/X; Threads text only. No language routing,
 
 ## Identities
 
-OpenSpec CLI 1.15.0, config blob `8f976f578610adeefde25096a98101b9f9c2c12c`; Code 5.0.0 (security, data, integrations, ui). Base `8a3e01b788d52e18369d637372cbb5b9d2966632`. Build commit: implementation checkpoint on `fm/syncloom-v2-slice5b-bluesky-x-threads-20261031`; final head and gates are recorded in the task receipt.
+OpenSpec CLI 1.15.0, config blob `8f976f578610adeefde25096a98101b9f9c2c12c`; Code 5.0.0 (security, data, integrations, ui). Initial base `8a3e01b788d52e18369d637372cbb5b9d2966632`; integration base `1fc1785` includes parallel Meta slice 5c. Build commit: implementation checkpoint on `fm/syncloom-v2-slice5b-bluesky-x-threads-20261031`; final head and gates are recorded in the task receipt.
 
 ## Evidence and gaps
 
-[Q1 verbatim study and provenance](../research/2026-10-30-q1-x-threads-bluesky/README.md), imported at `0372b5c`, before specification. Claude-only, reduced confidence; not independently corroborated by a challenger.
+[Q1 verbatim study and provenance](../research/2026-10-30-q1-x-threads-bluesky/README.md), imported at `161c4d1` after rebase (original checkpoint `0372b5c`), before specification. Claude-only, reduced confidence; not independently corroborated by a challenger.
 
 ### Primary-source checks, 2026-10-31 UTC
 
