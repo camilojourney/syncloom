@@ -1,5 +1,8 @@
 // Shared by core and HTTP test binaries, which use different subsets of these fixtures.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use super::{fake_meta, memory_store::MemoryStore};
 use std::{
     sync::{Arc, Mutex},
@@ -18,6 +21,10 @@ pub struct Media {
     pub refused: bool,
 }
 impl MediaDelivery for Media {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn deliver<'a>(&'a self, bytes: Vec<u8>, mime: &'a str) -> MediaFuture<'a> {
         Box::pin(async move {
             if self.refused {
@@ -30,6 +37,10 @@ impl MediaDelivery for Media {
         })
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn config(fake: &fake_meta::FakeMeta) -> MetaConfig {
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -69,6 +80,10 @@ pub fn stored() -> Token {
         obtained_at: "2026-10-31T00:00:00Z".into(),
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn consent(meta: &Meta) {
     let start = meta.sign_in_begin().unwrap();
     reqwest::Client::new()

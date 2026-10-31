@@ -1,6 +1,9 @@
 //! Stateful Graph boundary, reachable only on loopback. All credentials/content are synthetic.
 // Shared by core and HTTP test binaries, which inspect different subsets of the recorded calls.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use axum::{
     Router,
     body::Bytes,
@@ -69,9 +72,17 @@ impl FakeMeta {
     pub fn base(&self) -> &str {
         &self.base
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn configure(&self, c: Config) {
         *self.inner.config.lock().unwrap() = c;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn calls(&self, path: &str) -> Vec<Call> {
         self.inner
             .calls
@@ -82,10 +93,18 @@ impl FakeMeta {
             .cloned()
             .collect()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn all(&self) -> Vec<Call> {
         self.inner.calls.lock().unwrap().clone()
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start(config: Config) -> FakeMeta {
     let inner = Arc::new(Inner {
         config: Mutex::new(config),
@@ -103,6 +122,10 @@ pub async fn start(config: Config) -> FakeMeta {
     });
     FakeMeta { base, inner, task }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn authorize(
     State(i): State<Arc<Inner>>,
     Query(q): Query<HashMap<String, String>>,
@@ -120,6 +143,10 @@ async fn authorize(
     );
     Redirect::temporary(url.as_str()).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn graph_get(
     State(i): State<Arc<Inner>>,
     Path(path): Path<String>,
@@ -174,6 +201,11 @@ async fn graph_get(
     };
     axum::Json(answer).into_response()
 }
+#[expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn graph_post(
     State(i): State<Arc<Inner>>,
     Path(path): Path<String>,
@@ -216,6 +248,10 @@ async fn graph_post(
     };
     axum::Json(answer).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn record(
     i: &Inner,
     path: &str,
@@ -232,6 +268,10 @@ fn record(
         body,
     });
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn fault(i: &Inner, path: &str) -> Option<Response> {
     let c = i.config.lock().unwrap().clone();
     if c.fault_path.as_deref() != Some(path)

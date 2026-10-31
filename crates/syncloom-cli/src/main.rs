@@ -111,6 +111,10 @@ enum ConnectionCommand {
     SignOut,
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Studio command results contain only supported JSON-serializable values."
+)]
 fn to_json<T: serde::Serialize>(value: T) -> Value {
     serde_json::to_value(value).expect("studio results serialize")
 }
@@ -125,6 +129,10 @@ fn initialize() -> Result<Studio, StartupError> {
     build_studio(config, Settings::default()).map_err(|error| StartupError::Storage(error.into()))
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 async fn run(cli: Cli) -> i32 {
     let studio = match initialize() {
         Ok(studio) => studio,
@@ -295,6 +303,10 @@ fn export(
         )
         .map(to_json)
 }
+#[expect(
+    clippy::print_stdout,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 fn print_result(result: Result<CommandOutput, StudioError>) -> i32 {
     match result {
         Ok(CommandOutput::Json(value)) => {
@@ -312,6 +324,10 @@ enum ConnectionPlatform {
 }
 
 /// Both platforms share command output and waiting semantics, not their protocol.
+#[expect(
+    clippy::print_stdout,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 async fn connection(
     studio: &Studio,
     command: ConnectionCommand,
@@ -358,6 +374,10 @@ fn view(studio: &Studio, piece_id: &str, kind: &str) -> i32 {
     }
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 fn failed(error: StudioError) -> i32 {
     eprintln!(
         "{}",

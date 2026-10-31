@@ -46,6 +46,10 @@ const ERROR_TABLE: [(u16, &str); 35] = [
     (409, "asset_conflict"),
 ];
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn with_id(request: reqwest::RequestBuilder) -> Answer {
     let url = request
         .try_clone()
@@ -74,6 +78,11 @@ async fn with_id(request: reqwest::RequestBuilder) -> Answer {
     .await
 }
 
+#[expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn produce(code: &str) -> Answer {
     match code {
         "session_required" => {

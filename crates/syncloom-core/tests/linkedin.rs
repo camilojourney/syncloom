@@ -12,6 +12,10 @@ use syncloom_core::{
     AuthFlow, ConnectionStatus, Linkedin, Platform, PostFailure, PostRequest, StudioError,
 };
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn query(url: &str) -> (String, HashMap<String, String>) {
     let parsed = url::Url::parse(url).unwrap();
     (

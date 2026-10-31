@@ -19,6 +19,10 @@ struct Args {
 }
 
 #[tokio::main]
+#[expect(
+    clippy::print_stdout,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 async fn main() -> Result<(), String> {
     let args = Args::parse();
     let fake = fake_claude::start(fake_claude::Mode::parse(&args.mode, &args.text)?).await;

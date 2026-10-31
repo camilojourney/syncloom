@@ -3,12 +3,21 @@ mod support;
 use serde_json::{Value, json};
 use support::{scripted::Scripted, *};
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn session(server: &TestServer) -> String {
     let response = get(server, "/v1/session").await;
     assert_eq!(response.status, 200, "{}", response.raw);
     response.body["token"].as_str().unwrap().to_owned()
 }
 
+#[expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn field(html: &str, name: &str) -> String {
     html.split_once(&format!("name=\"{name}\" value=\""))
         .unwrap_or_else(|| panic!("missing {name} in {html}"))
@@ -19,6 +28,10 @@ fn field(html: &str, name: &str) -> String {
         .to_owned()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn form(server: &TestServer, path: &str, fields: &[(&str, &str)]) -> Answer {
     answer(
         client()

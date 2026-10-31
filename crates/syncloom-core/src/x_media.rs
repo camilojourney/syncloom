@@ -17,6 +17,10 @@ struct MediaData {
 struct Processing {
     state: String,
 }
+#[expect(
+    clippy::expect_used,
+    reason = "The fixed image/png MIME literal is valid."
+)]
 pub(crate) async fn upload(
     client: &reqwest::Client,
     base: &str,

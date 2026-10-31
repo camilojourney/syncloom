@@ -2,6 +2,7 @@
 name = "syncloom-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 description = "Syncloom's command line, binary syncloom."
@@ -9,6 +10,9 @@ description = "Syncloom's command line, binary syncloom."
 [[bin]]
 name = "syncloom"
 path = "src/main.rs"
+
+[lints]
+workspace = true
 
 [dependencies]
 rpassword.workspace = true

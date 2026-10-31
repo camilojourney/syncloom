@@ -78,6 +78,10 @@ impl FakeMastodon {
     pub fn base(&self) -> &str {
         &self.inner.base
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn calls(&self, path: &str) -> Vec<Call> {
         self.inner
             .calls
@@ -89,6 +93,10 @@ impl FakeMastodon {
             .collect()
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn record(i: &Inner, path: &'static str, h: HeaderMap, b: Vec<u8>) {
     i.calls.lock().unwrap().push(Call {
         path,
@@ -101,6 +109,10 @@ async fn apps(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response {
     axum::Json(json!({"client_id":"fake-app","client_secret":"fake-secret-axolotl"}))
         .into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn authorize(
     State(i): State<Arc<Inner>>,
     Query(q): Query<HashMap<String, String>>,
@@ -121,6 +133,10 @@ async fn authorize(
     }
     Redirect::temporary(url.as_str()).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn token(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response {
     record(&i, "token", h, b.to_vec());
     if i.config.token_status != 200 {
@@ -141,6 +157,10 @@ async fn instance(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
     }
     axum::Json(value).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn media(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response {
     record(&i, "media", h, b.to_vec());
     if i.config.media_status != 200 {
@@ -155,6 +175,10 @@ async fn media(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response 
     };
     (status,axum::Json(json!({"id":i.config.media_id,"url":if i.config.async_media {Value::Null} else {json!(format!("{}/media/1",i.base))}}))).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn poll(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
     record(&i, "poll", h, vec![]);
     let mut count = i.polls.lock().unwrap();
@@ -164,6 +188,10 @@ async fn poll(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
     }
     axum::Json(json!({"id":"media-1","url":format!("{}/media/1",i.base)})).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn statuses(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response {
     record(&i, "statuses", h, b.to_vec());
     if i.config.hang_status {
@@ -180,6 +208,10 @@ async fn statuses(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Respon
     )
         .into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start(config: Config) -> FakeMastodon {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());

@@ -5,6 +5,10 @@ use support::{
 };
 use syncloom_core::*;
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn fixture() -> (tempfile::TempDir, Studio, Piece) {
     let dir = tempfile::tempdir().unwrap();
     let studio = Studio::new(
@@ -30,6 +34,10 @@ fn request(p: &Piece, target: &str) -> manual_export::ExportRequest {
         target: target.into(),
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn approve(s: &Studio, p: &Piece) -> Piece {
     s.review(
         &p.piece_id,

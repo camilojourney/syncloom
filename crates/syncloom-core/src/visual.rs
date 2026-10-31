@@ -216,6 +216,10 @@ impl RendererConfig {
             })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "The child is assigned from a successful launch immediately before this access."
+    )]
     async fn render_inner(
         &self,
         content: &VisualContent,

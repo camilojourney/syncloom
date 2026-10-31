@@ -3,6 +3,10 @@ use crate::{Connection, Secret, SignInStart, StudioError, Token};
 use serde::Deserialize;
 use std::collections::HashSet;
 impl Meta {
+    #[expect(
+        clippy::expect_used,
+        reason = "BaseUrl validates the authorization base and the graph OAuth path is fixed."
+    )]
     pub fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
         let (client, _, configuration, _) = self.config.require()?;
         let mut url = reqwest::Url::parse(&format!(

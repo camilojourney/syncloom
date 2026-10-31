@@ -1,8 +1,8 @@
-# Fleet shared OpenSpec baseline 1.0.0
+# Fleet shared OpenSpec baseline 1.0.1
 schema: spec-driven
 
 context: |
-  Use stock OpenSpec with thin plans and the installed /code 5.0.0.
+  Use stock OpenSpec with thin plans and the installed /code.
   OpenSpec owns artifact guidance; Code owns implementation, security and testing rules.
   Load Code before code edits and only the references this change needs.
   Project context below owns tools, commands, architecture and specification migration.

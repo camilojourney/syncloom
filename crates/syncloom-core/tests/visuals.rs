@@ -26,6 +26,10 @@ fn review(rev: &str) -> ReviewRequest {
         expected_assets: None,
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn reviewed(piece: &Piece) -> ReviewRequest {
     let assets = piece.assets.as_ref().unwrap();
     ReviewRequest {
@@ -38,6 +42,10 @@ fn reviewed(piece: &Piece) -> ReviewRequest {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn fixture(config: RendererConfig) -> (tempfile::TempDir, Studio, Piece) {
     let dir = tempfile::tempdir().unwrap();
     let studio = Studio::new(
@@ -59,6 +67,10 @@ async fn fixture(config: RendererConfig) -> (tempfile::TempDir, Studio, Piece) {
     (dir, studio, piece)
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn pixels(bytes: &[u8]) -> Vec<u8> {
     let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
         .read_info()
@@ -131,6 +143,10 @@ async fn pinned_renderer_snapshot_repeat_bytes_and_pdf_geometry() {
     assert_snapshot("midnight", &first.image);
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn assert_snapshot(name: &str, bytes: &[u8]) {
     let golden = std::fs::read(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{name}.png")),

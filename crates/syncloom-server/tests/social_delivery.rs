@@ -12,6 +12,10 @@ use syncloom_core::{
     social::{SocialConfig, SocialPlatforms},
 };
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn setup(
     fake: &fake::Fake,
     platform: &str,
@@ -53,6 +57,10 @@ async fn setup(
     .await;
     (server, q)
 }
+#[expect(
+    clippy::panic,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn adapter(q: &SocialPlatforms, platform: &str) -> Arc<dyn Platform> {
     match platform {
         "bluesky" => q.bluesky.clone(),
@@ -61,6 +69,10 @@ fn adapter(q: &SocialPlatforms, platform: &str) -> Arc<dyn Platform> {
         _ => panic!("fixture platform"),
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn login(server: &TestServer, platform: &str) {
     if platform == "bluesky" {
         let signed = post(
@@ -93,6 +105,10 @@ async fn login(server: &TestServer, platform: &str) {
     };
     assert_eq!(signed.body["status"], "signed_in", "{}", signed.raw);
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn draft(server: &TestServer, platform: &str, image: bool) -> Value {
     let created = post(
         server,
@@ -109,10 +125,18 @@ async fn draft(server: &TestServer, platform: &str, image: bool) -> Value {
     assert_eq!(rendered.status, 200, "{}", rendered.raw);
     rendered.body
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn approve_piece(server: &TestServer, p: &Value) {
     let result=send_json(server,reqwest::Method::PATCH,&format!("/v1/pieces/{}",p["piece_id"].as_str().unwrap()),json!({"expected_revision":p["revision"],"status":"approved","expected_assets":p.get("assets").map(|a|json!({"image_sha256":a["image_sha256"],"carousel_sha256":a["carousel_sha256"]}))})).await;
     assert_eq!(result.status, 200, "{}", result.raw);
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn publish_path(p: &Value) -> String {
     format!("/v1/pieces/{}/publish", p["piece_id"].as_str().unwrap())
 }

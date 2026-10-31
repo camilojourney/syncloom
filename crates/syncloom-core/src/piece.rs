@@ -87,6 +87,10 @@ pub fn revision(channel: Channel, piece_id: &str, text: &str) -> String {
 }
 
 /// One owner of piece revision identity; absent visual content preserves the old encoding.
+#[expect(
+    clippy::expect_used,
+    reason = "VisualContent serializes only strings and string vectors, so hashing cannot encounter unsupported JSON values."
+)]
 pub(crate) fn revision_with_visual(
     channel: Channel,
     piece_id: &str,

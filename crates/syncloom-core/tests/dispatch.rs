@@ -24,6 +24,10 @@ fn publish(revision: &str) -> PublishRequest {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn approved_with(dir: &TempDir, platform: Option<Arc<ScriptedPlatform>>) -> (Studio, Piece) {
     let mut studio = studio(dir, Scripted::new(text("A draft about zebrafish.")), fast());
     if let Some(platform) = platform {
@@ -51,6 +55,10 @@ async fn approved_with(dir: &TempDir, platform: Option<Arc<ScriptedPlatform>>) -
     (studio, piece)
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn kinds(dir: &TempDir) -> Vec<String> {
     support::events(dir)
         .iter()

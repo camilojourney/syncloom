@@ -2,7 +2,10 @@
 //! the Posts API, with scripted answers and recorded requests. Both base URLs (auth and API)
 //! are served on one address. Included by the core tests, the CLI tests and the
 //! `fake_linkedin` example. It never contacts linkedin.com.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use axum::{
     Router,
     body::Bytes,
@@ -133,12 +136,24 @@ impl FakeLinkedin {
     pub fn base_url(&self) -> String {
         format!("http://{}", self.addr)
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set_auth(&self, mode: AuthMode) {
         *self.shared.auth.lock().unwrap() = mode;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set_token(&self, mode: TokenMode) {
         *self.shared.token.lock().unwrap() = mode;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set_post(&self, mode: PostMode) {
         *self.shared.post.lock().unwrap() = mode;
     }
@@ -146,20 +161,40 @@ impl FakeLinkedin {
     pub fn release(&self) {
         self.shared.gate.notify_one();
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn auth_requests(&self) -> Vec<AuthRequest> {
         self.shared.auth_requests.lock().unwrap().clone()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn token_requests(&self) -> Vec<TokenRequest> {
         self.shared.token_requests.lock().unwrap().clone()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn userinfo_bearers(&self) -> Vec<Option<String>> {
         self.shared.userinfo_bearers.lock().unwrap().clone()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn posts(&self) -> Vec<PostRecorded> {
         self.shared.posts.lock().unwrap().clone()
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start(auth: AuthMode, token: TokenMode, post_mode: PostMode) -> FakeLinkedin {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -186,6 +221,10 @@ pub async fn start(auth: AuthMode, token: TokenMode, post_mode: PostMode) -> Fak
 }
 
 /// The browser arrives here; the fake plays the member and redirects straight back.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn authorize(
     State(shared): State<Shared>,
     uri: axum::http::Uri,
@@ -215,6 +254,10 @@ async fn authorize(
     Redirect::temporary(&target).into_response()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn access_token(State(shared): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
     let form: HashMap<String, String> = form_fields(&String::from_utf8_lossy(&body));
     shared.token_requests.lock().unwrap().push(TokenRequest {
@@ -238,6 +281,10 @@ async fn access_token(State(shared): State<Shared>, headers: HeaderMap, body: By
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn userinfo(State(shared): State<Shared>, headers: HeaderMap) -> Response {
     let bearer = header_string(&headers, "authorization")
         .and_then(|value| value.strip_prefix("Bearer ").map(str::to_owned));
@@ -253,6 +300,10 @@ async fn userinfo(State(shared): State<Shared>, headers: HeaderMap) -> Response 
     .into_response()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn posts(State(shared): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
     let raw_body = String::from_utf8_lossy(&body).into_owned();
     shared.posts.lock().unwrap().push(PostRecorded {
@@ -284,6 +335,10 @@ async fn posts(State(shared): State<Shared>, headers: HeaderMap, body: Bytes) ->
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn created(id: Option<&str>) -> Response {
     let mut response = StatusCode::CREATED.into_response();
     if let Some(id) = id {
@@ -294,6 +349,10 @@ fn created(id: Option<&str>) -> Response {
     response
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn error_body(status: u16) -> Response {
     (
         StatusCode::from_u16(status).unwrap(),

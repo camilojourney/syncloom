@@ -11,6 +11,10 @@ use support::*;
 #[derive(Clone, Default)]
 struct Captured(Arc<Mutex<Vec<u8>>>);
 impl std::io::Write for Captured {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.lock().unwrap().extend_from_slice(buf);
         Ok(buf.len())

@@ -43,6 +43,10 @@ fn publish(revision: &str, dry_run: bool) -> PublishRequest {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn drafted(dir: &TempDir, reply: Reply) -> (Studio, Piece) {
     let studio = studio(dir, Scripted::new(reply), Settings::default());
     let response = studio.create_thought(thought(THOUGHT)).await.unwrap();
@@ -50,6 +54,10 @@ async fn drafted(dir: &TempDir, reply: Reply) -> (Studio, Piece) {
     (studio, response.pieces.into_iter().next().unwrap())
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn approved(dir: &TempDir) -> (Studio, Piece) {
     let (studio, piece) = drafted(
         dir,

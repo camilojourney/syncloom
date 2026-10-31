@@ -25,6 +25,10 @@ impl XrpcClient for Transport {
     }
 }
 impl HttpClient for Transport {
+    #[expect(
+        clippy::expect_used,
+        reason = "The response builder receives only a valid reqwest status before its headers are accessed."
+    )]
     async fn send_http(
         &self,
         request: Request<Vec<u8>>,

@@ -25,10 +25,18 @@ struct Run {
 }
 
 impl Run {
+    #[expect(
+        clippy::panic,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn json(&self) -> Value {
         serde_json::from_str(&self.stdout)
             .unwrap_or_else(|e| panic!("{e}: stdout {:?} stderr {:?}", self.stdout, self.stderr))
     }
+    #[expect(
+        clippy::panic,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn error(&self) -> Value {
         serde_json::from_str(&self.stderr)
             .unwrap_or_else(|e| panic!("{e}: stderr {:?}", self.stderr))
@@ -49,6 +57,10 @@ fn command(dir: &TempDir, base_url: &str, key: Option<&str>, args: &[&str]) -> C
     command
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn finish(output: std::process::Output) -> Run {
     Run {
         status: output.status.code().unwrap_or(-1),
@@ -57,6 +69,10 @@ fn finish(output: std::process::Output) -> Run {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn syncloom(dir: &TempDir, base_url: &str, key: Option<&str>, args: &[&str]) -> Run {
     finish(command(dir, base_url, key, args).output().unwrap())
 }
@@ -70,6 +86,10 @@ struct LinkedinEnv {
 }
 
 impl LinkedinEnv {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn new(fake: &fake_linkedin::FakeLinkedin, configured: bool, granted: bool) -> Self {
         let port = std::net::TcpListener::bind("127.0.0.1:0")
             .unwrap()
@@ -118,6 +138,10 @@ impl LinkedinEnv {
     /// Whether the Keychain holds the item, by its attributes only. The secret is readable only
     /// by the binary that stored it (the Keychain binds the item to that code hash), so this
     /// test process asks Apple's own tool for presence and lets `syncloom` read the value.
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn item_exists(&self) -> bool {
         Command::new("/usr/bin/security")
             .args([
@@ -148,6 +172,10 @@ impl Drop for LinkedinEnv {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn unique_suffix(now: std::time::SystemTime) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -167,6 +195,10 @@ fn separate_keychain_test_services_remain_unique_when_the_clock_repeats() {
     assert_ne!(unique_suffix(fixed), unique_suffix(fixed));
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn syncloom_linkedin(dir: &TempDir, base: &str, env: &LinkedinEnv, args: &[&str]) -> Run {
     let mut command = command(dir, base, Some("sk-fake"), args);
     env.apply(&mut command);
@@ -174,6 +206,11 @@ fn syncloom_linkedin(dir: &TempDir, base: &str, env: &LinkedinEnv, args: &[&str]
 }
 
 /// Run `linkedin sign-in`: read the URL line, play the browser, collect the rest.
+#[expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn sign_in(dir: &TempDir, base: &str, env: &LinkedinEnv) -> (Run, Value) {
     let mut command = command(dir, base, Some("sk-fake"), &["linkedin", "sign-in"]);
     env.apply(&mut command);
@@ -209,6 +246,10 @@ async fn sign_in(dir: &TempDir, base: &str, env: &LinkedinEnv) -> (Run, Value) {
     )
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn fixture_message(code: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../contracts/studio-api/errors")

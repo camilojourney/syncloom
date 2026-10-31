@@ -24,6 +24,10 @@ impl Drop for TestService {
 }
 
 /// What the Keychain itself says about the item, through Apple's own tool.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn keychain_has(service: &str) -> bool {
     Command::new("/usr/bin/security")
         .args(["find-generic-password", "-s", service, "-a", "linkedin"])
@@ -34,6 +38,10 @@ fn keychain_has(service: &str) -> bool {
 }
 
 #[test]
+#[expect(
+    clippy::panic,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn a_token_round_trips_through_the_keychain_and_is_deleted_without_a_trace() {
     let service = TestService::new("roundtrip");
     let store = KeychainStore::new(service.0.clone());
