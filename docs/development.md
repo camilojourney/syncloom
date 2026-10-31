@@ -2,20 +2,20 @@
 
 ## Shared Kit adoption
 
-Kit **1.0.1** is adopted from Fleet release commit `f63507c26ebf9510bec1e92f692919ec62f12270`, following `system/shared/kit/README.md` and its release ledger. Pinned in: OpenSpec change `2026-10-31-adopt-shared-kit-1-0-1` and the project commit containing this record. Previous adoption: Kit 1.0.0 at project commit `c8718007ab87d6062c70cfa7bf301bb9accc9b83`, Fleet release `e9ce8fecb722848654abb6f887f50939b7e5bdc1`.
+Kit **1.0.2** is adopted from Fleet release commit `d861f11cd52934a149077ded482c928cd5203472`, following `system/shared/kit/README.md` and its immutable release ledger. Pinned in: OpenSpec change `adopt-fleet-kit-1-0-2` and the project commit containing this record. Previous adoption: Kit 1.0.1 at project commit `d8ebd9fa5fe3cf8af0636a7eb2145dc26b9de320`, Fleet release `f63507c26ebf9510bec1e92f692919ec62f12270`.
 
-Components: OpenSpec baseline **1.0.2**, change-shape checker **1.0.0**, Rust profile **1.0.0** retained (Rust **1.99.1**), Code **5.2.1** and quality configuration **code-5.2.1** tested-with. Decide **1.1.0** is the release reference, not invoked here. Global inputs are not project enforcement pins or installation authorization.
+Components: OpenSpec baseline **1.0.2**, change-shape checker **1.0.1**, Rust profile **1.0.0** retained (Rust **1.99.1**), Code **5.2.1** and quality configuration **code-5.2.1** tested-with. Decide **1.1.0** is the release reference, not invoked here. Global inputs are not project enforcement pins or installation authorization.
 
 ### Immutable source identities
 
-Baseline and checker source commit: `9df2415d95cf3e753a268734bed098f24ae027b9`, verified as an ancestor of the release. Baseline blob: `c44e0ffa2d9facdfff58f91bb04cb8d6cb609622`; checker blob: `0420aa817549db1462386794a1a5c39bc402dce5`. Firstmate steering 001 corrected the dispatch's conflicting checker identity to the immutable release ledger.
+Baseline source: `9df2415d95cf3e753a268734bed098f24ae027b9`, blob `c44e0ffa2d9facdfff58f91bb04cb8d6cb609622`. Checker source: `72ae87b8fc6feeb32996618eb5a228b719924319`, blob `366f60d4dc377bfd32bc2ec293516b26ce4aa44b`. Both component sources are verified ancestors of the release and their release bytes match their source bytes. Release ledger blob: `8d6eca6e222acf1be59eb8420bf2b4dd730f424b`, SHA256 `58ba554e3fa6910a83d8aa8097460bf20dac210d5b9445fdd3af94727b1a7e67`.
 
 Paths below are relative to Fleet; hashes are SHA256 unless labeled Git tree.
 
 | Source | Hash |
 | --- | --- |
 | `system/shared/openspec/baseline.yaml` | `c3cae84909ed326a5bed597a8370ca87ffa0e83e189e21d9ab95ecaa189f4b2b` |
-| `system/shared/scripts/check-change-shape.py` | `53b3ba7c7c78f6e9ef60f51b24a9d59cb9381fdea01fc13ee8cb7905ffc8366b` |
+| `system/shared/scripts/check-change-shape.py` | `c707e00629112d75354791b06734fc0ca1adae1845772a11c08f10a837a917bf` |
 | `system/shared/rust/Cargo.toml` | `79fd95c4616b532ba7e1751b090f5d7ff030507d85512ecdc61f27fe0ac0b495` |
 | `system/shared/rust/rust-toolchain.toml` | `f715f440167e20fd8ea9afa0498c3d1ab80174cfcb8cbc895f106a34d907a1e1` |
 | `system/shared/rust/clippy.toml` | `741d8b6cbd57d7b01ff8918083bbf313e281cce0dbdcb1ed669dc8cb84f44578` |
@@ -39,9 +39,9 @@ Rust and unchanged findings/weakened-checks sources remain at `840493182630729d3
 | `crates/syncloom-core/Cargo.toml` | `92d10b04838bb6ed983062aff2edf104392d0c404564f88d7fe748433a1d6de1` |
 | `crates/syncloom-server/Cargo.toml` | `01dd028586c50aacf525ebeecf55170dce6325077fb5e08e8b3841052bc214ce` |
 | `crates/syncloom-cli/Cargo.toml` | `215b8216aee9061bd7d792166d045eb4ba87b785d6e77094b92f5dfdae7bf347` |
-| `scripts/check-change-shape.py` | `53b3ba7c7c78f6e9ef60f51b24a9d59cb9381fdea01fc13ee8cb7905ffc8366b` |
+| `scripts/check-change-shape.py` | `c707e00629112d75354791b06734fc0ca1adae1845772a11c08f10a837a917bf` |
 
-Common baseline lines match the source exactly; every pre-existing Syncloom context line is preserved. Previous baseline 1.0.1 source SHA256 was `fb3e135d4c29607dfd9adbf4b96f1554206f90cfa134d93900932939b2a4498a`. Previous checker SHA256 was `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`. All retained Rust configuration hashes match the previous committed record.
+Common baseline lines match the source exactly; every pre-existing Syncloom context line is preserved. Baseline and all Rust configuration are unchanged from Kit 1.0.1. Previous checker SHA256 was `53b3ba7c7c78f6e9ef60f51b24a9d59cb9381fdea01fc13ee8cb7905ffc8366b`; the new materialized checker matches Fleet exactly. The launch base predated both kit adoptions; this change was rebased onto the recorded Kit 1.0.1 owner commit before final validation.
 
 Rust lints and release sections match Fleet. Project metadata, dependencies and Cargo.lock remain project-owned and unchanged. Every member inherits workspace lints and MSRV. Package-level root `[lints]` is N/A: Cargo rejects it in this virtual workspace; the prior Kit 1.0.0 adoption's steering message 001 approved the correct root `workspace.lints` / member `lints.workspace` mapping. Nix files are not materialized in the project; optional deny/mutants reports are not selected. Nextest timeout configuration is adopted, but nextest execution is not claimed.
 
@@ -49,7 +49,17 @@ Configuration exceptions: none for selected shared sections. The prior Kit 1.0.0
 
 No new exceptions; configuration exceptions: none for this adoption. The historical project-owned lint expectations above remain unchanged.
 
-### Actual loaded inputs and verification
+### Current adoption verification
+
+The current run loads Code **5.2.2**, not the release's tested-with Code 5.2.1. Security, design and testing references govern secret handling, single-owner materialization and real-CLI red/green evidence. No global skill installation or repin is performed; Decide is not invoked because no consequential unresolved choice remains. [Evidence and exact commands](../openspec/changes/adopt-fleet-kit-1-0-2/evidence.md) record actual hashes, received worker trace, original base, fresh acceptance/rejection results and validation limits. Fresh receipt location: `/Users/camiloslaptop/.firstmate-homes/syncloom-v2-lab/data/syncloom-kit102/`.
+
+| Problem (source) | Owner | Change | Regression or acceptance | Result |
+| --- | --- | --- | --- | --- |
+| Faithful multiline request rejected and overcounted | Fleet | Byte-exact checker 1.0.1 | Independent synthetic CLI tests with exact request-source binding and deliberate changed/missing/joined/split text | Red: old checker rejects faithful text, counts four instead of two paragraphs. Green: six tests pass, including mismatch rejection and reviewer-token controls. |
+| Release adoption and retained configuration | Syncloom | This recorded kit 1.0.2 adoption | Immutable component ancestry/blob/SHA256 and project comparison | Verified baseline/checker; retained Rust and global reference inputs unchanged. |
+| Integrated validation | Code / Syncloom | Current run | Exact commands and individual outcomes in evidence.md | Pending final validation. |
+
+### Historical Kit 1.0.1 inputs and verification
 
 Loaded `/Users/camiloslaptop/.agents/skills/code/SKILL.md` version 5.2.1, SHA256 `efaa1df842147b98f515fa09615f9d7cb213d6ce6b295f41ccd6f625258dcc3a`; loaded Verify matches the source hash above. Loaded topic reference: security, SHA256 `12ff1d9cc04eee151fe92502402f1df16b31e510249a26d9e9b29ce86cfb8e37`. No product security boundary changes. Decide was not invoked.
 
@@ -93,7 +103,7 @@ The [visual asset guide](visual-assets.md) pins the installed browser and font a
 
 ## Record checkers
 
-`scripts/check-change-shape.py` is Fleet-owned from Shared Kit 1.0.1, checker 1.0.0. Its immutable provenance is invoz.v2 `ddd9880ef316d7cac7b4d87be84e480fd148e237:scripts/check-change-shape.py` (original SHA256 `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`). Update from Fleet's release ledger, not from another project's materialized copy. Shape validation does not authenticate a reviewer or grant approval.
+`scripts/check-change-shape.py` is Fleet-owned from Shared Kit 1.0.1, now checker 1.0.1 from Kit 1.0.2. Run `python3 -B -I scripts/check-change-shape.py openspec/changes/<change> --request-source <request.txt>` to bind exact request paragraphs, including internal newlines; without source binding, counts alone cannot prove verbatim intent. Consumer regressions run with `python3 -B -I -m unittest discover -s scripts -p 'test_check_change_shape.py' -v`. Its immutable provenance is invoz.v2 `ddd9880ef316d7cac7b4d87be84e480fd148e237:scripts/check-change-shape.py` (original SHA256 `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`). Update from Fleet's release ledger, not from another project's materialized copy. Shape validation does not authenticate a reviewer or grant approval.
 
 `scripts/check-research-records.py` and `scripts/test_check_research_records.py` remain invoz.v2-owned byte-identical copies (SHA256 `20503765e214235c8e002007e7bad7501f2b2ec8d9081741a6a550a5f34ebae1` and `efcefaf2ceb7d4faf89fb3a26cbb36a5557e89ab25171d0d9d0159f5a6a5f853`). Copy their updates from that owner and rerun tests. Repository-record tooling stays Python; porting it would create a second policy owner. All checkers are stdlib-only; run with `python3 -B -I` to avoid repository bytecode.
 
