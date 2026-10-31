@@ -9,6 +9,10 @@ use syncloom_core::{
     *,
 };
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn adapter(fake: &FakeMastodon, store: Arc<MemoryStore>) -> Arc<Mastodon> {
     Arc::new(Mastodon::new(
         MastodonConfig::parse(
@@ -24,6 +28,10 @@ fn adapter(fake: &FakeMastodon, store: Arc<MemoryStore>) -> Arc<Mastodon> {
         Duration::from_secs(2),
     ))
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn consent(fake: &FakeMastodon, store: Arc<MemoryStore>) -> Arc<Mastodon> {
     let m = adapter(fake, store);
     let start = m.sign_in_begin().await.unwrap();

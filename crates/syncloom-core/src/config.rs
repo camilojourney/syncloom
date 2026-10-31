@@ -60,6 +60,10 @@ pub(crate) fn plain_url(raw: &str) -> Option<reqwest::Url> {
 
 /// The one outbound HTTP client policy: a 5 s connect timeout and no redirect following, so
 /// a provider or platform cannot send the studio anywhere else.
+#[expect(
+    clippy::expect_used,
+    reason = "Failure to initialize the fixed TLS client is unrecoverable; do not fall back to an unbounded client."
+)]
 pub(crate) fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))

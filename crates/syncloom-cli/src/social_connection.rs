@@ -53,6 +53,10 @@ pub(crate) async fn run(
     };
     Ok(crate::to_json(connection))
 }
+#[expect(
+    clippy::print_stdout,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 async fn sign_in(
     q: &SocialPlatforms,
     channel: Channel,

@@ -20,6 +20,10 @@ struct Args {
 }
 
 #[tokio::main]
+#[expect(
+    clippy::print_stdout,
+    reason = "This binary intentionally writes its documented user-facing output to the terminal."
+)]
 async fn main() -> Result<(), String> {
     let args = Args::parse();
     let auth = match args.auth.as_str() {

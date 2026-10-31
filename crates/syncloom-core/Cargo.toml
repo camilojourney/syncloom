@@ -2,9 +2,13 @@
 name = "syncloom-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 description = "Syncloom's rules: thought intake, drafting through a model provider, platform rules, review, the dispatch outbox, platform credentials, the LinkedIn integration, the provenance log and the file store."
+
+[lints]
+workspace = true
 
 [dependencies]
 atrium-api.workspace = true

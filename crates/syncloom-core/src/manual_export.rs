@@ -45,6 +45,10 @@ impl Target {
         }
     }
 }
+#[expect(
+    clippy::expect_used,
+    reason = "The manifest contains only JSON-serializable strings and fixed metadata."
+)]
 pub(crate) fn files(
     piece: &Piece,
     target: Target,

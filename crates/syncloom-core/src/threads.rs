@@ -23,6 +23,10 @@ impl Threads {
             pending: Mutex::new(None),
         }
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth pending state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
         configured(self.context.config.threads_secret.as_ref())?;
         let redirect = configured(self.context.config.threads_redirect.as_ref())?;
@@ -52,6 +56,10 @@ impl Threads {
             ),
         })
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth pending state cannot be safely reused; preserve fail-closed behavior."
+    )]
     fn take_code(&self, callback: &str) -> Result<String, StudioError> {
         let pending = self
             .pending
@@ -129,6 +137,10 @@ impl Threads {
             "threads_basic,threads_content_publish".into(),
         )
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth pending state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.pending.lock().unwrap().take();
         self.context.credentials.clear()
@@ -141,6 +153,10 @@ impl crate::oauth_context::OAuthLifecycle for Threads {
     fn oauth(&self) -> &OAuthContext {
         &self.context
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth pending state cannot be safely reused; preserve fail-closed behavior."
+    )]
     fn pending(&self) -> bool {
         self.pending
             .lock()

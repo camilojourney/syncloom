@@ -56,6 +56,10 @@ async fn start_meta(
     .await;
     (server, adapter, media)
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn sign_in(server: &TestServer) {
     let start = post_empty(server, "/v1/meta/sign-in").await;
     assert_eq!(start.status, 202, "{}", start.raw);
@@ -74,6 +78,10 @@ async fn draft(server: &TestServer, channel: &str, unique: usize) -> serde_json:
     assert_eq!(r.status, 201, "{}", r.raw);
     r.body["pieces"][0].clone()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn rendered(server: &TestServer, p: &serde_json::Value, count: usize) -> serde_json::Value {
     let path = format!("/v1/pieces/{}/render", p["piece_id"].as_str().unwrap());
     let r=post(server,&path,json!({"expected_revision":p["revision"],"template":"paper","slides":(0..count).map(|i|format!("Evidence slide {}",i+1)).collect::<Vec<_>>()})).await;
@@ -83,6 +91,10 @@ async fn rendered(server: &TestServer, p: &serde_json::Value, count: usize) -> s
 fn hashes(p: &serde_json::Value) -> serde_json::Value {
     json!({"image_sha256":p["assets"]["image_sha256"],"carousel_sha256":p["assets"]["carousel_sha256"],"slides_sha256":p["assets"]["slides_sha256"]})
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn approve_meta(server: &TestServer, p: &serde_json::Value) -> Answer {
     let mut body = json!({"status":"approved","expected_revision":p["revision"]});
     if !p["assets"].is_null() {
@@ -96,6 +108,10 @@ async fn approve_meta(server: &TestServer, p: &serde_json::Value) -> Answer {
     )
     .await
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn publish_meta(server: &TestServer, p: &serde_json::Value) -> Answer {
     post(
         server,

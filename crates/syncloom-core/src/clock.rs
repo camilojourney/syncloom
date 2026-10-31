@@ -27,6 +27,10 @@ impl Clock for FixedClock {
 
 /// Whole seconds, UTC, `Z` suffix. Sub-second precision is dropped so instants compare as
 /// strings and never carry a fractional part.
+#[expect(
+    clippy::expect_used,
+    reason = "Callers supply RFC3339-range instants; zero nanoseconds is valid and formatting failures remain fatal."
+)]
 pub fn rfc3339(instant: OffsetDateTime) -> String {
     instant
         .to_offset(time::UtcOffset::UTC)

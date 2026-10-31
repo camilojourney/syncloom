@@ -140,6 +140,10 @@ impl Linkedin {
     }
 
     /// Bind the shared callback listener and return the platform-specific authorization URL.
+    #[expect(
+        clippy::expect_used,
+        reason = "BaseUrl validates the authorization base and authorization_path supplies a fixed path."
+    )]
     pub fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
         let (client_id, _) = self.app()?;
         let mut url = reqwest::Url::parse(&format!(
@@ -279,6 +283,10 @@ fn post_body(member_id: &str, text: &str) -> serde_json::Value {
 
 /// LinkedIn's answer as one outcome: 2xx with `x-restli-id` is posted; a 2xx without it is
 /// unknown; 401 needs consent, 429 is rate limited, any other 4xx refused, anything else unknown.
+#[expect(
+    clippy::expect_used,
+    reason = "The preceding non-success branch guarantees an HTTP failure classification."
+)]
 fn outcome(response: reqwest::Response) -> Result<Posted, PostFailure> {
     let status = response.status();
     if !status.is_success() {

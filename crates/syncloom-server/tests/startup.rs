@@ -75,6 +75,10 @@ fn the_process_refuses_a_bad_provider_base_url_naming_the_variable() {
 
 // studio-api: Loopback bind, Bound address announced
 #[test]
+#[expect(
+    clippy::panic,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn the_process_announces_the_bound_address_in_one_json_line() {
     let dir = TempDir::new().unwrap();
     let mut child = binary(&dir)

@@ -40,6 +40,10 @@ impl CostConsent {
 }
 
 impl CostConsents {
+    #[expect(
+        clippy::expect_used,
+        reason = "Poisoned cost-consent state cannot safely authorize spend; preserve fail-closed behavior."
+    )]
     fn accepted(&self, piece: &Piece) -> Option<u64> {
         let current = CostConsent::current(piece);
         let mut records = self.0.lock().expect("cost consent lock");
@@ -54,6 +58,10 @@ impl CostConsents {
         }
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Poisoned cost-consent state cannot safely authorize spend; preserve fail-closed behavior."
+    )]
     fn accept(&self, piece: &Piece, form: &PieceForm) -> Result<(), StudioError> {
         if piece.channel != syncloom_core::Channel::X {
             return Err(StudioError::InvalidRequest);
@@ -222,6 +230,10 @@ fn approval_note(piece: &Piece) -> &'static str {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "The hash list contains only strings, which always serialize to JSON."
+)]
 fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
     let id = escape(&piece.piece_id);
     let channel = piece.channel.display_name();

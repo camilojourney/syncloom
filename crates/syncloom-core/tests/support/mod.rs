@@ -1,5 +1,8 @@
 //! Shared test support for the core crate.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 pub mod fake_claude;
 pub mod fake_linkedin;
 pub mod memory_store;
@@ -25,6 +28,10 @@ pub const TOKEN_EXPIRES_AT: &str = "2026-12-29T18:00:00Z";
 pub const CLIENT_SECRET_CANARY: &str = "client-secret-axolotl";
 
 /// A studio over a fresh temporary directory.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn studio(dir: &TempDir, provider: Arc<dyn ModelProvider>, settings: Settings) -> Studio {
     Studio::new(
         Store::open(dir.path()).unwrap(),
@@ -43,6 +50,10 @@ pub fn fast() -> Settings {
 }
 
 /// A port nobody listens on right now, for a fixed loopback redirect URL.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -52,6 +63,10 @@ pub fn free_port() -> u16 {
 }
 
 /// A LinkedIn configuration pointing both bases at the fake, with or without app credentials.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn linkedin_config(
     fake_base: &str,
     port: u16,
@@ -91,6 +106,10 @@ pub fn stored_token(expires_at: &str) -> Token {
 
 /// The browser: follows the authorization URL through the fake's redirect to the callback
 /// listener and returns the callback page.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn browser(url: &str) -> reqwest::Response {
     reqwest::Client::builder()
         .no_proxy()
@@ -109,6 +128,10 @@ pub const THOUGHT: &str =
 pub const NORMALIZED: &str =
     "Agents write better when the spec names one owner per rule; zebrafish.";
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn events(dir: &TempDir) -> Vec<serde_json::Value> {
     let path = dir.path().join("provenance").join("events.jsonl");
     if !path.exists() {
@@ -125,6 +148,10 @@ pub fn events_raw(dir: &TempDir) -> String {
     std::fs::read_to_string(dir.path().join("provenance").join("events.jsonl")).unwrap_or_default()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn files(dir: &TempDir, sub: &str) -> Vec<String> {
     let path = dir.path().join(sub);
     if !path.exists() {
@@ -139,6 +166,10 @@ pub fn files(dir: &TempDir, sub: &str) -> Vec<String> {
 }
 
 /// The one intent in the outbox, parsed.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn intent(dir: &TempDir) -> serde_json::Value {
     let names = files(dir, "outbox");
     assert_eq!(names.len(), 1, "expected exactly one intent: {names:?}");
@@ -149,6 +180,10 @@ pub fn intent(dir: &TempDir) -> serde_json::Value {
 }
 
 /// Every file under the data directory as one string, for canary checks.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn all_data(dir: &TempDir) -> String {
     let mut out = String::new();
     for sub in ["pieces", "outbox", "provenance"] {

@@ -8,6 +8,10 @@ use support::scripted::{Scripted, text};
 use support::*;
 use syncloom_core::TokenStore;
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn browser(url: &str) -> reqwest::Response {
     client().get(url).send().await.unwrap()
 }

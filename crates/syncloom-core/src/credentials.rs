@@ -87,12 +87,24 @@ pub trait TokenStore: Send + Sync {
 #[derive(Default)]
 pub(crate) struct CredentialWrites(std::sync::Mutex<u64>);
 impl CredentialWrites {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned credential-generation state cannot be safely reused without risking stale credential commits."
+    )]
     pub fn generation(&self) -> u64 {
         *self.0.lock().unwrap()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned credential-generation state cannot be safely reused without risking stale credential commits."
+    )]
     pub fn invalidate(&self) {
         *self.0.lock().unwrap() += 1;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned credential-generation state cannot be safely reused without risking stale credential commits."
+    )]
     pub fn save(
         &self,
         generation: u64,
@@ -107,6 +119,10 @@ impl CredentialWrites {
         store.save(account, token)?;
         Ok(())
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned credential-generation state cannot be safely reused without risking stale credential commits."
+    )]
     pub fn delete(&self, store: &dyn TokenStore, account: &str) -> Result<(), crate::StudioError> {
         let mut current = self.0.lock().unwrap();
         *current += 1;

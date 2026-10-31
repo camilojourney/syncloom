@@ -1,6 +1,9 @@
 //! Shared support for the server tests: a server over the scripted provider in a temporary
 //! directory, raw socket requests for Host header control, and body helpers.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 #[path = "../../../syncloom-core/tests/support/fake_linkedin.rs"]
 pub mod fake_linkedin;
 #[path = "../../../syncloom-core/tests/support/memory_store.rs"]
@@ -53,6 +56,10 @@ pub fn fixed_clock() -> Arc<FixedClock> {
     Arc::new(FixedClock(datetime!(2026-10-30 18:00:00 UTC)))
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -74,6 +81,10 @@ pub fn stored_token(expires_at: &str) -> Token {
 
 /// A server whose studio has the LinkedIn integration over the fake, with app credentials when
 /// `configured` and delivery granted when `granted`.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start_linkedin(
     provider: Arc<Scripted>,
     settings: Settings,
@@ -115,6 +126,10 @@ pub async fn start_with(provider: Arc<Scripted>, settings: Settings) -> TestServ
     start_studio(provider, settings, |studio| studio).await
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start_studio(
     provider: Arc<Scripted>,
     settings: Settings,
@@ -149,6 +164,10 @@ pub async fn start(provider: Arc<Scripted>) -> TestServer {
     start_with(provider, Settings::default()).await
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn client() -> reqwest::Client {
     reqwest::Client::builder().no_proxy().build().unwrap()
 }
@@ -178,6 +197,10 @@ impl Answer {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn answer(response: reqwest::Response) -> Answer {
     let status = response.status().as_u16();
     let headers = response.headers().clone();
@@ -191,10 +214,18 @@ pub async fn answer(response: reqwest::Response) -> Answer {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn get(server: &TestServer, path: &str) -> Answer {
     answer(client().get(server.url(path)).send().await.unwrap()).await
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn send_json(
     server: &TestServer,
     method: reqwest::Method,
@@ -217,6 +248,10 @@ pub async fn post(server: &TestServer, path: &str, body: Value) -> Answer {
 }
 
 /// A POST with no body, as the sign-in operation takes.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn post_empty(server: &TestServer, path: &str) -> Answer {
     answer(
         client()
@@ -248,10 +283,18 @@ pub fn piece_of(answer: &Answer) -> Value {
     answer.body["pieces"][0].clone()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn id_of(piece: &Value) -> String {
     piece["piece_id"].as_str().unwrap().to_owned()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn revision_of(piece: &Value) -> String {
     piece["revision"].as_str().unwrap().to_owned()
 }
@@ -267,6 +310,10 @@ pub async fn approve(server: &TestServer, piece: &Value) -> Answer {
 }
 
 /// Write one raw HTTP/1.1 request and read the whole response, for Host header control.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn raw(addr: SocketAddr, request: &str) -> Answer {
     let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
     stream.write_all(request.as_bytes()).await.unwrap();
@@ -314,6 +361,11 @@ pub fn head_with_hosts(request_line: &str, host_lines: &[&str], extra: &[(&str, 
     request
 }
 
+#[expect(
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn fixture(name: &str) -> Value {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../contracts/studio-api")
@@ -324,6 +376,10 @@ pub fn fixture(name: &str) -> Value {
     .unwrap()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn events(dir: &TempDir) -> Vec<Value> {
     let path = dir.path().join("provenance").join("events.jsonl");
     if !path.exists() {
@@ -336,6 +392,10 @@ pub fn events(dir: &TempDir) -> Vec<Value> {
         .collect()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn files(dir: &TempDir, sub: &str) -> Vec<String> {
     let path = dir.path().join(sub);
     if !path.exists() {

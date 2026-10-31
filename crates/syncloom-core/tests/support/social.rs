@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use crate::fake::Fake;
 use std::{
     sync::{Arc, Mutex},
@@ -11,6 +14,10 @@ use syncloom_core::{
 use time::{OffsetDateTime, macros::datetime};
 pub struct TestClock(pub Mutex<OffsetDateTime>);
 impl Clock for TestClock {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn now(&self) -> OffsetDateTime {
         *self.0.lock().unwrap()
     }
@@ -18,6 +25,10 @@ impl Clock for TestClock {
 pub fn clock() -> Arc<TestClock> {
     Arc::new(TestClock(Mutex::new(datetime!(2026-10-31 02:00 UTC))))
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub fn social(
     fake: &Fake,
     store: Arc<dyn syncloom_core::TokenStore>,
@@ -51,6 +62,10 @@ pub fn text() -> PostRequest {
         slides: Vec::new(),
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn x_login(q: &SocialPlatforms) {
     let start = q.x.sign_in_begin().unwrap();
     let u = reqwest::Url::parse(&start.authorization_url).unwrap();
@@ -70,6 +85,10 @@ pub async fn x_login(q: &SocialPlatforms) {
     reqwest::get(cb).await.unwrap();
     q.x.sign_in_wait().await.unwrap();
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn threads_login(q: &SocialPlatforms) {
     let start = q.threads.sign_in_begin().unwrap();
     let u = reqwest::Url::parse(&start.authorization_url).unwrap();
