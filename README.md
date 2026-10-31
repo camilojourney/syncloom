@@ -10,7 +10,7 @@ From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought
 - `contracts/` - fixtures the server tests against (`contracts/studio-api/`, owned by the capability `studio-api`).
 - `openspec/` - specs and changes; `openspec/specs/` is the only specification authority.
 - `docs/research/` and `docs/decisions/` - the studies behind the product and the decisions they served. Start at [`docs/research/INDEX.md`](docs/research/INDEX.md) and [`docs/decisions/README.md`](docs/decisions/README.md).
-- `scripts/` - record checkers carried over from invoz.v2 ([docs/development.md](docs/development.md) says why they stay Python).
+- `scripts/` - Fleet's released change-shape checker and invoz.v2's research-record checker ([docs/development.md](docs/development.md) records ownership and why they stay Python).
 
 ## Run and check
 
