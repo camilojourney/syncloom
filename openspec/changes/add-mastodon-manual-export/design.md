@@ -37,6 +37,10 @@ Only the local operator acts. API Host guards cover every new route; OAuth state
 - Export is not proof of posting: notes require the operator to check subreddit rules and later TikTok video requirements.
 - Live instance compatibility remains unproven: all execution evidence uses a loopback fake; real consent requires separate authorization.
 
+## Validation review
+
+The weakened-check analyzer flags six candidates, none accepted as a weakened check: LinkedIn's expiry equality now compares the same expected instant through `Option::as_deref`; the log count increases from eight to ten for two added requests; four `fit(...)` boundary assertions are mistaken for focused test calls. The latter assertions actively verify the new channel bounds and do not skip or focus tests. No suppression or findings waiver remains. Guard mutations were rerun after the named-step refactor.
+
 ## Migration Plan
 
 Additive channel/status variants and optional token expiry preserve existing records. No bulk rewrite or destructive migration. Rollback uses the earlier binary with pre-change data backups; never read new-channel records with an older binary.
