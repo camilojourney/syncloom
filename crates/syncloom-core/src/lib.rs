@@ -26,6 +26,7 @@ pub mod piece;
 pub mod platform;
 pub mod provenance;
 pub mod provider;
+pub mod routing;
 pub mod social;
 mod social_config;
 pub mod store;

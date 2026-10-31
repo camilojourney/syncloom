@@ -518,6 +518,7 @@ impl Studio {
                     piece_id,
                     group_id: group_id.clone(),
                     channel: *channel,
+                    routing: Some(crate::routing::analyze_thought(&thought, *channel)),
                     platform: channel.platform().to_owned(),
                     revision,
                     status: Status::PendingReview,

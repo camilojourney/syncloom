@@ -22,6 +22,7 @@ fn piece(text: &str) -> Piece {
         publish_status: None,
         visual: None,
         assets: None,
+        routing: None,
         fit: Fit {
             verdict: Verdict::Review,
             char_count: 11,

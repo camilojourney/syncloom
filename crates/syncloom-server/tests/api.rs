@@ -305,6 +305,15 @@ async fn a_thought_is_drafted_into_a_pending_piece() {
         piece["source"],
         json!({"type": "text", "raw_input": THOUGHT})
     );
+    assert_eq!(
+        piece["routing"],
+        json!({
+            "destination": {"language":"en", "platform":"linkedin", "account":"camiloexperience", "handle":"@camiloexperience", "approval_required":true},
+            "thesis":"Agents write better when the spec names one owner per rule; zebrafish",
+            "visual_hook":"Agents write better when the spec names one owner per rule; zebrafish",
+            "products":[]
+        })
+    );
     assert_eq!(piece["review_decision_id"], Value::Null);
     assert_eq!(piece["publish_status"], Value::Null);
     assert_eq!(
@@ -333,6 +342,7 @@ async fn a_thought_is_drafted_into_a_pending_piece() {
         "publish_status",
         "fit",
         "source",
+        "routing",
         "created_at",
         "updated_at",
     ];
