@@ -238,7 +238,11 @@ impl Linkedin {
 
     /// Exactly one `POST /rest/posts`. The caller (the studio) applies the deadline.
     async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
-        let token = self.usable_token()?;
+        let token = crate::credentials::usable_token(
+            self.store.as_ref(),
+            ACCOUNT,
+            &self.clock.now_rfc3339(),
+        )?;
         let response = self
             .client
             .post(format!("{}/rest/posts", self.config.api_base.as_str()))
@@ -250,20 +254,6 @@ impl Linkedin {
             .await
             .map_err(crate::platform::transport_failure)?;
         outcome(response)
-    }
-
-    /// The stored token when present and not expired; otherwise consent is required and
-    /// nothing is sent.
-    fn usable_token(&self) -> Result<Token, PostFailure> {
-        let token = self
-            .store
-            .load(ACCOUNT)
-            .map_err(|_| PostFailure::Unknown)?
-            .ok_or(PostFailure::ConsentRequired)?;
-        if token.is_expired_at(&self.clock.now_rfc3339()) {
-            return Err(PostFailure::ConsentRequired);
-        }
-        Ok(token)
     }
 }
 

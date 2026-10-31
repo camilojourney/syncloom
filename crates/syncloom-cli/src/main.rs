@@ -101,104 +101,174 @@ fn to_json<T: serde::Serialize>(value: T) -> Value {
     serde_json::to_value(value).expect("studio results serialize")
 }
 
+enum StartupError {
+    Configuration(String),
+    Storage(StudioError),
+}
+fn initialize() -> Result<Studio, StartupError> {
+    let config =
+        studio_config(|name| std::env::var(name).ok()).map_err(StartupError::Configuration)?;
+    build_studio(config, Settings::default()).map_err(|error| StartupError::Storage(error.into()))
+}
+
 async fn run(cli: Cli) -> i32 {
-    let config = match studio_config(|name| std::env::var(name).ok()) {
-        Ok(config) => config,
-        Err(error) => {
+    let studio = match initialize() {
+        Ok(studio) => studio,
+        Err(StartupError::Configuration(error)) => {
             eprintln!("{error}");
             return 2;
         }
+        Err(StartupError::Storage(error)) => return failed(error),
     };
-    let studio = match build_studio(config, Settings::default()) {
-        Ok(studio) => studio,
-        Err(error) => return failed(StudioError::from(error)),
-    };
-    let result = match cli.command {
-        Command::Thought { text, channel } => studio
-            .create_thought(ThoughtRequest {
-                text,
-                channels: channel,
-            })
-            .await
-            .map(to_json),
+    print_result(dispatch(&studio, cli.command).await)
+}
+
+enum CommandOutput {
+    Json(Value),
+    Exit(i32),
+}
+
+/// Routing only. Each handler owns request construction for its operation.
+async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, StudioError> {
+    let result = match command {
+        Command::Thought { text, channel } => thought(studio, text, channel).await,
         Command::Show { piece_id } => studio.show(&piece_id).map(to_json),
         Command::Approve {
             piece_id,
             expected_revision,
             image_sha256,
             carousel_sha256,
-        } => studio
-            .review(
-                &piece_id,
-                ReviewRequest {
-                    status: Some(Status::Approved),
-                    text: None,
-                    expected_revision,
-                    expected_assets: image_sha256.zip(carousel_sha256).map(
-                        |(image_sha256, carousel_sha256)| syncloom_core::AssetHashes {
-                            image_sha256,
-                            carousel_sha256,
-                        },
-                    ),
-                },
-            )
-            .map(to_json),
+        } => approve(
+            studio,
+            &piece_id,
+            expected_revision,
+            image_sha256,
+            carousel_sha256,
+        ),
         Command::Publish {
             piece_id,
             expected_revision,
             dry_run,
-        } => studio
-            .publish(
-                &piece_id,
-                PublishRequest {
-                    expected_revision,
-                    dry_run,
-                },
-            )
-            .await
-            .map(to_json),
+        } => publish(studio, &piece_id, expected_revision, dry_run).await,
         Command::Render {
             piece_id,
             expected_revision,
             template,
             slides,
-        } => studio
-            .render(
-                &piece_id,
-                syncloom_core::RenderRequest {
-                    expected_revision,
-                    template,
-                    slides,
-                },
-            )
-            .await
-            .map(to_json),
-        Command::View { piece_id, kind } => return view(&studio, &piece_id, &kind),
+        } => render(studio, &piece_id, expected_revision, template, slides).await,
+        Command::View { piece_id, kind } => {
+            return Ok(CommandOutput::Exit(view(studio, &piece_id, &kind)));
+        }
         Command::Linkedin { command } => {
-            connection(&studio, command, ConnectionPlatform::Linkedin).await
+            connection(studio, command, ConnectionPlatform::Linkedin).await
         }
         Command::Mastodon { command } => {
-            connection(&studio, command, ConnectionPlatform::Mastodon).await
+            connection(studio, command, ConnectionPlatform::Mastodon).await
         }
         Command::Export {
             piece_id,
             expected_revision,
             target,
-        } => studio
-            .export(
-                &piece_id,
-                syncloom_core::manual_export::ExportRequest {
-                    expected_revision,
-                    target,
-                },
-            )
-            .map(to_json),
+        } => export(studio, &piece_id, expected_revision, target),
     };
+    result.map(CommandOutput::Json)
+}
+
+async fn thought(
+    studio: &Studio,
+    text: String,
+    channels: Vec<String>,
+) -> Result<Value, StudioError> {
+    studio
+        .create_thought(ThoughtRequest { text, channels })
+        .await
+        .map(to_json)
+}
+fn approve(
+    studio: &Studio,
+    piece_id: &str,
+    expected_revision: String,
+    image: Option<String>,
+    carousel: Option<String>,
+) -> Result<Value, StudioError> {
+    let expected_assets =
+        image.zip(carousel).map(
+            |(image_sha256, carousel_sha256)| syncloom_core::AssetHashes {
+                image_sha256,
+                carousel_sha256,
+            },
+        );
+    studio
+        .review(
+            piece_id,
+            ReviewRequest {
+                status: Some(Status::Approved),
+                text: None,
+                expected_revision,
+                expected_assets,
+            },
+        )
+        .map(to_json)
+}
+async fn publish(
+    studio: &Studio,
+    piece_id: &str,
+    expected_revision: String,
+    dry_run: bool,
+) -> Result<Value, StudioError> {
+    studio
+        .publish(
+            piece_id,
+            PublishRequest {
+                expected_revision,
+                dry_run,
+            },
+        )
+        .await
+        .map(to_json)
+}
+async fn render(
+    studio: &Studio,
+    piece_id: &str,
+    expected_revision: String,
+    template: String,
+    slides: Vec<String>,
+) -> Result<Value, StudioError> {
+    studio
+        .render(
+            piece_id,
+            syncloom_core::RenderRequest {
+                expected_revision,
+                template,
+                slides,
+            },
+        )
+        .await
+        .map(to_json)
+}
+fn export(
+    studio: &Studio,
+    piece_id: &str,
+    expected_revision: String,
+    target: String,
+) -> Result<Value, StudioError> {
+    studio
+        .export(
+            piece_id,
+            syncloom_core::manual_export::ExportRequest {
+                expected_revision,
+                target,
+            },
+        )
+        .map(to_json)
+}
+fn print_result(result: Result<CommandOutput, StudioError>) -> i32 {
     match result {
-        Ok(value) => {
+        Ok(CommandOutput::Json(value)) => {
             println!("{value}");
             0
         }
+        Ok(CommandOutput::Exit(code)) => code,
         Err(error) => failed(error),
     }
 }

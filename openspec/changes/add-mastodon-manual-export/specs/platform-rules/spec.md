@@ -11,4 +11,3 @@ The rules SHALL recognize exactly the channels of the table in their scenario an
 - **AND** `mastodon` maps to platform `mastodon` with draft bounds 1 to 500; live instance limits are checked by `mastodon-integration`
 - **AND** `manual_export` maps to platform `manual` with local drafting bounds 1 to 40000; target notes, not this bound, govern manual platform suitability
 - **AND** any other name, including `linkedin`, `LinkedIn_Text` and `linkedin_text ` with a trailing space, is unknown
-

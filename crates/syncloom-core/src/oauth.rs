@@ -177,19 +177,7 @@ impl Session {
                 .append_pair("code_challenge", &s256(v.expose()));
         }
         let (sender, receiver) = oneshot::channel();
-        let host = reqwest::Url::parse(redirect.as_str()).expect("checked redirect");
-        let expected = format!("{}:{}", host.host_str().unwrap(), host.port().unwrap());
-        let app=Router::new().route(redirect.path(),get(callback))
-            .fallback(|| async { fixed_error(StatusCode::NOT_FOUND) })
-            .method_not_allowed_fallback(|| async { fixed_error(StatusCode::METHOD_NOT_ALLOWED) })
-            .layer(middleware::from_fn(move |request:Request,next:middleware::Next| {
-                let expected=expected.clone();
-                async move {
-                    let mut hosts=request.headers().get_all(header::HOST).iter();
-                    if matches!((hosts.next(),hosts.next()),(Some(h),None) if h.as_bytes()==expected.as_bytes()) { next.run(request).await }
-                    else { fixed_error(StatusCode::FORBIDDEN) }
-                }
-            })).with_state(Arc::new(Mutex::new(Some(sender))));
+        let app = callback_app(redirect, sender);
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
         });
@@ -240,6 +228,22 @@ impl Session {
         }
         result.map(|code| (code, pending.verifier.clone()))
     }
+}
+/// One owner of callback routing, Host validation and fixed error responses.
+fn callback_app(redirect: &RedirectUrl, sender: oneshot::Sender<Callback>) -> Router {
+    let host = reqwest::Url::parse(redirect.as_str()).expect("checked redirect");
+    let expected = format!("{}:{}", host.host_str().unwrap(), host.port().unwrap());
+    Router::new().route(redirect.path(),get(callback))
+        .fallback(|| async { fixed_error(StatusCode::NOT_FOUND) })
+        .method_not_allowed_fallback(|| async { fixed_error(StatusCode::METHOD_NOT_ALLOWED) })
+        .layer(middleware::from_fn(move |request:Request,next:middleware::Next| {
+        let expected=expected.clone();
+        async move {
+            let mut hosts=request.headers().get_all(header::HOST).iter();
+            if matches!((hosts.next(),hosts.next()),(Some(h),None) if h.as_bytes()==expected.as_bytes()) { next.run(request).await }
+            else { fixed_error(StatusCode::FORBIDDEN) }
+        }
+        })).with_state(Arc::new(Mutex::new(Some(sender))))
 }
 fn accepted(p: &Pending, callback: Callback) -> Result<String, StudioError> {
     if !callback

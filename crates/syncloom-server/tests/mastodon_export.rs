@@ -94,6 +94,10 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
     assert_eq!(published.body["post_id"], "status-1");
     let media = fake.calls("media");
     assert_eq!(media.len(), 1);
+    assert_eq!(
+        media[0].headers["authorization"],
+        format!("Bearer {}", fake_mastodon::TOKEN)
+    );
     assert!(media[0].body.windows(8).any(|w| w == b"\x89PNG\r\n\x1a\n"));
     assert!(String::from_utf8_lossy(&media[0].body).contains("Build with evidence."));
     let reopened = Studio::new(

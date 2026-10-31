@@ -209,85 +209,79 @@ impl Mastodon {
         }
         read_json(response).await.ok_or(PostFailure::Unknown)
     }
-    async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
+    async fn upload_image(
+        &self,
+        token: &Secret,
+        image: crate::platform::PostImage,
+    ) -> Result<String, PostFailure> {
         let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
-        let token = self
-            .store
-            .load(&self.account())
-            .map_err(|_| PostFailure::Unknown)?
-            .ok_or(PostFailure::ConsentRequired)?;
-        if token.is_expired_at(&self.clock.now_rfc3339()) {
-            return Err(PostFailure::ConsentRequired);
-        }
-        let instance: Instance = self
-            .json(self.client.get(format!("{base}/api/v2/instance")))
+        let part = reqwest::multipart::Part::bytes(image.bytes)
+            .file_name("image.png")
+            .mime_str("image/png")
+            .expect("fixed MIME");
+        let form = reqwest::multipart::Form::new()
+            .part("file", part)
+            .text("description", image.alt_text);
+        let media: Media = self
+            .json(
+                self.client
+                    .post(format!("{base}/api/v2/media"))
+                    .bearer_auth(token.expose())
+                    .multipart(form),
+            )
             .await?;
-        let limits = instance.configuration;
-        if request.text.chars().count() > limits.statuses.max_characters || request.text.is_empty()
-        {
-            return Err(PostFailure::Refused);
+        if !valid_id(&media.id) {
+            return Err(PostFailure::Unknown);
         }
-        let mut ids = Vec::new();
-        if let Some(image) = request.image {
-            if limits.statuses.max_media_attachments < 1
-                || image.bytes.len() > limits.media_attachments.image_size_limit
-                || !limits
-                    .media_attachments
-                    .supported_mime_types
-                    .iter()
-                    .any(|s| s == "image/png")
-                || image.alt_text.trim().is_empty()
-            {
-                return Err(PostFailure::Refused);
+        self.wait_for_media(token, media).await
+    }
+
+    async fn wait_for_media(
+        &self,
+        token: &Secret,
+        mut media: Media,
+    ) -> Result<String, PostFailure> {
+        let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
+        let mut remaining = 20;
+        while !media.ready() && remaining > 0 {
+            remaining -= 1;
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let response = self
+                .client
+                .get(format!("{base}/api/v1/media/{}", media.id))
+                .bearer_auth(token.expose())
+                .send()
+                .await
+                .map_err(transport_failure)?;
+            if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                continue;
             }
-            let part = reqwest::multipart::Part::bytes(image.bytes)
-                .file_name("image.png")
-                .mime_str("image/png")
-                .expect("fixed MIME");
-            let form = reqwest::multipart::Form::new()
-                .part("file", part)
-                .text("description", image.alt_text);
-            let mut media: Media = self
-                .json(
-                    self.client
-                        .post(format!("{base}/api/v2/media"))
-                        .bearer_auth(token.access_token.expose())
-                        .multipart(form),
-                )
-                .await?;
-            if !valid_id(&media.id) {
+            if let Some(failure) = http_failure(response.status()) {
+                return Err(failure);
+            }
+            let ready: Media = read_json(response).await.ok_or(PostFailure::Unknown)?;
+            if ready.id != media.id {
                 return Err(PostFailure::Unknown);
             }
-            for _ in 0..20 {
-                if media.url.as_ref().is_some_and(|u| !u.is_empty()) {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                let response = self
-                    .client
-                    .get(format!("{base}/api/v1/media/{}", media.id))
-                    .bearer_auth(token.access_token.expose())
-                    .send()
-                    .await
-                    .map_err(transport_failure)?;
-                if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
-                    continue;
-                }
-                if let Some(f) = http_failure(response.status()) {
-                    return Err(f);
-                }
-                let ready: Media = read_json(response).await.ok_or(PostFailure::Unknown)?;
-                if ready.id != media.id {
-                    return Err(PostFailure::Unknown);
-                }
-                media = ready;
-            }
-            if !media.url.as_ref().is_some_and(|u| !u.is_empty()) {
-                return Err(PostFailure::Unknown);
-            }
-            ids.push(media.id);
+            media = ready;
         }
-        let status:Status=self.json(self.client.post(format!("{base}/api/v1/statuses")).bearer_auth(token.access_token.expose()).header("Idempotency-Key",request.request_id).json(&serde_json::json!({"status":request.text,"media_ids":ids,"visibility":"public"}))).await?;
+        if media.ready() {
+            Ok(media.id)
+        } else {
+            Err(PostFailure::Unknown)
+        }
+    }
+
+    async fn create_status(
+        &self,
+        token: &Secret,
+        request: PostRequest,
+        ids: Vec<String>,
+    ) -> Result<Posted, PostFailure> {
+        let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
+        let status: Status = self.json(self.client.post(format!("{base}/api/v1/statuses"))
+            .bearer_auth(token.expose()).header("Idempotency-Key", request.request_id)
+            .json(&serde_json::json!({"status": request.text, "media_ids": ids, "visibility": "public"}))).await?;
         if !valid_id(&status.id) || status.url.is_empty() {
             return Err(PostFailure::Unknown);
         }
@@ -301,9 +295,27 @@ impl Mastodon {
         })
     }
 }
+
 impl Platform for Mastodon {
-    fn publish(&self, request: PostRequest) -> PostFuture<'_> {
-        Box::pin(self.post(request))
+    fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
+        Box::pin(async move {
+            let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
+            let token = crate::credentials::usable_token(
+                self.store.as_ref(),
+                &self.account(),
+                &self.clock.now_rfc3339(),
+            )?;
+            let instance: Instance = self
+                .json(self.client.get(format!("{base}/api/v2/instance")))
+                .await?;
+            instance.configuration.check_text(&request.text)?;
+            let mut ids = Vec::new();
+            if let Some(image) = request.image.take() {
+                instance.configuration.check_image(&image)?;
+                ids.push(self.upload_image(&token.access_token, image).await?);
+            }
+            self.create_status(&token.access_token, request, ids).await
+        })
     }
 }
 fn valid_id(id: &str) -> bool {
@@ -322,6 +334,30 @@ struct Limits {
     statuses: StatusLimits,
     media_attachments: MediaLimits,
 }
+impl Limits {
+    fn check_text(&self, text: &str) -> Result<(), PostFailure> {
+        if text.chars().count() > self.statuses.max_characters || text.is_empty() {
+            Err(PostFailure::Refused)
+        } else {
+            Ok(())
+        }
+    }
+    fn check_image(&self, image: &crate::platform::PostImage) -> Result<(), PostFailure> {
+        if self.statuses.max_media_attachments < 1
+            || image.bytes.len() > self.media_attachments.image_size_limit
+            || !self
+                .media_attachments
+                .supported_mime_types
+                .iter()
+                .any(|s| s == "image/png")
+            || image.alt_text.trim().is_empty()
+        {
+            Err(PostFailure::Refused)
+        } else {
+            Ok(())
+        }
+    }
+}
 #[derive(Deserialize)]
 struct StatusLimits {
     max_characters: usize,
@@ -336,6 +372,11 @@ struct MediaLimits {
 struct Media {
     id: String,
     url: Option<String>,
+}
+impl Media {
+    fn ready(&self) -> bool {
+        self.url.as_ref().is_some_and(|u| !u.is_empty())
+    }
 }
 #[derive(Deserialize)]
 struct Status {

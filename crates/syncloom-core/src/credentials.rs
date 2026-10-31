@@ -65,6 +65,22 @@ pub trait TokenStore: Send + Sync {
     fn delete(&self, account: &str) -> Result<(), StoreError>;
 }
 
+/// Shared dispatch credential policy. Missing and expired tokens send nothing.
+pub(crate) fn usable_token(
+    store: &dyn TokenStore,
+    account: &str,
+    now: &str,
+) -> Result<Token, crate::PostFailure> {
+    let token = store
+        .load(account)
+        .map_err(|_| crate::PostFailure::Unknown)?
+        .ok_or(crate::PostFailure::ConsentRequired)?;
+    if token.is_expired_at(now) {
+        return Err(crate::PostFailure::ConsentRequired);
+    }
+    Ok(token)
+}
+
 /// The macOS Keychain: one generic-password item per account under `service`, holding the
 /// token bundle as JSON. Read for this store: `keyring-core` 1.0.1 (`Entry`, `Error::NoEntry`)
 /// and `apple-native-keyring-store` 1.0.2 (`keychain::Store`, the login keychain).
