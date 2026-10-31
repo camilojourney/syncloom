@@ -370,15 +370,7 @@ impl Studio {
         let operation = format!("export:{}", target.name());
         let key = intent_key(&operation, &piece.piece_id, &piece.revision);
         let existing = lock.load_intent(&key)?;
-        let (image, carousel) = if let Some(assets) = &piece.assets {
-            (
-                Some(lock.load_asset(&assets.image_sha256)?),
-                Some(lock.load_asset(&assets.carousel_sha256)?),
-            )
-        } else {
-            (None, None)
-        };
-        let files = crate::manual_export::files(&piece, target, image, carousel);
+        let files = self.bundle_files(&lock, &piece, target)?;
         let bundle = lock.save_export(&key, &files, existing.is_some())?;
         let request_id = crate::outbox::request_id(&operation, &piece.piece_id, &piece.revision);
         if existing.is_none() {
@@ -397,18 +389,7 @@ impl Studio {
                 post_id: None,
                 post_url: None,
             };
-            lock.save_intent(&key, &intent)?;
-            piece.publish_status = Some("exported".into());
-            self.save_change(
-                &lock,
-                EventKind::PieceExported,
-                &mut piece,
-                Extra {
-                    request_id: Some(request_id.clone()),
-                    outcome: Some("exported".into()),
-                    ..Extra::default()
-                },
-            )?;
+            self.record_export(&lock, &key, &mut piece, &intent)?;
         }
         Ok(ExportResponse {
             status: "exported".into(),
@@ -716,6 +697,122 @@ impl Studio {
         Ok(intent)
     }
 
+    fn record_export(
+        &self,
+        lock: &Lock<'_>,
+        key: &str,
+        piece: &mut Piece,
+        intent: &DispatchIntent,
+    ) -> Result<(), StudioError> {
+        lock.save_intent(key, intent)?;
+        piece.publish_status = Some("exported".into());
+        self.save_change(
+            lock,
+            EventKind::PieceExported,
+            piece,
+            Extra {
+                request_id: Some(intent.request_id.clone()),
+                outcome: Some("exported".into()),
+                ..Extra::default()
+            },
+        )
+    }
+
+    fn post_image(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+    ) -> Result<Option<crate::platform::PostImage>, StudioError> {
+        let image = if piece.visual.is_some() {
+            let assets = self.checked_assets(lock, piece)?;
+            Some(crate::platform::PostImage {
+                bytes: lock.load_asset(&assets.image_sha256)?,
+                alt_text: piece
+                    .visual
+                    .as_ref()
+                    .map(|v| v.image_alt_text())
+                    .unwrap_or("")
+                    .to_owned(),
+            })
+        } else {
+            None
+        };
+        Ok(image)
+    }
+
+    /// Persist the attempt marker before releasing the caller's claim lock.
+    fn start_attempt(
+        &self,
+        lock: &Lock<'_>,
+        key: &str,
+        piece: &mut Piece,
+        intent: &mut DispatchIntent,
+    ) -> Result<(), StudioError> {
+        let now = self.clock.now_rfc3339();
+        intent.status = IntentStatus::Posting;
+        intent.attempts += 1;
+        intent.attempted_at = Some(now.clone());
+        intent.finished_at = None;
+        lock.save_intent(key, intent)?;
+        piece.publish_status = Some(IntentStatus::Posting.as_str().to_owned());
+        piece.updated_at = now;
+        lock.save_piece(piece)?;
+        self.record_intent(lock, EventKind::DispatchAttempted, piece, intent)?;
+        Ok(())
+    }
+
+    fn bundle_files(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+        target: crate::manual_export::Target,
+    ) -> Result<std::collections::BTreeMap<String, Vec<u8>>, StudioError> {
+        let (image, carousel) = if let Some(assets) = &piece.assets {
+            (
+                Some(lock.load_asset(&assets.image_sha256)?),
+                Some(lock.load_asset(&assets.carousel_sha256)?),
+            )
+        } else {
+            (None, None)
+        };
+        Ok(crate::manual_export::files(piece, target, image, carousel))
+    }
+
+    /// Atomically recheck approval and claim the durable intent before any network operation.
+    fn claim_attempt(
+        &self,
+        key: &str,
+        piece: &Piece,
+        intent: &DispatchIntent,
+    ) -> Result<Claim, StudioError> {
+        let lock = self.store.lock()?;
+        let mut piece = self.load_at(&lock, &piece.piece_id, &intent.revision)?;
+        self.require_approval(&lock, &piece)?;
+        let mut intent = lock.load_intent(key)?.ok_or(StudioError::Internal)?;
+        if !intent.status.allows_new_attempt() {
+            if intent.status == IntentStatus::Posting {
+                intent.status = IntentStatus::Unknown;
+                return self
+                    .finish_locked(&lock, key, &piece.piece_id, intent, false)
+                    .map(|response| Claim::Finished(Box::new(response)));
+            }
+            return Ok(Claim::Finished(Box::new(response_from(
+                piece, &intent, false,
+            ))));
+        }
+        let image = self.post_image(&lock, &piece)?;
+        let request = PostRequest {
+            request_id: intent.request_id.clone(),
+            text: intent.payload.content.clone(),
+            image,
+        };
+        self.start_attempt(&lock, key, &mut piece, &mut intent)?;
+        Ok(Claim::Send {
+            intent: Box::new(intent),
+            request,
+        })
+    }
+
     /// One platform attempt: `posting` written first, the lock released for the call, the
     /// outcome written after. A deadline overrun is `unknown`: the request may have landed.
     async fn attempt(
@@ -726,48 +823,9 @@ impl Studio {
         created: bool,
         platform: Arc<dyn Platform>,
     ) -> Result<PublishResponse, StudioError> {
-        let (mut intent, request) = {
-            let lock = self.store.lock()?;
-            let mut piece = self.load_at(&lock, &piece.piece_id, &intent.revision)?;
-            self.require_approval(&lock, &piece)?;
-            let mut intent = lock.load_intent(key)?.ok_or(StudioError::Internal)?;
-            if !intent.status.allows_new_attempt() {
-                if intent.status == IntentStatus::Posting {
-                    intent.status = IntentStatus::Unknown;
-                    return self.finish_locked(&lock, key, &piece.piece_id, intent, false);
-                }
-                return Ok(response_from(piece, &intent, false));
-            }
-            let image = if piece.visual.is_some() {
-                let assets = self.checked_assets(&lock, &piece)?;
-                Some(crate::platform::PostImage {
-                    bytes: lock.load_asset(&assets.image_sha256)?,
-                    alt_text: piece
-                        .visual
-                        .as_ref()
-                        .map(|v| v.image_alt_text())
-                        .unwrap_or("")
-                        .to_owned(),
-                })
-            } else {
-                None
-            };
-            let request = PostRequest {
-                request_id: intent.request_id.clone(),
-                text: intent.payload.content.clone(),
-                image,
-            };
-            let now = self.clock.now_rfc3339();
-            intent.status = IntentStatus::Posting;
-            intent.attempts += 1;
-            intent.attempted_at = Some(now.clone());
-            intent.finished_at = None;
-            lock.save_intent(key, &intent)?;
-            piece.publish_status = Some(IntentStatus::Posting.as_str().to_owned());
-            piece.updated_at = now;
-            lock.save_piece(&piece)?;
-            self.record_intent(&lock, EventKind::DispatchAttempted, &piece, &intent)?;
-            (intent, request)
+        let (mut intent, request) = match self.claim_attempt(key, &piece, &intent)? {
+            Claim::Finished(response) => return Ok(*response),
+            Claim::Send { intent, request } => (*intent, request),
         };
         let result =
             tokio::time::timeout(self.settings.platform_deadline, platform.publish(request)).await;
@@ -906,6 +964,14 @@ impl Studio {
         };
         Ok(lock.append_event(&event)?)
     }
+}
+
+enum Claim {
+    Finished(Box<PublishResponse>),
+    Send {
+        intent: Box<DispatchIntent>,
+        request: PostRequest,
+    },
 }
 
 /// What the locked part of a publish produced.
