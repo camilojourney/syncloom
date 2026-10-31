@@ -4,7 +4,7 @@
 usage: check-change-shape.py <change dir> [--request-source FILE]
 
 Checks: one SHALL sentence of at most 30 words and at least one scenario per requirement; unique
-requirement names; Request section with quoted paragraphs; Approval pending; capability and
+requirement names; Request section with quoted paragraphs; Approval pending or attributed approved; capability and
 "Duplicate kept" lines; Open questions; proposal body under 250 words; design References line;
 task 1.1 "Load the code skill".
 
@@ -12,6 +12,11 @@ task 1.1 "Load the code skill".
 paragraph must appear verbatim as a "> " quote in the proposal. Without it, only the presence and
 count of quoted paragraphs are reported (verbatim cannot be proven).
 Exit 0 when no problem is found, 1 otherwise. Standard library only.
+
+Fleet checker 1.0.1, owned here from kit 1.0.1. Imported from invoz.v2
+ddd9880ef316d7cac7b4d87be84e480fd148e237:scripts/check-change-shape.py
+(SHA256 54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2).
+Shape validation does not authenticate the reviewer or grant approval.
 """
 import pathlib
 import re
@@ -47,8 +52,20 @@ def check_specs(change):
     return problems, notes
 
 
+def _quoted_paragraphs(request):
+    quotes, lines = [], []
+    # Remove only quote prefixes; internal newlines and content must stay exact.
+    for line in request.splitlines() + [""]:
+        if line.startswith("> ") and line[2:]:
+            lines.append(line[2:])
+        elif lines:
+            quotes.append("\n".join(lines))
+            lines = []
+    return quotes
+
+
 def check_request(request, source):
-    quotes = [line[2:] for line in request.splitlines() if line.startswith("> ")]
+    quotes = _quoted_paragraphs(request)
     problems = [] if quotes else ["Request quotes nothing"]
     if source is not None:
         paragraphs = [p.strip() for p in source.read_text().split("\n\n") if p.strip()]
@@ -56,11 +73,14 @@ def check_request(request, source):
     return problems, [f"Request quotes {len(quotes)} paragraphs"]
 
 
+# [impl->req~shared-approval-shape.reviewer-path~1]
 def check_body(body):
     problems = []
-    if not re.search(r"^pending$", body, re.M):
-        problems.append("Approval does not say pending")
-    for needle in ("New capability requested:", "Duplicate kept:", "## Open questions"):
+    if not re.search(r"^(?:pending|approved: \S[^\n]*)$", body, re.M):
+        problems.append("Approval needs pending or approved: <reviewer>")
+    if not any(token in body for token in ("New capability requested:", "New capability approved:")):
+        problems.append("proposal lacks 'New capability requested:' or 'New capability approved:'")
+    for needle in ("Duplicate kept:", "## Open questions"):
         if needle not in body:
             problems.append(f"proposal lacks '{needle}'")
     words = len(body.split())
