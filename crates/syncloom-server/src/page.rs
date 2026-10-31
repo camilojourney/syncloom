@@ -19,7 +19,7 @@ use syncloom_core::{
 
 fn document(title: &str, content: &str) -> Html<String> {
     Html(format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{} | Syncloom</title><link rel="stylesheet" href="/studio.css"></head><body><header class="topbar"><a class="brand" href="/">syncloom<span class="brand-dot">.</span></a><span class="local">Laptop only <span aria-hidden="true">·</span> 127.0.0.1</span></header><main>{content}</main><footer>One thought. Your voice. Your decision.<span>Local studio / LinkedIn</span></footer></body></html>"#,
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{} | Syncloom</title><link rel="stylesheet" href="/studio.css"></head><body><header class="topbar"><a class="brand" href="/">syncloom<span class="brand-dot">.</span></a><span class="local">Laptop only <span aria-hidden="true">·</span> 127.0.0.1</span></header><main>{content}</main><footer>One thought. Your voice. Your decision.<span>Local studio</span></footer></body></html>"#,
         escape(title)
     ))
 }
@@ -54,7 +54,7 @@ pub(crate) async fn index(
     let page = state.studio.list(cursor(query)?.after.as_deref())?;
     let mut saved = String::new();
     for piece in page.pieces {
-        saved.push_str(&format!(r#"<a class="piece-card" href="/review/{}"><div class="card-meta"><span>LinkedIn / text</span><span class="status">{}</span></div><h3>{}</h3><p class="thought-excerpt">{}</p><span class="open-piece">Review piece ↗</span></a>"#, escape(&piece.piece_id), status(piece.status), escape(&piece.text), escape(&piece.source.raw_input)));
+        saved.push_str(&format!(r#"<a class="piece-card" href="/review/{}"><div class="card-meta"><span>{}</span><span class="status">{}</span></div><h3>{}</h3><p class="thought-excerpt">{}</p><span class="open-piece">Review piece ↗</span></a>"#, escape(&piece.piece_id), piece.channel.name(), status(piece.status), escape(&piece.text), escape(&piece.source.raw_input)));
     }
     if saved.is_empty() {
         saved.push_str("<div class=\"empty card\"><h3>No pieces yet</h3><p>Your next piece starts with a thought. Add one to draft for LinkedIn.</p></div>");
@@ -166,6 +166,7 @@ fn approval_note(piece: &Piece) -> &'static str {
 
 fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
     let id = escape(&piece.piece_id);
+    let channel = piece.channel.name();
     let fields = revision_fields(state, piece);
     let mut hashes = String::new();
     if let Some(assets) = &piece.assets {
@@ -202,7 +203,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">LinkedIn / text</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. Visual uploads remain contained.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. LinkedIn visuals stay contained; granted Mastodon delivery can upload the approved PNG. Carousels and manual export stay local.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
             status(piece.status),
             escape(&piece.source.raw_input),
             escape(&piece.text),
@@ -217,6 +218,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
 
 fn previews(piece: &Piece) -> String {
     let id = escape(&piece.piece_id);
+    let channel = piece.channel.name();
     match &piece.assets {
         Some(assets) => format!(
             r#"<div class="preview-grid"><article class="preview-card"><div class="preview-label">Image / PNG</div><img class="asset-image" src="/v1/pieces/{id}/assets/image" alt="Rendered first slide for this exact revision"><div class="preview-details"><a href="/v1/pieces/{id}/assets/image" target="_blank" rel="noreferrer">Open verified PNG ↗</a><p class="label">Image SHA-256</p><code class="hash">{}</code></div></article><article class="preview-card"><div class="preview-label">Carousel / PDF · {} pages</div><div class="pdf-preview"><iframe title="Rendered PDF carousel" src="/v1/pieces/{id}/assets/carousel#toolbar=0&amp;navpanes=0&amp;view=FitH"></iframe></div><div class="preview-details"><a href="/v1/pieces/{id}/assets/carousel" target="_blank" rel="noreferrer">Open verified PDF ↗</a><p class="hint">Scroll inside the PDF to inspect every page. If your browser cannot embed PDFs, use the link above.</p><p class="label">Carousel SHA-256</p><code class="hash">{}</code></div></article></div>"#,
@@ -225,7 +227,7 @@ fn previews(piece: &Piece) -> String {
             escape(&assets.carousel_sha256)
         ),
         None => format!(
-            r#"<article class="text-phone"><div class="preview-label">LinkedIn / text preview</div><p class="draft-text">{}</p></article><div class="empty visual-empty"><h3>No current visual assets</h3><p>Render previews to inspect the image and carousel before approving.</p></div>"#,
+            r#"<article class="text-phone"><div class="preview-label">{channel} preview</div><p class="draft-text">{}</p></article><div class="empty visual-empty"><h3>No current visual assets</h3><p>Render previews to inspect the image and carousel before approving.</p></div>"#,
             escape(&piece.text)
         ),
     }
