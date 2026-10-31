@@ -340,14 +340,17 @@ hr {
 .previews h2 {
   margin:0
 }
+.preview-heading {
+  align-items:baseline;
+  justify-content:flex-start
+}
 .preview-grid {
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,360px));
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:16px;
   align-items:start
 }
 .preview-card {
-  max-width:360px;
   width:100%;
   border:1px solid var(--line);
   border-radius:14px;
@@ -368,12 +371,17 @@ hr {
   height:auto;
   aspect-ratio:4/5
 }
+.pdf-preview {
+  aspect-ratio:4/5;
+  overflow:hidden
+}
 .preview-card iframe {
   display:block;
-  width:100%;
+  /* FitH includes a 3px native PDF shadow on the right and bottom.
+     Keep that gutter outside the page-sized viewport, not over the artwork. */
+  width:calc(100% + 3px);
   aspect-ratio:4/5;
-  border:0;
-  background:#e4e6df
+  border:0
 }
 .preview-details {
   padding:14px
@@ -507,6 +515,9 @@ footer {
   .preview-grid {
     grid-template-columns:minmax(0,360px);
     justify-content:center
+  }
+  .preview-heading {
+    justify-content:space-between
   }
   .text-phone,.visual-empty {
     margin-left:auto;
