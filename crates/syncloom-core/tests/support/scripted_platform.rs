@@ -1,5 +1,8 @@
 //! An in-process fake platform with scripted outcomes, recording every request.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use std::sync::{Arc, Mutex};
 use syncloom_core::{Platform, PostFailure, PostFuture, PostRequest, Posted};
 use tokio::sync::Notify;
@@ -37,9 +40,17 @@ impl ScriptedPlatform {
             gate: Notify::new(),
         })
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set(&self, outcome: Outcome) {
         *self.outcome.lock().unwrap() = outcome;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn requests(&self) -> Vec<PostRequest> {
         self.requests.lock().unwrap().clone()
     }
@@ -49,6 +60,10 @@ impl ScriptedPlatform {
 }
 
 impl Platform for ScriptedPlatform {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         self.requests.lock().unwrap().push(request);
         let outcome = self.outcome.lock().unwrap().clone();

@@ -13,6 +13,10 @@ fn request() -> DraftRequest {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 fn provider(base: &str, key: Option<&str>, model: &str) -> ClaudeProvider {
     ClaudeProvider::new(
         key.map(str::to_owned),

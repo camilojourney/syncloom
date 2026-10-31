@@ -107,6 +107,10 @@ pub(crate) async fn middleware(
 }
 
 /// Applied after error rendering so even refused requests carry the same protections.
+#[expect(
+    clippy::expect_used,
+    reason = "Security header values contain only fixed ASCII literals, never request data."
+)]
 pub(crate) fn protect(response: &mut Response) {
     // Only verified PDF bytes may be framed by our own studio. Pages remain unframeable.
     let pdf = response

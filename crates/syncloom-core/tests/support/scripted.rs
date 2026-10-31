@@ -1,5 +1,8 @@
 //! An in-process fake model provider with scripted replies, recording every request.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use std::sync::{Arc, Mutex};
 use syncloom_core::{Draft, DraftFuture, DraftRequest, ModelProvider, ProviderError, Usage};
 
@@ -35,15 +38,28 @@ impl Scripted {
             requests: Mutex::new(Vec::new()),
         })
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set(&self, reply: Reply) {
         *self.reply.lock().unwrap() = reply;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn requests(&self) -> Vec<DraftRequest> {
         self.requests.lock().unwrap().clone()
     }
 }
 
 impl ModelProvider for Scripted {
+    #[expect(
+        clippy::panic,
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     fn draft(&self, request: DraftRequest) -> DraftFuture<'_> {
         self.requests.lock().unwrap().push(request);
         let reply = self.reply.lock().unwrap().clone();

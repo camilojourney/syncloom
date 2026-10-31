@@ -58,6 +58,10 @@ impl OAuthContext {
         commit(issued, &renewal.token, renewal.generation)
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Callers supply validated authorization bases and fixed platform paths."
+    )]
     pub fn authorization_url(
         &self,
         client: Option<&String>,

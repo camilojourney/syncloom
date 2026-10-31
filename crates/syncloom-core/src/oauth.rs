@@ -116,6 +116,10 @@ struct Pending {
     listener: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 impl Pending {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+    )]
     fn stop(&self) -> Option<tokio::task::JoinHandle<()>> {
         let task = self.listener.lock().unwrap().take();
         if let Some(task) = &task {
@@ -185,11 +189,19 @@ impl Session {
         self.cancel();
         self.credentials.clear()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub fn cancel(&self) {
         if let Some(pending) = self.pending.lock().unwrap().take() {
             pending.stop();
         }
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub fn active(&self) -> bool {
         self.pending
             .lock()
@@ -197,6 +209,10 @@ impl Session {
             .as_ref()
             .is_some_and(|p| Instant::now() < p.deadline)
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub fn begin(&self, mut url: reqwest::Url, pkce: bool) -> Result<SignInStart, StudioError> {
         let redirect = &self.redirect;
         let deadline = self.deadline;
@@ -243,6 +259,10 @@ impl Session {
             expires_at: crate::clock::rfc3339(self.now() + deadline),
         })
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+    )]
     pub async fn wait(&self) -> Result<(String, Option<Secret>, u64), StudioError> {
         let pending = self
             .pending
@@ -279,6 +299,11 @@ impl Session {
     }
 }
 /// One owner of callback routing, Host validation and fixed error responses.
+#[expect(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "RedirectUrl guarantees a parsed loopback URL with an explicit non-default port and host."
+)]
 fn callback_app(redirect: &RedirectUrl, sender: oneshot::Sender<Callback>) -> Router {
     let host = reqwest::Url::parse(redirect.as_str()).expect("checked redirect");
     let expected = format!("{}:{}", host.host_str().unwrap(), host.port().unwrap());
@@ -313,6 +338,10 @@ fn accepted(p: &Pending, callback: Callback) -> Result<String, StudioError> {
 fn fixed_error(status: StatusCode) -> Response {
     (status,axum::Json(serde_json::json!({"error":{"code":"sign_in_rejected","message":"Sign-in callback refused."}}))).into_response()
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Poisoned OAuth lifecycle state cannot be safely reused; preserve fail-closed behavior."
+)]
 async fn callback(
     State(sender): State<Arc<Mutex<Option<oneshot::Sender<Callback>>>>>,
     query: Result<Query<Callback>, axum::extract::rejection::QueryRejection>,
@@ -325,6 +354,10 @@ async fn callback(
     }
     ([(header::CONTENT_TYPE,"text/html; charset=utf-8")],"<!doctype html><html><head><title>Syncloom</title></head><body><p>Sign-in answer received. Return to the studio.</p></body></html>").into_response()
 }
+#[expect(
+    clippy::expect_used,
+    reason = "OS randomness failure is unrecoverable; never substitute predictable OAuth state or verifier bytes."
+)]
 pub(crate) fn random_token() -> Secret {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("OS randomness");

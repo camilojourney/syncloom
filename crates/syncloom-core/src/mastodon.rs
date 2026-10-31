@@ -20,6 +20,10 @@ pub struct MastodonConfig {
     redirect: crate::RedirectUrl,
 }
 impl MastodonConfig {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "BaseUrl has already parsed and validated this instance URL."
+    )]
     pub fn parse(instance: Option<&str>, redirect: Option<&str>) -> Result<Self, String> {
         let instance = instance
             .filter(|s| !s.trim().is_empty())
@@ -80,6 +84,10 @@ impl Mastodon {
     pub fn account(&self) -> String {
         account_for(&self.config)
     }
+    #[expect(
+        clippy::expect_used,
+        reason = "The instance is a validated BaseUrl and the authorization suffix is fixed."
+    )]
     pub async fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
         let instance = self.instance()?;
         let mut slot = self.app.lock().await;
@@ -172,6 +180,10 @@ impl Mastodon {
         self.instance()?;
         self.session.sign_out()
     }
+    #[expect(
+        clippy::expect_used,
+        reason = "The fixed image/png MIME literal is valid."
+    )]
     async fn upload_image(
         &self,
         token: &Secret,
@@ -234,6 +246,10 @@ impl Mastodon {
         }
     }
 
+    #[expect(
+        clippy::unwrap_used,
+        reason = "The configured instance base has already passed BaseUrl validation."
+    )]
     async fn create_status(
         &self,
         token: &Secret,

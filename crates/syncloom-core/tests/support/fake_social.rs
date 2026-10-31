@@ -1,5 +1,8 @@
 //! Independent loopback servers with only one platform's routes enabled per instance.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use axum::{
     Router,
     body::to_bytes,
@@ -22,6 +25,10 @@ pub struct Call {
     pub body: Vec<u8>,
 }
 impl Call {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn json(&self) -> Value {
         serde_json::from_slice(&self.body).unwrap()
     }
@@ -49,6 +56,10 @@ impl Drop for Fake {
     }
 }
 impl Fake {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     async fn start(routes: Vec<(&str, Value)>) -> Self {
         let data = Arc::new(Mutex::new(Data::default()));
         for (path, body) in routes {
@@ -66,9 +77,17 @@ impl Fake {
     pub fn base(&self) -> &str {
         &self.base
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn calls(&self) -> Vec<Call> {
         self.data.lock().unwrap().calls.clone()
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn reply(&self, path: &str, status: u16, body: Value) {
         self.data
             .lock()
@@ -76,6 +95,10 @@ impl Fake {
             .replies
             .insert(path.into(), VecDeque::from([(status, body)]));
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn sequence(&self, path: &str, replies: Vec<(u16, Value)>) {
         self.data
             .lock()
@@ -83,6 +106,10 @@ impl Fake {
             .replies
             .insert(path.into(), replies.into());
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn hold(&self, path: &str) -> Arc<tokio::sync::Notify> {
         let gate = Arc::new(tokio::sync::Notify::new());
         self.data
@@ -92,6 +119,10 @@ impl Fake {
             .insert(path.into(), gate.clone());
         gate
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub async fn wait_calls(&self, count: usize) {
         let changed = self.data.lock().unwrap().changed.clone();
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
@@ -157,6 +188,10 @@ pub fn jwt(exp: i64) -> String {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(format!("{{\"exp\":{exp}}}"))
     )
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn handle(State(data): State<Arc<Mutex<Data>>>, request: Request) -> Response {
     let path = request.uri().path().to_owned();
     let call = Call {

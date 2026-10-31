@@ -1,6 +1,9 @@
 //! A fake Claude Messages endpoint on loopback: scripted answers, recorded requests.
 //! Included by the provider tests, the CLI tests and the `fake_claude` example.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "Each integration target uses a different subset of the shared test fixtures."
+)]
 use axum::{
     Router,
     body::Bytes,
@@ -70,14 +73,26 @@ impl FakeClaude {
     pub fn base_url(&self) -> String {
         format!("http://{}", self.addr)
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn set(&self, mode: Mode) {
         *self.shared.mode.lock().unwrap() = mode;
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+    )]
     pub fn requests(&self) -> Vec<Recorded> {
         self.shared.requests.lock().unwrap().clone()
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 pub async fn start(mode: Mode) -> FakeClaude {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -92,6 +107,10 @@ pub async fn start(mode: Mode) -> FakeClaude {
     FakeClaude { addr, shared }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
+)]
 async fn messages(State(shared): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
     let key = headers
         .get("x-api-key")

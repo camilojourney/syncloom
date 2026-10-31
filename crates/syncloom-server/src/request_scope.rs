@@ -116,6 +116,10 @@ fn route_label(path: &str) -> &'static str {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "request_id validates inbound IDs as visible ASCII or generates a UUID before header insertion."
+)]
 pub(crate) async fn middleware(request: Request, next: Next) -> Response {
     let is_page = crate::boundary::is_page_path(request.uri().path());
     let scope = Scope(Arc::new(Inner {
