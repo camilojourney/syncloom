@@ -41,6 +41,9 @@ enum Command {
         image_sha256: Option<String>,
         #[arg(long, requires = "image_sha256")]
         carousel_sha256: Option<String>,
+        /// Repeat in slide order for Meta JPEG assets.
+        #[arg(long = "slide-sha256", requires = "image_sha256")]
+        slides_sha256: Vec<String>,
     },
     /// Publish an approved piece (dispatched when SYNCLOOM_DELIVERY grants its platform,
     /// else a contained intent), or preview the payload with --dry-run.
@@ -138,12 +141,14 @@ async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, St
             expected_revision,
             image_sha256,
             carousel_sha256,
+            slides_sha256,
         } => approve(
             studio,
             &piece_id,
             expected_revision,
             image_sha256,
             carousel_sha256,
+            slides_sha256,
         ),
         Command::Publish {
             piece_id,
@@ -190,12 +195,14 @@ fn approve(
     expected_revision: String,
     image: Option<String>,
     carousel: Option<String>,
+    slides_sha256: Vec<String>,
 ) -> Result<Value, StudioError> {
     let expected_assets =
         image.zip(carousel).map(
             |(image_sha256, carousel_sha256)| syncloom_core::AssetHashes {
                 image_sha256,
                 carousel_sha256,
+                slides_sha256,
             },
         );
     studio

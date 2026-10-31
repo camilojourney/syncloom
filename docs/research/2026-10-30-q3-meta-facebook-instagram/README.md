@@ -1,6 +1,6 @@
 # Q3: Meta (Facebook Pages and Instagram) publishing from a local Rust app
 
-Status: pending decision
+Status: open
 
 ## Question
 
@@ -20,16 +20,19 @@ Phrona 5.0.12 study `main969-q3-meta`, run by the phrona-lab home on 2026-10-30:
 
 ## Status
 
-Pending decision: answered (Facebook Login for Business with Page tokens, Standard Access without review, local scheduling with Facebook's native window as an option, Graph API v25.0) and the slice 5 decision it serves is not written yet.
+Answered and used by decision 0005; open: real hosting, app eligibility, redirect acceptance and public visibility. The adapter pins v26.0 from re-opened official docs, not the summary's v25.0 recommendation.
 
 ## Decision
 
-[Decision 0003](../../decisions/0003-visual-renderer.md) uses the slice brief's conservative ten-slide cap for local assets, without implementing Meta publishing. The slice 5 channels and integrations decision remains pending.
+[Decision 0003](../../decisions/0003-visual-renderer.md) uses the slice brief's conservative ten-slide cap for local assets, without implementing Meta publishing. [Decision 0005](../../decisions/0005-meta-integration.md) records slice 5c Meta integration choices and live-use gaps.
 
 ## Official-doc verification for slice 5c (2026-10-31)
 
 Re-opened Meta's current official pages before specifying the adapter:
 - [Content publishing](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/): Facebook Login for Business with a Page token, public image URLs, JPEG only, image alt_text, carousel children followed by a parent and media_publish; FINISHED before publishing, ERROR/EXPIRED fail, expiry after 24 hours. No scheduling parameter is listed. The page contradicts itself on 50/100 daily posts; no hard-coded daily quota is inferred.
+- [Page photo reference](https://developers.facebook.com/docs/graph-api/reference/page/photos/): caption, alt_text_custom, published and public url parameters. Confirmed separately before exercising photo delivery.
+- [IG media reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/): permalink is the permanent media URL; numeric ids are not fabricated into Instagram shortcodes.
+- [Login security](https://developers.facebook.com/docs/facebook-login/security/): HTTPS required generally; no loopback exemption established in the inspected page, so real redirect eligibility remains open.
 - [Page posts](https://developers.facebook.com/docs/pages-api/posts/): feed message, photos url, photo response post_id distinct from photo id; post permalink is facebook.com/<page_post_id>. Native scheduling exists but is not used.
 - [Long-lived tokens](https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived/): exchange short-lived user token with fb_exchange_token, then derive Page tokens through accounts; derived Page tokens have no expiration date but can be invalidated.
 - [Facebook Login for Business](https://developers.facebook.com/docs/facebook-login/facebook-login-for-business/): user-token configuration, manual dialog with config_id instead of scope; advanced access for businesses not owned/managed.

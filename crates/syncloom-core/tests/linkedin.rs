@@ -48,6 +48,7 @@ fn request() -> PostRequest {
         request_id: "dispatch-904f4c443cf556d7f34c6c307a86dfe3".to_owned(),
         text: "A draft about zebrafish.".to_owned(),
         image: None,
+        slides: Vec::new(),
     }
 }
 

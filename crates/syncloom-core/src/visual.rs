@@ -91,6 +91,8 @@ pub fn digest(bytes: &[u8]) -> String {
 pub struct AssetHashes {
     pub image_sha256: String,
     pub carousel_sha256: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slides_sha256: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +101,8 @@ pub struct Assets {
     pub template_version: String,
     pub image_sha256: String,
     pub carousel_sha256: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slides_sha256: Vec<String>,
     pub pages: usize,
     pub renderer_version: String,
     pub font_sha256: String,
@@ -108,18 +112,25 @@ pub struct Assets {
 pub enum AssetKind {
     Image,
     Carousel,
+    Slide(usize),
 }
 impl AssetKind {
     pub fn mime(self) -> &'static str {
         match self {
             Self::Image => "image/png",
             Self::Carousel => "application/pdf",
+            Self::Slide(_) => "image/jpeg",
         }
     }
-    pub fn hash(self, assets: &Assets) -> &str {
+    pub fn hash(self, assets: &Assets) -> Result<&str, StudioError> {
         match self {
-            Self::Image => &assets.image_sha256,
-            Self::Carousel => &assets.carousel_sha256,
+            Self::Image => Ok(&assets.image_sha256),
+            Self::Carousel => Ok(&assets.carousel_sha256),
+            Self::Slide(index) => assets
+                .slides_sha256
+                .get(index)
+                .map(String::as_str)
+                .ok_or(StudioError::AssetsRequired),
         }
     }
 }
@@ -127,16 +138,21 @@ impl AssetKind {
 pub struct Rendered {
     pub image: Vec<u8>,
     pub carousel: Vec<u8>,
+    pub slides: Vec<Vec<u8>>,
 }
 
 impl RendererConfig {
-    pub async fn render(&self, content: &VisualContent) -> Result<Rendered, StudioError> {
+    pub async fn render(
+        &self,
+        content: &VisualContent,
+        jpeg_slides: bool,
+    ) -> Result<Rendered, StudioError> {
         // The child lives outside the timed future so every outcome kills and reaps it.
         let profile = tempfile::tempdir().map_err(|_| StudioError::RendererFailed)?;
         let mut child = None;
         let result = tokio::time::timeout(
             self.deadline,
-            self.render_inner(content, profile.path(), &mut child),
+            self.render_inner(content, jpeg_slides, profile.path(), &mut child),
         )
         .await
         .unwrap_or(Err(StudioError::RendererTimeout));
@@ -203,6 +219,7 @@ impl RendererConfig {
     async fn render_inner(
         &self,
         content: &VisualContent,
+        jpeg_slides: bool,
         profile: &std::path::Path,
         child: &mut Option<Child>,
     ) -> Result<Rendered, StudioError> {
@@ -216,7 +233,8 @@ impl RendererConfig {
         .await?;
         let frame_id = cdp.attach_page().await?;
         cdp.set_document(frame_id, content, &font).await?;
-        cdp.capture().await
+        cdp.capture(if jpeg_slides { content.slides.len() } else { 0 })
+            .await
     }
 }
 
@@ -340,7 +358,7 @@ impl Cdp {
         Ok(())
     }
 
-    async fn capture(&mut self) -> Result<Rendered, StudioError> {
+    async fn capture(&mut self, jpeg_count: usize) -> Result<Rendered, StudioError> {
         let image = self
             .call(
                 "Page.captureScreenshot",
@@ -358,7 +376,19 @@ impl Cdp {
                 }),
             )
             .await?;
+        let mut slides = Vec::new();
+        for index in 0..jpeg_count {
+            let jpeg = self
+                .call(
+                    "Page.captureScreenshot",
+                    json!({"format":"jpeg","quality":95,"captureBeyondViewport":true,
+                "clip":{"x":0,"y":index as u32*HEIGHT,"width":WIDTH,"height":HEIGHT,"scale":1}}),
+                )
+                .await?;
+            slides.push(decoded(&jpeg)?);
+        }
         Ok(Rendered {
+            slides,
             image: decoded(&image)?,
             carousel: normalize_pdf(&decoded(&pdf)?)?,
         })

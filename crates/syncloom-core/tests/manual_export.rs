@@ -40,6 +40,7 @@ fn approve(s: &Studio, p: &Piece) -> Piece {
             expected_assets: p.assets.as_ref().map(|a| AssetHashes {
                 image_sha256: a.image_sha256.clone(),
                 carousel_sha256: a.carousel_sha256.clone(),
+                slides_sha256: a.slides_sha256.clone(),
             }),
         },
     )

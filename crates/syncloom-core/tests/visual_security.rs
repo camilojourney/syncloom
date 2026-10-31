@@ -9,7 +9,7 @@ async fn unsupported_glyphs_are_refused_instead_of_using_unpinned_fallback_fonts
     .content()
     .unwrap();
     assert!(matches!(
-        config.render(&content).await,
+        config.render(&content, false).await,
         Err(syncloom_core::StudioError::InvalidRequest)
     ));
 }
@@ -45,7 +45,7 @@ async fn markup_is_literal_text_and_never_fetches_a_url() {
     }
     .content()
     .unwrap();
-    let result = config.render(&content).await;
+    let result = config.render(&content, false).await;
     task.abort();
     let rendered = result.unwrap();
     assert_eq!(hits.load(Ordering::SeqCst), 0);

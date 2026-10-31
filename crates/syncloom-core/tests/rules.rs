@@ -162,6 +162,7 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "provider_timeout",
         "linkedin_not_configured",
         "mastodon_not_configured",
+        "meta_not_configured",
         "sign_in_in_progress",
         "sign_in_not_started",
         "sign_in_denied",
@@ -366,7 +367,8 @@ fn the_delivery_grant_names_known_platforms_or_nothing() {
     assert!(delivery_grant(Some("  ")).unwrap().is_empty());
     let granted = delivery_grant(Some(" linkedin ")).unwrap();
     assert_eq!(granted.iter().collect::<Vec<_>>(), ["linkedin"]);
-    for refused in ["linkedin,tiktok", "instagram", "LinkedIn"] {
+    assert_eq!(delivery_grant(Some("facebook,instagram")).unwrap().iter().map(String::as_str).collect::<Vec<_>>(),["facebook","instagram"]);
+    for refused in ["linkedin,tiktok", "youtube", "LinkedIn"] {
         let error = delivery_grant(Some(refused)).expect_err(refused);
         assert!(error.contains("SYNCLOOM_DELIVERY"), "{refused}: {error}");
     }

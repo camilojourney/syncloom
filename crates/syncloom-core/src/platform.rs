@@ -9,6 +9,8 @@ pub struct PostRequest {
     pub request_id: String,
     pub text: String,
     pub image: Option<PostImage>,
+    /// Ordered approved JPEG slides. Only carousel-capable adapters consume these.
+    pub slides: Vec<PostImage>,
 }
 
 /// Verified image bytes, never a URL or caller-selected path.

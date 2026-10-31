@@ -2,6 +2,7 @@
 mod boundary;
 mod config;
 mod failure;
+mod meta;
 mod page;
 mod request_scope;
 mod server;

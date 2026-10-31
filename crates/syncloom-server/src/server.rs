@@ -46,6 +46,7 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         boundary: Boundary::new(address.to_string()),
     });
     let app = Router::new()
+        .merge(crate::meta::routes())
         .route("/", get(page::index))
         .route("/studio.css", get(page::css))
         .route("/review/{piece_id}", get(page::review))
@@ -220,7 +221,7 @@ async fn render_piece(
     Ok(axum::Json(piece).into_response())
 }
 
-fn asset_response(
+pub(crate) fn asset_response(
     state: &AppState,
     id: &str,
     kind: syncloom_core::AssetKind,

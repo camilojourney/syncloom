@@ -40,6 +40,7 @@ fn request() -> PostRequest {
         request_id: "dispatch-fixture".into(),
         text: "Build with evidence.".into(),
         image: None,
+        slides: Vec::new(),
     }
 }
 

@@ -9,6 +9,8 @@ pub enum Channel {
     LinkedinText,
     Mastodon,
     ManualExport,
+    FacebookPage,
+    Instagram,
 }
 
 /// Inclusive character bounds a draft is checked against.
@@ -25,6 +27,8 @@ impl Channel {
             "linkedin_text" => Some(Channel::LinkedinText),
             "mastodon" => Some(Channel::Mastodon),
             "manual_export" => Some(Channel::ManualExport),
+            "facebook_page" => Some(Channel::FacebookPage),
+            "instagram" => Some(Channel::Instagram),
             _ => None,
         }
     }
@@ -33,6 +37,8 @@ impl Channel {
             Channel::LinkedinText => "linkedin_text",
             Channel::Mastodon => "mastodon",
             Channel::ManualExport => "manual_export",
+            Channel::FacebookPage => "facebook_page",
+            Channel::Instagram => "instagram",
         }
     }
     /// The platform the channel posts to.
@@ -41,6 +47,8 @@ impl Channel {
             Channel::LinkedinText => "linkedin",
             Channel::Mastodon => "mastodon",
             Channel::ManualExport => "manual",
+            Channel::FacebookPage => "facebook",
+            Channel::Instagram => "instagram",
         }
     }
     /// Retained from the old pipeline for LinkedIn text: 20 to 3000 characters.
@@ -53,6 +61,14 @@ impl Channel {
             Channel::Mastodon => Bounds {
                 min_chars: 1,
                 max_chars: 500,
+            },
+            Channel::FacebookPage => Bounds {
+                min_chars: 1,
+                max_chars: 63206,
+            },
+            Channel::Instagram => Bounds {
+                min_chars: 1,
+                max_chars: 2200,
             },
             Channel::ManualExport => Bounds {
                 min_chars: 1,

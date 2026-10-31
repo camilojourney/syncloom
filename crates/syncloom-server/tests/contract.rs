@@ -8,7 +8,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 32] = [
+const ERROR_TABLE: [(u16, &str); 33] = [
     (403, "origin_not_allowed"),
     (403, "session_required"),
     (400, "invalid_request"),
@@ -31,6 +31,7 @@ const ERROR_TABLE: [(u16, &str); 32] = [
     (503, "provider_not_configured"),
     (503, "linkedin_not_configured"),
     (503, "mastodon_not_configured"),
+    (503, "meta_not_configured"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
     (503, "renderer_missing"),
@@ -93,6 +94,10 @@ async fn produce(code: &str) -> Answer {
                     .header("origin", "https://evil.invalid"),
             )
             .await
+        }
+        "meta_not_configured" => {
+            let server = start(Scripted::new(text("x"))).await;
+            with_id(client().get(server.url("/v1/meta/connection"))).await
         }
         "mastodon_not_configured" => {
             let server = start(Scripted::new(text("x"))).await;

@@ -114,6 +114,7 @@ pub struct Studio {
     /// The LinkedIn integration for sign-in and connection, granted or not.
     linkedin: Option<Arc<Linkedin>>,
     mastodon: Option<Arc<crate::mastodon::Mastodon>>,
+    meta: Option<Arc<crate::meta::Meta>>,
     renderer: crate::visual::RendererConfig,
 }
 
@@ -193,6 +194,7 @@ impl Studio {
             delivery: HashMap::new(),
             linkedin: None,
             mastodon: None,
+            meta: None,
             renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
         }
     }
@@ -235,7 +237,17 @@ impl Studio {
             )?;
             piece
         };
-        let rendered = match self.renderer.render(&content).await {
+        let rendered = match self
+            .renderer
+            .render(
+                &content,
+                matches!(
+                    configured.channel,
+                    Channel::FacebookPage | Channel::Instagram
+                ),
+            )
+            .await
+        {
             Ok(rendered) => rendered,
             Err(error) => {
                 let lock = self.store.lock()?;
@@ -261,6 +273,11 @@ impl Studio {
             template_version: TEMPLATE_VERSION.into(),
             image_sha256,
             carousel_sha256,
+            slides_sha256: rendered
+                .slides
+                .iter()
+                .map(|bytes| lock.save_asset(bytes))
+                .collect::<Result<_, _>>()?,
             pages: content.slides.len(),
             renderer_version: self.renderer.version.clone(),
             font_sha256: self.renderer.font_sha256.clone(),
@@ -287,6 +304,12 @@ impl Studio {
         }
         lock.load_asset(&assets.image_sha256)?;
         lock.load_asset(&assets.carousel_sha256)?;
+        if !assets.slides_sha256.is_empty() && assets.slides_sha256.len() != assets.pages {
+            return Err(StudioError::AssetIntegrity);
+        }
+        for hash in &assets.slides_sha256 {
+            lock.load_asset(hash)?;
+        }
         Ok(assets)
     }
 
@@ -298,7 +321,7 @@ impl Studio {
         let lock = self.store.lock()?;
         let piece = self.load(&lock, piece_id)?;
         let assets = self.checked_assets(&lock, &piece)?;
-        let hash = kind.hash(assets).to_owned();
+        let hash = kind.hash(assets)?.to_owned();
         let bytes = lock.load_asset(&hash)?;
         self.record(&lock, EventKind::AssetsViewed, &piece, Extra::default())?;
         Ok((bytes, hash))
@@ -333,6 +356,14 @@ impl Studio {
     }
     pub fn linkedin_sign_out(&self) -> Result<crate::linkedin::Connection, StudioError> {
         self.linkedin()?.sign_out()
+    }
+
+    pub fn with_meta(mut self, adapter: Arc<crate::meta::Meta>) -> Self {
+        self.meta = Some(adapter);
+        self
+    }
+    pub fn meta(&self) -> Result<&crate::meta::Meta, StudioError> {
+        self.meta.as_deref().ok_or(StudioError::MetaNotConfigured)
     }
 
     pub fn with_mastodon(mut self, adapter: Arc<crate::mastodon::Mastodon>) -> Self {
@@ -567,6 +598,7 @@ impl Studio {
             let expected = expected.ok_or(StudioError::AssetsRequired)?;
             if expected.image_sha256 != assets.image_sha256
                 || expected.carousel_sha256 != assets.carousel_sha256
+                || expected.slides_sha256 != assets.slides_sha256
             {
                 return Err(StudioError::AssetConflict);
             }
@@ -617,7 +649,11 @@ impl Studio {
             .get(&piece.platform)
             .filter(|_| {
                 piece.channel != Channel::ManualExport
-                    && (piece.visual.is_none() || piece.channel == Channel::Mastodon)
+                    && (piece.visual.is_none()
+                        || matches!(
+                            piece.channel,
+                            Channel::Mastodon | Channel::FacebookPage | Channel::Instagram
+                        ))
             })
             .cloned()
         else {
@@ -740,6 +776,29 @@ impl Studio {
         Ok(image)
     }
 
+    fn post_slides(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+    ) -> Result<Vec<crate::platform::PostImage>, StudioError> {
+        if piece.channel != Channel::Instagram || piece.visual.is_none() {
+            return Ok(Vec::new());
+        }
+        let assets = self.checked_assets(lock, piece)?;
+        let visual = piece.visual.as_ref().ok_or(StudioError::AssetsRequired)?;
+        assets
+            .slides_sha256
+            .iter()
+            .zip(&visual.slides)
+            .map(|(hash, alt)| {
+                Ok(crate::platform::PostImage {
+                    bytes: lock.load_asset(hash)?,
+                    alt_text: alt.clone(),
+                })
+            })
+            .collect()
+    }
+
     /// Persist the attempt marker before releasing the caller's claim lock.
     fn start_attempt(
         &self,
@@ -805,6 +864,7 @@ impl Studio {
             request_id: intent.request_id.clone(),
             text: intent.payload.content.clone(),
             image,
+            slides: self.post_slides(&lock, &piece)?,
         };
         self.start_attempt(&lock, key, &mut piece, &mut intent)?;
         Ok(Claim::Send {

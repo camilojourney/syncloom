@@ -15,6 +15,7 @@ pub mod html;
 pub mod linkedin;
 pub mod manual_export;
 pub mod mastodon;
+pub mod meta;
 pub mod oauth;
 pub mod outbox;
 pub mod piece;

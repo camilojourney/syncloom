@@ -32,6 +32,7 @@ fn reviewed(piece: &Piece) -> ReviewRequest {
         expected_assets: Some(AssetHashes {
             image_sha256: assets.image_sha256.clone(),
             carousel_sha256: assets.carousel_sha256.clone(),
+            slides_sha256: assets.slides_sha256.clone(),
         }),
         ..review(&piece.revision)
     }
@@ -82,9 +83,9 @@ async fn pinned_renderer_snapshot_repeat_bytes_and_pdf_geometry() {
     )
     .content()
     .unwrap();
-    let first = config.render(&content).await.unwrap();
+    let first = config.render(&content, false).await.unwrap();
     tokio::time::sleep(Duration::from_millis(1100)).await; // cross the PDF creation-time boundary
-    let second = config.render(&content).await.unwrap();
+    let second = config.render(&content, false).await.unwrap();
     assert_eq!(
         digest(&first.image),
         digest(&second.image),
@@ -155,7 +156,7 @@ fn assert_snapshot(name: &str, bytes: &[u8]) {
 async fn ten_pages_are_uniform_and_overflow_is_refused() {
     let config = config();
     let content = request("", "paper", &["One slide"; 10]).content().unwrap();
-    let rendered = config.render(&content).await.unwrap();
+    let rendered = config.render(&content, false).await.unwrap();
     if let Ok(dir) = std::env::var("SYNCLOOM_VISUAL_RECEIPTS") {
         std::fs::write(
             std::path::Path::new(&dir).join("paper.png"),
@@ -183,7 +184,7 @@ async fn ten_pages_are_uniform_and_overflow_is_refused() {
         .content()
         .unwrap();
     assert!(matches!(
-        config.render(&overflow).await,
+        config.render(&overflow, false).await,
         Err(StudioError::InvalidRequest)
     ));
 }
@@ -279,13 +280,13 @@ async fn missing_timeout_crash_version_and_font_fail_truthfully() {
     let mut missing = config();
     missing.binary = dir.path().join("missing");
     assert!(matches!(
-        missing.render(&content).await,
+        missing.render(&content, false).await,
         Err(StudioError::RendererMissing)
     ));
     let mut crash = config();
     crash.binary = executable(dir.path(), "exit 12");
     assert!(matches!(
-        crash.render(&content).await,
+        crash.render(&content, false).await,
         Err(StudioError::RendererFailed)
     ));
     let marker = dir.path().join("pid");
@@ -296,7 +297,7 @@ async fn missing_timeout_crash_version_and_font_fail_truthfully() {
     );
     slow.deadline = Duration::from_millis(200);
     assert!(matches!(
-        slow.render(&content).await,
+        slow.render(&content, false).await,
         Err(StudioError::RendererTimeout)
     ));
     let pid = std::fs::read_to_string(marker).unwrap();
@@ -312,13 +313,13 @@ async fn missing_timeout_crash_version_and_font_fail_truthfully() {
     let mut version = config();
     version.version = "0.0.0.0".into();
     assert!(matches!(
-        version.render(&content).await,
+        version.render(&content, false).await,
         Err(StudioError::RendererVersionMismatch)
     ));
     let mut font = config();
     font.font_sha256 = "0".repeat(64);
     assert!(matches!(
-        font.render(&content).await,
+        font.render(&content, false).await,
         Err(StudioError::RendererFontMismatch)
     ));
     let (store, studio, original) = fixture(missing).await;

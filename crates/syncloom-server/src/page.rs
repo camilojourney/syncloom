@@ -175,6 +175,12 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
             hidden("image_sha256", &assets.image_sha256),
             hidden("carousel_sha256", &assets.carousel_sha256)
         );
+        if !assets.slides_sha256.is_empty() {
+            hashes.push_str(&hidden(
+                "slides_sha256",
+                &serde_json::to_string(&assets.slides_sha256).expect("hash list"),
+            ));
+        }
     }
     let approval_disabled = if piece.status != Status::PendingReview
         || (piece.visual.is_some() && piece.assets.is_none())
@@ -203,7 +209,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. LinkedIn visuals stay contained; granted Mastodon delivery can upload the approved PNG. Carousels and manual export stay local.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. LinkedIn visuals stay contained; granted Mastodon delivery can upload the approved PNG. Meta delivery needs an explicit public-media host; none is configured. Manual export stays local.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
             status(piece.status),
             escape(&piece.source.raw_input),
             escape(&piece.text),
@@ -211,7 +217,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
             piece.fit.max_chars,
             piece.fit.verdict,
             escape(&piece.revision),
-            previews(piece)
+            format_args!("{}{}", previews(piece), jpeg_previews(piece))
         ),
     )
 }
@@ -231,6 +237,16 @@ fn previews(piece: &Piece) -> String {
             escape(&piece.text)
         ),
     }
+}
+
+fn jpeg_previews(piece: &Piece) -> String {
+    let Some(assets) = &piece.assets else {
+        return String::new();
+    };
+    let id = escape(&piece.piece_id);
+    assets.slides_sha256.iter().enumerate().map(|(index,hash)|format!(
+        r#"<article class="preview-card"><div class="preview-label">Meta / JPEG · slide {}</div><img class="asset-image" src="/v1/pieces/{id}/assets/slides/{index}" alt="Rendered slide {}"><div class="preview-details"><p class="label">JPEG SHA-256</p><code class="hash">{}</code></div></article>"#,
+        index+1,index+1,escape(hash))).collect()
 }
 
 fn publish_receipt(receipt: &PublishResponse) -> String {
@@ -293,6 +309,7 @@ pub(crate) struct PieceForm {
     slides: Option<String>,
     image_sha256: Option<String>,
     carousel_sha256: Option<String>,
+    slides_sha256: Option<String>,
 }
 
 impl PieceForm {
@@ -309,6 +326,13 @@ impl PieceForm {
                 (Some(image_sha256), Some(carousel_sha256)) => Some(AssetHashes {
                     image_sha256,
                     carousel_sha256,
+                    slides_sha256: self
+                        .slides_sha256
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()
+                        .map_err(|_| StudioError::InvalidRequest)?
+                        .unwrap_or_default(),
                 }),
                 _ => return Err(StudioError::InvalidRequest),
             };

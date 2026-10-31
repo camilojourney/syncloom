@@ -287,11 +287,17 @@ fn s256(verifier: &str) -> String {
 
 /// Bounded JSON answers shared by adapters; never include provider bodies in errors.
 pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
 ) -> Option<T> {
     if !response.status().is_success() {
         return None;
     }
+    read_json_body(response).await
+}
+
+pub(crate) async fn read_json_body<T: serde::de::DeserializeOwned>(
+    mut response: reqwest::Response,
+) -> Option<T> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.ok()? {
         if bytes.len() + chunk.len() > 64 * 1024 {
