@@ -2,37 +2,36 @@
 
 ## Shared Kit adoption
 
-Kit **1.0.0** is adopted from Fleet release commit `e9ce8fecb722848654abb6f887f50939b7e5bdc1`, following `system/shared/kit/README.md` and its release ledger. Pinned in: OpenSpec change `2026-10-31-adopt-shared-kit-1-0-0` and the project commit containing this record. The project commit is the adoption authority, not a global skill activation.
+Kit **1.0.1** is adopted from Fleet release commit `f63507c26ebf9510bec1e92f692919ec62f12270`, following `system/shared/kit/README.md` and its release ledger. Pinned in: OpenSpec change `2026-10-31-adopt-shared-kit-1-0-1` and the project commit containing this record. Previous adoption: Kit 1.0.0 at project commit `c8718007ab87d6062c70cfa7bf301bb9accc9b83`, Fleet release `e9ce8fecb722848654abb6f887f50939b7e5bdc1`.
 
-Components: OpenSpec baseline **1.0.1**, Rust profile **1.0.0** (Rust **1.99.1**), quality configuration **code-5.2.0**, Code **5.2.0** and Decide **1.1.0** tested-with references. All selected materialized sources and quality files below come from component commit `840493182630729d32e5ee364f7037f01d47e1ed`, verified as an ancestor of the release. Decide comes from ancestor `367a5c1ff818696c6b3f4e34cf438e086ce80adb`.
+Components: OpenSpec baseline **1.0.2**, change-shape checker **1.0.0**, Rust profile **1.0.0** retained (Rust **1.99.1**), Code **5.2.1** and quality configuration **code-5.2.1** tested-with. Decide **1.1.0** is the release reference, not invoked here. Global inputs are not project enforcement pins or installation authorization.
 
 ### Immutable source identities
 
-Paths are relative to Fleet; hashes are SHA256 unless labeled as Git trees.
+Baseline and checker source commit: `9df2415d95cf3e753a268734bed098f24ae027b9`, verified as an ancestor of the release. Baseline blob: `c44e0ffa2d9facdfff58f91bb04cb8d6cb609622`; checker blob: `0420aa817549db1462386794a1a5c39bc402dce5`. Firstmate steering 001 corrected the dispatch's conflicting checker identity to the immutable release ledger.
+
+Paths below are relative to Fleet; hashes are SHA256 unless labeled Git tree.
 
 | Source | Hash |
 | --- | --- |
-| `system/shared/openspec/baseline.yaml` | `fb3e135d4c29607dfd9adbf4b96f1554206f90cfa134d93900932939b2a4498a` |
+| `system/shared/openspec/baseline.yaml` | `c3cae84909ed326a5bed597a8370ca87ffa0e83e189e21d9ab95ecaa189f4b2b` |
+| `system/shared/scripts/check-change-shape.py` | `53b3ba7c7c78f6e9ef60f51b24a9d59cb9381fdea01fc13ee8cb7905ffc8366b` |
 | `system/shared/rust/Cargo.toml` | `79fd95c4616b532ba7e1751b090f5d7ff030507d85512ecdc61f27fe0ac0b495` |
 | `system/shared/rust/rust-toolchain.toml` | `f715f440167e20fd8ea9afa0498c3d1ab80174cfcb8cbc895f106a34d907a1e1` |
 | `system/shared/rust/clippy.toml` | `741d8b6cbd57d7b01ff8918083bbf313e281cce0dbdcb1ed669dc8cb84f44578` |
 | `system/shared/rust/.config/nextest.toml` | `7e08fd48e32d6224af50bc2cd5dd205d87f22bbd8c9499dcd836937c0a7148f0` |
-| `system/skills/platform/code` | Git tree `bc87759cac3739e97919fd76d411d5bbb3c8cc76` |
-| `system/skills/platform/decide` | Git tree `b92df4099dd2602d40fb049e54840c8cfb0e1fe8` |
-| `system/skills/platform/code/scripts/verify.py` | `6b45b23dbf21eb575753a82c4b689cf4e2e9342988a447b6a558d5b34da19d92` |
+| `system/skills/platform/code` | Git tree `62cd39633ecea96fe97bc202458c2aaf160fda89` |
+| `system/skills/platform/code/scripts/verify.py` | `8d37ad455935c3e60cef63d3099ea127e03bc7fcb2da3e9e4c82e191829750bf` |
 | `system/skills/platform/code/scripts/findings.py` | `472c9eccb3e0fdaddbaf6d369ab4e3dd3cdca1474fe280286f0005328ba13944` |
 | `system/skills/platform/code/scripts/weakened_checks.py` | `faf6c56d1e8b5437d46bc6d432824e555e2c19a62ee880e55d812ef769638e45` |
-| `.spec-check.toml` | `3ade0cdec731f2721b95514f51c9be4287f6fa4ef92c193ab44cf9cb404dc595` |
-| `.vale.ini` | `f1e8361f4f119ecc9001577442fa50d1200f101d56ff8fd0d342e2a104e7ae18` |
-| `ruff.toml` | `acef2f0e0a1cc252d636fda5e9ac6bbb7ddb7bb7bf7d8bb7ade6f78254024212` |
 
-Quality delegates to Fleet's `system/skills/platform/specs` (Git tree `ba3bc7c5398d809219356a5d824105527a08e280`) and `system/skills/meta/skill-creator-fleet/assets/vale` (Git tree `20ec6a0b169b7cbe32e78c3fbc158c42a5da46ef`). These global tested-with references are not copied into the project or enforcement pins.
+Rust and unchanged findings/weakened-checks sources remain at `840493182630729d32e5ee364f7037f01d47e1ed`; Code/Verify source is `db815962b0364ba22fcb5b2c2713953f6f31ff6d`. Both are ancestors of the selected release. Other quality configuration and delegated owner identities remain the exact unchanged entries in that release ledger; they are references, not copied project configuration.
 
 ### Reviewed project configuration
 
 | Project file | SHA256 |
 | --- | --- |
-| `openspec/config.yaml` | `7b6eb5f4b64d5b39f132db48657fa2c5ed7fd210378b2aaf4bca340e7fa94d37` |
+| `openspec/config.yaml` | `0b434cfa8f1553a31a0eabece3a9525ba7519bd5506c9292fa48d6b21e9e50e4` |
 | `Cargo.toml` | `c1fcf57b361df273a6209225523c3f2332aeab3ada44f7bc339619900cb3e6d6` |
 | `rust-toolchain.toml` | `f715f440167e20fd8ea9afa0498c3d1ab80174cfcb8cbc895f106a34d907a1e1` |
 | `clippy.toml` | `741d8b6cbd57d7b01ff8918083bbf313e281cce0dbdcb1ed669dc8cb84f44578` |
@@ -40,32 +39,35 @@ Quality delegates to Fleet's `system/skills/platform/specs` (Git tree `ba3bc7c53
 | `crates/syncloom-core/Cargo.toml` | `92d10b04838bb6ed983062aff2edf104392d0c404564f88d7fe748433a1d6de1` |
 | `crates/syncloom-server/Cargo.toml` | `01dd028586c50aacf525ebeecf55170dce6325077fb5e08e8b3841052bc214ce` |
 | `crates/syncloom-cli/Cargo.toml` | `215b8216aee9061bd7d792166d045eb4ba87b785d6e77094b92f5dfdae7bf347` |
+| `scripts/check-change-shape.py` | `53b3ba7c7c78f6e9ef60f51b24a9d59cb9381fdea01fc13ee8cb7905ffc8366b` |
 
-Baseline common lines match the source exactly; all pre-existing Syncloom context lines below the common block are preserved. The obsolete `/code 5.0.0` literal is removed from common guidance. Prior baseline 1.0.0 was pinned at `4501883843df70c50f0726120aca09387ca6c95d`; its retained source hash is `47bd2a780e24184cc60f03fc3cd12df3aad1c48a94cab7bdd1538c7e0b605f00`.
+Common baseline lines match the source exactly; every pre-existing Syncloom context line is preserved. Previous baseline 1.0.1 source SHA256 was `fb3e135d4c29607dfd9adbf4b96f1554206f90cfa134d93900932939b2a4498a`. Previous checker SHA256 was `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`. All retained Rust configuration hashes match the previous committed record.
 
-Rust lints and release sections match Fleet. Project metadata, dependencies and Cargo.lock remain project-owned and unchanged. Every member inherits workspace lints and MSRV. Package-level root `[lints]` is N/A: Cargo rejects it in this virtual workspace; firstmate approved the correct root `workspace.lints` / member `lints.workspace` mapping in steering message 001. Nix files are not materialized in the project; optional deny/mutants reports are not selected. Nextest timeout configuration is adopted, but nextest execution is not claimed.
+Rust lints and release sections match Fleet. Project metadata, dependencies and Cargo.lock remain project-owned and unchanged. Every member inherits workspace lints and MSRV. Package-level root `[lints]` is N/A: Cargo rejects it in this virtual workspace; the prior Kit 1.0.0 adoption's steering message 001 approved the correct root `workspace.lints` / member `lints.workspace` mapping. Nix files are not materialized in the project; optional deny/mutants reports are not selected. Nextest timeout configuration is adopted, but nextest execution is not claimed.
 
-Configuration exceptions: none for selected shared sections. Firstmate message 002 authorizes local function-scoped `#[expect]` annotations for verified invariants, fail-closed mutex poisoning, intentional CLI output and fail-fast test fixtures. Each carries its reason in source; these are explicit project lint exceptions owned by the Syncloom maintainer, not global profile weakening. Existing shared-fixture dead-code allowances gain reasons without broadening their scope. Runtime behavior, security guards and test assertions remain unchanged.
+Configuration exceptions: none for selected shared sections. The prior Kit 1.0.0 adoption's firstmate message 002 authorizes local function-scoped `#[expect]` annotations for verified invariants, fail-closed mutex poisoning, intentional CLI output and fail-fast test fixtures. Each carries its reason in source; these are explicit project lint exceptions owned by the Syncloom maintainer, not global profile weakening. Existing shared-fixture dead-code allowances gain reasons without broadening their scope. Runtime behavior, security guards and test assertions remain unchanged.
+
+No new exceptions; configuration exceptions: none for this adoption. The historical project-owned lint expectations above remain unchanged.
 
 ### Actual loaded inputs and verification
 
-Initially loaded Code at `/Users/camiloslaptop/.agents/skills/code/SKILL.md` was version 5.2.0, SHA256 `76f2f50100e291057b607f6cb8279f87269aa23dd6d1075937482a96ea16ca2c` (Git blob `33e8f65f1d72d7da103a1cfac8ea8f0053ea8246`, matching the kit component). A separate machine-owner update changed the global symlink target during this task to Fleet commit `f63507c26ebf9510bec1e92f692919ec62f12270`: Code 5.2.1 was re-read before Verify, SKILL.md SHA256 `efaa1df842147b98f515fa09615f9d7cb213d6ce6b295f41ccd6f625258dcc3a`, verify.py SHA256 `8d37ad455935c3e60cef63d3099ea127e03bc7fcb2da3e9e4c82e191829750bf`. The loaded findings.py and weakened_checks.py still match the kit hashes above. Topic reference loaded: `references/security.md`, SHA256 `12ff1d9cc04eee151fe92502402f1df16b31e510249a26d9e9b29ce86cfb8e37`; no authorization or secret-handling boundary changes. Decide was not invoked: 1.1.0 is the kit's tested-with reference, not evidence of a locally executed decision procedure. Other global quality inputs are release references only unless the Verify receipt records their actual use.
+Loaded `/Users/camiloslaptop/.agents/skills/code/SKILL.md` version 5.2.1, SHA256 `efaa1df842147b98f515fa09615f9d7cb213d6ce6b295f41ccd6f625258dcc3a`; loaded Verify matches the source hash above. Loaded topic reference: security, SHA256 `12ff1d9cc04eee151fe92502402f1df16b31e510249a26d9e9b29ce86cfb8e37`. No product security boundary changes. Decide was not invoked.
 
-Receipts live outside the worktree at `/Users/camiloslaptop/.firstmate-homes/syncloom-v2-lab/data/syncloom-v2-adopt-shared-kit-1-0-0/`.
+Receipts: `/Users/camiloslaptop/.firstmate-homes/syncloom-v2-lab/data/syncloom-v2-adopt-shared-kit-1-0-1/`.
 
 | Problem (source) | Owner | Change | Regression or acceptance | Result |
 | --- | --- | --- | --- | --- |
-| Stale baseline guidance and no kit pin | Fleet baseline / Syncloom | Reviewed 1.0.1 merge and this record | Source hashes, retained project context and strict OpenSpec validation | Pass: 19 items after rebasing onto main |
-| Virtual root cannot inherit package lints | Cargo / Syncloom | Correct member inheritance | Cargo 1.99.1 metadata; minimal rejection receipt `virtual-manifest.txt` | Pass with approved N/A root mapping |
-| New strict profile exposes existing invariant panics and fixture/output lint findings | Syncloom | Narrow reasoned expectations, no runtime edits | `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` | Pass on rebased main: formatting, all-target Clippy and full tests; no ignored tests |
-| Adoption shape and record integrity | Syncloom | Request-first proposal and adoption record | Change-shape checker, research checker and checker unit tests | Pass: 0 problems; 25 tests |
-| Final integrated quality | Code / Syncloom | Installed Code Verify with native project checks | `python3 /Users/camiloslaptop/.agents/skills/code/scripts/verify.py --base main --change-kind refactor` with explicit checks | Full tests, native Clippy, specs, records, links and secrets checks pass. First Verify rejected an existing example-CLI duplication; retained with design rationale. All 176 local suppression candidates reviewed and retained under firstmate authorization; final receipt `verify.txt` records advisories. |
+| Reviewer-token replacement rejected by old checker | Fleet | Exact baseline/checker adoption together | Public CLI with request-source binding: pending, independent reviewer/capability transitions, both transitions, malformed approval and altered request | Old checker failed three transition cases (`reviewer-red.txt`); adopted checker passes all seven (`reviewer-green.txt`) |
+| Unrecorded shared ownership transition | Fleet / Syncloom | This record and Fleet custody | Source SHA256/blob identities, baseline/common-context comparison and retained project hashes | Pass; no project Rust changes |
+| Integrated product checks | Syncloom | Unchanged Rust profile | `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` under locked Fleet Nix profile | Pass (`workspace.txt`), no ignored tests |
+| Specification and record integrity | Syncloom | Tooling-only OpenSpec change | `openspec validate --all --strict --no-interactive`; shape checker; research checker and its unit suite | Pass: 20 items, zero shape/research problems, 25 tests |
+| Final quality | Code / Syncloom | Installed Code 5.2.1 Verify | `python3 /Users/camiloslaptop/.agents/skills/code/scripts/verify.py --base main --change-kind refactor` with explicit project checks | ACCEPT; explicit full Rust and record checks pass, strict specs pass, zero blocking findings, zero weakened-check candidates, links and secrets pass. Receipt `verify.txt`; native auto-lint is N/A because Rust inputs are unchanged, but the explicit check covers all targets. Vale is N/A (no project .vale.ini). |
 
-Failed attempts are retained: initial Clippy reported 36 core production violations and stopped before tests (`workspace.txt`); subsequent `clippy-round2.txt` through `clippy-round6.txt` capture annotation placement corrections and additional targets exposed as compilation advanced; `clippy-final.txt` passes. Initial source comparison caught an incomplete toolchain copy, corrected to byte-exact profile bytes; the first shape check required explicit none declarations, now present. No tests were skipped, loosened or re-baselined. Initial full Verify evidence is preserved as `verify-initial.txt`; its full rebased tests passed. Kept example CLI scaffolding belongs to independent fake-protocol owners; design.md records why merging it would add coupling. The final Verify rerun includes the full workspace acceptance command again.
+No tests were skipped, loosened or re-baselined. No local checker refactor: Fleet is its source owner. Nextest, optional Rust reports and non-Darwin platforms remain unmeasured; materialized configuration does not imply those checks ran.
 
 ## OpenSpec configuration
 
-OpenSpec CLI 1.15.0 uses the stock `spec-driven` schema. Existing generated skills and commands under `.agents/`, `.claude/` and `.pi/` were initialized with `openspec init --tools codex,claude,pi` and remain unmodified. Re-check baseline updates with `git -C <fleet-system> show 840493182630729d32e5ee364f7037f01d47e1ed:system/shared/openspec/baseline.yaml`, compare SHA256, then review only common guidance while preserving project context. Run `openspec validate --all --strict --no-interactive`.
+OpenSpec CLI 1.15.0 uses the stock `spec-driven` schema. Existing generated skills and commands under `.agents/`, `.claude/` and `.pi/` were initialized with `openspec init --tools codex,claude,pi` and remain unmodified. Re-check baseline updates with `git -C <fleet-system> show 9df2415d95cf3e753a268734bed098f24ae027b9:system/shared/openspec/baseline.yaml`, compare SHA256, then review only common guidance while preserving project context. Run `openspec validate --all --strict --no-interactive`.
 
 ## Toolchain
 
@@ -91,7 +93,9 @@ The [visual asset guide](visual-assets.md) pins the installed browser and font a
 
 ## Record checkers
 
-`scripts/check-change-shape.py`, `scripts/check-research-records.py` and `scripts/test_check_research_records.py` are byte-identical copies of invoz.v2's (sha256 `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`, `20503765e214235c8e002007e7bad7501f2b2ec8d9081741a6a550a5f34ebae1` and `efcefaf2ceb7d4faf89fb3a26cbb36a5557e89ab25171d0d9d0159f5a6a5f853`). They stay Python on purpose: the rule "Rust for all first-party code" (vision 1.2) covers the product, and these are repository-record checkers shared with invoz.v2 whose owner is the invoz.v2 copy. Porting them would create a second owner of the same rules; running them from invoz.v2's path would couple the two repositories. When invoz.v2 changes a checker, copy it here and re-run the tests. The checkers are stdlib-only and run with `python3 -B -I`; `-B` prevents the dynamically imported checker test from leaving bytecode in the repository.
+`scripts/check-change-shape.py` is Fleet-owned from Shared Kit 1.0.1, checker 1.0.0. Its immutable provenance is invoz.v2 `ddd9880ef316d7cac7b4d87be84e480fd148e237:scripts/check-change-shape.py` (original SHA256 `54f77643ee4e4cdc3cfc9f66b20cda5413efc9dfd95982532d58e62fd14b74f2`). Update from Fleet's release ledger, not from another project's materialized copy. Shape validation does not authenticate a reviewer or grant approval.
+
+`scripts/check-research-records.py` and `scripts/test_check_research_records.py` remain invoz.v2-owned byte-identical copies (SHA256 `20503765e214235c8e002007e7bad7501f2b2ec8d9081741a6a550a5f34ebae1` and `efcefaf2ceb7d4faf89fb3a26cbb36a5557e89ab25171d0d9d0159f5a6a5f853`). Copy their updates from that owner and rerun tests. Repository-record tooling stays Python; porting it would create a second policy owner. All checkers are stdlib-only; run with `python3 -B -I` to avoid repository bytecode.
 
 ## Hermetic tests
 
@@ -115,4 +119,4 @@ OAuth listener/state/JSON bounds are shared in `crates/syncloom-core/src/oauth.r
 
 ## Lessons applied
 
-Every build task applies `data/v2-build-lessons-20261030.md` of the firstmate home (27 items: OpenSpec 1.15.0 with this config, the installed Code skill loaded first (initially 5.2.0, then 5.2.1 for this adoption), test first, verbatim requests, research saved word for word, Receipts-first reports, no secrets or personal data in requests or files, `gitleaks git` mode, loopback-only servers with Host check and a fixed error envelope, hermetic tests, scratch under `/tmp/fm-<task>/`, Rust via nix, Rust for first-party code, rebase onto the current local `main` and re-run the gates before done, and the Code skill's Verify gate with the weakened-checks analysis run on the final tree with its output saved as `verify.txt` in the task's data folder, exact Request-first proposal shape, and post-landing OpenSpec archival by the merge owner). A worker that finds one of them wrong says so in its report.
+Every build task applies `data/v2-build-lessons-20261030.md` of the firstmate home (27 items: OpenSpec 1.15.0 with this config, the installed Code skill loaded first (5.2.1 for Kit 1.0.1 adoption), test first, verbatim requests, research saved word for word, Receipts-first reports, no secrets or personal data in requests or files, `gitleaks git` mode, loopback-only servers with Host check and a fixed error envelope, hermetic tests, scratch under `/tmp/fm-<task>/`, Rust via nix, Rust for first-party code, rebase onto the current local `main` and re-run the gates before done, and the Code skill's Verify gate with the weakened-checks analysis run on the final tree with its output saved as `verify.txt` in the task's data folder, exact Request-first proposal shape, and post-landing OpenSpec archival by the merge owner). A worker that finds one of them wrong says so in its report.

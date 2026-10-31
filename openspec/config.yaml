@@ -1,4 +1,4 @@
-# Fleet shared OpenSpec baseline 1.0.1
+# Fleet shared OpenSpec baseline 1.0.2
 schema: spec-driven
 
 context: |
@@ -18,9 +18,9 @@ context: |
 
 rules:
   proposal:
-    - 'Start with a "Request" section quoting the requester''s words verbatim, then an "Approval" section that says "pending"; only the reviewer fills it in. Never write approved yourself.'
+    - 'Start with a "Request" section quoting the requester''s words verbatim, then an "Approval" section that says "pending"; only the authorized reviewer replaces pending with "approved: <reviewer>" using their identity. Never write approved yourself. The shape checker validates text, not reviewer authority.'
     - 'Before naming capabilities, run `openspec list --specs` and read every spec whose purpose overlaps, including unmigrated project owners; modify an existing capability unless none fits, and say which ones you checked.'
-    - 'For each new capability, add a line under Approval: "New capability requested: <name>". The reviewer turns it into "New capability approved: <name>".'
+    - 'For each new capability, add a line under Approval: "New capability requested: <name>". Only the authorized reviewer turns it into "New capability approved: <name>"; requested remains valid until that review.'
     - 'For each copy of the same knowledge the design keeps (two blocks where changing one rule would need the same edit in both), add a line under Approval: "Duplicate kept: <where>, because <reason>". The reviewer decides; merge it if they do not accept the reason.'
     - 'End with an "Open questions" section listing each assumption or missing case the request leaves open, as a question for the product owner, or "None."'
     - 'Write for a busy reviewer: short sentences, no filler, no restating the request. Keep the proposal body, outside the Request quote, under 250 words.'
