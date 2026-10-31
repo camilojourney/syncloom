@@ -1,5 +1,4 @@
 //! Stateful loopback Mastodon boundary. No endpoint can contact a real instance.
-#![allow(dead_code)]
 use axum::{
     Router,
     body::Bytes,

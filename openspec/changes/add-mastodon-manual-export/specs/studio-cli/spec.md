@@ -23,4 +23,3 @@ The CLI SHALL offer `thought`, `show`, `approve`, `publish`, `linkedin sign-in|s
 - **THEN** it prints the authorization URL, waits for the callback and prints the safe connection
 - **AND** `mastodon status` and `mastodon sign-out` report the connection without exposing credentials
 - **AND** `export <piece_id> --expected-revision <revision> --target reddit` returns the local bundle receipt
-
