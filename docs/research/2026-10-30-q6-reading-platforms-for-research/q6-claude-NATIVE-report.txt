@@ -1,0 +1,246 @@
+Reading social platforms for topic research, October 2026: official APIs per platform, what is banned, and what to choose
+
+Recommendation: use option E (HN, arXiv, RSS and news) as the base, add official read APIs only where they are free or cost a few dollars (Bluesky, YouTube, Hacker News, a capped X budget, and Threads if App Review passes), and add option D for the founder’s own metrics. Reject B (polite fetching of public pages) and C (licensed providers). Most platforms do not ban personal research reads outright. Instead they either price them cheaply (X), offer them free (Bluesky, YouTube, HN, Threads), or close them to individuals (Reddit as of 31 Oct 2026, LinkedIn, TikTok, Facebook public search). That mixed picture triggers neither “would change the answer” condition across the board.
+
+TL;DR
+
+
+Workable official read paths for one person:
+
+Bluesky: open, free firehose and public AppView.
+Hacker News: Firebase API with no rate limit, plus Algolia search at 10,000 requests per hour per IP.
+YouTube: free. Since 1 June 2026, search.list has its own bucket of 100 calls a day.
+X: pay-per-use at $0.005 per post read, $0.001 per owned read and $0.010 per trends request. Recent search covers the last 7 days.
+Threads: keyword and tag search, limited to 2,200 queries per rolling 24 hours, after App Review.
+
+
+
+Closed or effectively closed to a non-academic individual:
+
+Reddit: new public Data API requests stop 31 Oct 2026, RSS ends 13 Nov 2026, and remaining public access ends March 2027.
+LinkedIn: no public post search. Member post data may be cached for at most 48 hours. Scraping is barred by contract.
+TikTok: the Research API is for academics and non-profits only.
+Facebook and Instagram research: Meta Content Library requires an academic or not-for-profit research affiliation. A solo founder does not qualify on any platform’s researcher program.
+
+
+
+Scraping is prohibited by contract on most platforms, and enforcement is real but legally mixed. X lost its contract claims against Bright Data in 2024 on copyright-preemption grounds. On 31 Jul 2026, Judge Paul Engelmayer (SDNY) let Reddit’s DMCA anti-circumvention claims against SerpApi and Perplexity proceed, dismissing only the trafficking, unfair competition and unjust enrichment claims. X sent cease-and-desist letters to Nitter on 24 Aug 2026, citing “unlawful use and circumvention of X’s Application Programming Interface (API)” (TechCrunch, 25 Aug 2026). Licensed providers (option C) are quote-based enterprise products. The cheap self-serve ones are scraping-based. Neither fits “a few dollars a month.”
+
+
+Key Findings
+
+Per-platform summary table
+
+“NF” means not found in primary sources during this research. “2°” means the claim is supported only by secondary sources. Dates are the document’s date or “last updated” where shown. “Undated (read 30 Oct 2026)” means the page shows no date and I read it on 30 October 2026.
+
+PlatformPublic post readKeyword/hashtag searchTrendingComment threadsOwn-post metricsTier / price / quotaPersonal / non-commercial coverageRetention / caching / derived / AI-inputScraping / automation rule + enforcementDatasets / firehose / RSSXYes: Posts Read at $0.005 per resource (docs.x.com pricing, undated, read 30 Oct 2026) xYes: recent search covers the last 7 days for all developers, and full-archive search is available on pay-per-use (docs.x.com search intro, undated) xYes: Trends at $0.010 per request (pricing page) xYes: conversation threads in post objects (docs.x.com intro, undated)Yes: Owned Reads at $0.001 per resource, and Analytics Read is listed (pricing page) xPay-per-use credits, no subscription. Monthly read cap is 3M (pricing page) or 2M (post-cap page), so X’s own docs conflict xxNo non-commercial or research tier found in current docs: NFNo training or fine-tuning of a foundation or frontier model, except Grok (Restricted Use Cases page, undated). x Rules on inference or prompt input: NF. Caching limits: NFDeveloper Agreement bans prohibited uses (2°). X v. Bright Data contract claims dismissed May 2024 (2°). proskauer Cease-and-desist letters to Nitter, 24 Aug 2026 (TechCrunch, 25 Aug 2026)Filtered stream billed per post (post-cap page). Firehose is Enterprise only. Official RSS: NFLinkedInNo API to read arbitrary members’ posts (2°)No public post search (2°) edgesNFOwn organization page’s comments only, through the gated Community Management API (2°)Organization page analytics through Community Management (2°). social-api Personal-profile analytics: NFCommunity Management API needs an application and review. Price: NFNFMembers’ social activity data: 48-hour storage limit. Other members’ profile data: no caching beyond 24 hours (LinkedIn Data Storage Requirements, li-lms-2026-06). microsoft AI rules: NFUser Agreement §8.2 bans scraping, effective 3 Nov 2025 (2°). LinkedIn sued Proxycurl/Nubela in Jan 2025 (2°). lobstr hiQ outcome (2°, see Details)None foundThreadsYes: public media fields through search (Meta docs, undated, read 30 Oct 2026)Yes: keyword_search with search_mode=TAG, 2,200 queries per user per rolling 24 hours. Without threads_keyword_search approval, results are limited to the user’s own posts facebookNFReply endpoints exist. Detail not verified: NFInsights permission threads_manage_insights (2°)Free. Requires threads_basic and threads_keyword_search plus App Review. Price: none publishedMeta Content Library covers Threads, but only for academic and non-profit researchers (2°) lilachbullockNFMeta terms on automated collection: NF in this researchNFBlueskyYes: public AppView (api.bsky.app and public.api.bsky.app) has “generous rate-limits” (docs.bsky.app rate limits, undated) bskySearch endpoint exists but was not verified in a primary doc: NFNFThread retrieval: not verified, NFYour own records are public and readable. A dedicated analytics API: NFFree. PDS limit is 3,000 requests per 5 minutes per IP bskyOpen to anyone. No program neededDeveloper Guidelines require honoring deletion requests (docs.bsky.app, undated). bsky AI training clause in developer terms: NFNo scraping ban needed because the data is public over the protocol. Spam and bulk automated interactions are banned bskyRelay firehose is public with no authentication (bsky.network relay doc, undated). Jetstream offers JSON with filtering. bsky Official RSS: NFInstagramOnly through Hashtag Search and Business Discovery (2°)Hashtags only: 30 unique per rolling 7 days per Business or Creator account. Requires App Review and the “Instagram Public Content Access” feature (Meta IG Hashtag ref, updated 3 Mar 2025) facebookfacebookNFComments on hashtag media cannot be posted. facebook Reading them: NFInsights for Business and Creator accounts (2°). Primary: NFFree. Business or Creator account plus Facebook Login for Business required getphylloMeta Content Library is academic and non-profit only (updated 30 Apr 2026) metaNFNF in this research. Meta v. Bright Data: summary judgment for Bright Data on the contract claim, 23 Jan 2024 (2°) elgrithMeta Content Library only, for eligible researchersFacebookPublic keyword search: NF. Not available to general developers per Meta Content Library positioningNFNFOwn Page comments: NF in primaryPage insights: NF in primaryNFMeta Content Library: affiliation with an academic or not-for-profit research institution required (updated 30 Apr 2026). Free for approved researchers (2°) metagitbookNFMeta v. Bright Data, 2024 (2°) natlawreviewMeta Content Library, researcher-onlyYouTubeYes: videos.list and others, mostly 1 unit each (2° plus quota doc snippet)search.list has its own bucket since 1 Jun 2026: 100 calls a day at 1 unit each (Data API Revision History) githubupload-postmostPopular chart via videos.list. Content adjusted 21 Jul 2025 (Revision History)commentThreads.list, comments.list (Data API reference)YouTube Analytics API (Reporting revision history). videos.batchGetStats added 3 Jun 2026 googleFree. 10,000 units a day for other methods, plus separate search and insert buckets. Extensions through an audit formOrdinary API Terms apply. YouTube Researcher Program: NF in primary (2°: academic-focused)Non-Authorized Data may be stored at most 30 days, then deleted or refreshed. Statistics read without authorization must not be stored more than 30 days (Developer Policies III.E.4). fandomgoogle AI rules: NFAPI policy bans masking identity and credentials (Developer Policies III.D.1). google Scraping clause in the YouTube ToS: NF in this researchChannel RSS: NF in primaryRedditPublic Data API, but new access requests close 31 Oct 2026 (Reddit Help changelog, 8 Oct 2026, plus 2° dates) imisofts +2Search through the Data API, same closureNFYes, through the Data API, same closureOwn posts through the Data API, same closureFree tier is 100 queries per minute per OAuth client ID for approved non-commercial use (2°, citing Data API Wiki updated 11 May 2026). Commercial use needs a contract prowloNon-commercial use was explicitly free, but approval was manual and is now closing. Unregistered apps lose access from 12 Jan 2027, and all public access ends March 2027 (2°) techrepublicremioData API Terms: NF in primary this research. Reddit cites “scraping and automated abuse” (changelog) reddithelpReddit v. SerpApi/Perplexity/Oxylabs/AWMProxy (SDNY 1:25-cv-8736): on 31 Jul 2026 Judge Engelmayer let the DMCA §1201 anti-circumvention claims proceed, dismissing only the §1201(b) trafficking, unfair competition and unjust enrichment claims (MLex)RSS support ends 13 Nov 2026, with “no replacement” outside moderated communities (Reddit Help changelog, 8 Oct 2026). reddithelpremio Data dumps: NFTikTokResearch API only, for academics and non-profits TikTokResearch API video query onlyNFResearch API comments (research-only) uncDisplay API for your own videos (2°)Research API: 1,000 requests and 100,000 records a day, reset at 00:00 UTC (TikTok Research API FAQ, undated) tiktoktiktokApplicants must be employed by a non-profit academic institution in the US or Europe. Creators, advertisers and commercial users are ineligible (2° on the latter) keyapi +2Research use is non-commercial only (Research API page) TikTokTikTok ToS scraping clause: NF in this researchCommercial Content API covers ads only, starting with EU ads (TikTok dev page, undated) tiktokHacker NewsYes: Firebase API, no key (MIT-licensed docs, 2°) apifyYes: Algolia HN Search, 10,000 requests per hour per IP (hn.algolia.com/api, undated) algoliatopstories, beststories and newstories lists (Firebase) devItem kids (Firebase). Algolia /items/:id returns full trees devYour own user and items, publicFree. Firebase: “There is currently no rate limit” (HackerNews/API README on GitHub, primary)OpenAlgolia asks for attribution (2°). apify AI rules: NFToS clause: NF. Algolia may blacklist IPs over the limit (hn.algolia.com/api) algoliaFirebase realtime database. Algolia full-text index
+
+Details
+
+X (Twitter)
+
+
+Pricing (primary). https://docs.x.com/x-api/getting-started/pricing (undated; read 30 Oct 2026):
+
+“The X API uses pay-per-usage pricing… No subscriptions.” Posts Read costs $0.005 per resource, User Read $0.010, Trends $0.010 per request, and Counts Recent $0.005 per request. x
+Owned Reads cost “$0.001 per resource (1,000 resources for $1)”. This applies to GET /2/users/{id}/tweets and /mentions when the authenticated user owns the app. x
+Resources are deduplicated within a 24-hour UTC window. This is a “soft guarantee.” x
+Spending limits are configurable. x
+
+
+
+Monthly read cap conflict. The pricing page says “capped at 3 million Post reads per monthly billing cycle.” x https://docs.x.com/x-api/fundamentals/post-cap says “a monthly cap of 2 million Post reads.” x The pricing page is probably authoritative, but this is unresolved. It does not matter at founder scale.
+Search. https://docs.x.com/x-api/posts/search/introduction (undated) says recent search covers “Posts from the last 7 days. Available to all developers.” It also says “Full-archive search is available to pay-per-use and Enterprise customers.” x
+
+Basic and Pro are no longer offered to new developers. On 6 Feb 2026, @XDevelopers posted “Officially launching X API Pay-Per-Use,” saying legacy Free users “will move to Pay-Per-Use with a one-time $10 voucher.”
+
+
+
+AI. https://docs.x.com/developer-terms/restricted-use-cases (undated): “X prohibits any use of the X APIs and/or X Content to fine-tune or train a foundation or frontier model with the exception of Grok.” x
+
+The page also bans “investigating or tracking X users or their content.” x
+Using posts as prompt input for inference is not expressly addressed: NF. Feeding only aggregated topic signals to a model is the defensible reading, not storing raw posts in prompts.
+
+
+
+Enforcement.
+
+X Corp. v. Bright Data (N.D. Cal., Judge Alsup) was dismissed in May 2024. The court held X’s contract claims over scraping and selling public data were preempted by the Copyright Act (2°: Proskauer release, 23 May 2024; casemine). proskauercasemine
+X sent cease-and-desist letters to Nitter on 24 Aug 2026, accusing it of “unlawful use and circumvention of X’s Application Programming Interface (API) and associated data” and giving it until 5 p.m. EST on 25 Aug to shut down (TechCrunch, Sarah Perez, 25 Aug 2026). Nitter briefly came back in early September, and its GitHub repository was archived again on 11 Sep 2026 (TechCrunch, 15 Sep 2026).
+
+
+
+Cost at founder scale. About 2,000 third-party post reads a month is $10. Owned reads for your own posts and mentions cost cents. Thirty trends requests cost $0.30.
+
+
+Threads
+
+
+https://developers.facebook.com/documentation/threads/keyword-search (undated; read 30 Oct 2026) states:
+
+“A user can send a maximum of 2,200 queries within a rolling 24-hour period.” facebook
+It requires threads_basic and threads_keyword_search. facebook
+“If your app has not been approved for the threads_keyword_search permission, the search will be performed only on posts owned by the authenticated user.” facebook
+
+
+
+It supports search_type=TOP|RECENT, search_mode=KEYWORD|TAG, and since/until going back to 5 Jul 2023. Results are capped at 100 per call. facebook
+Sensitive keywords return empty arrays. facebook
+No trending endpoint was found.
+
+
+Bluesky
+
+
+https://docs.bsky.app/docs/advanced-guides/rate-limits (undated): the AppView “API services have generous rate-limits.” bsky
+
+The PDS allows 3,000 requests per 5 minutes per IP. bsky
+Write operations are capped at 5,000 points an hour and 35,000 a day per account (bsky.network/docs/rate-limits). bsky
+
+
+
+https://bsky.network/docs/relay/ (undated): “No authentication is required; the firehose is public.” Jetstream offers a filtered JSON stream that can be self-hosted. huggingface +2
+https://docs.bsky.app/docs/support/developer-guidelines (undated): “All services must have a method for deleting content a user has requested to be deleted.” It also bans automated or bulk interactions. bskybsky
+Bluesky publicly said it does not train generative AI on user content (2°: Bluesky post, 15 Nov 2024). yahoo It admits it cannot enforce consent outside its systems (2°: TechCrunch, 27 Nov 2024). TechCrunch
+
+
+YouTube
+
+
+Quota. https://developers.google.com/youtube/data/revision_history:
+
+The 1 June 2026 entry moved videos.insert and search.list “to their own respective quota buckets.” google
+The quota-cost page snippet says “a default quota allocation of 100 search.list calls, 100 videos.insert calls, and 10,000 units per day combined for all other endpoints… The quota cost is 1 per call.” google
+The 3 June 2026 entry added videos.batchGetStats, with 1 unit in its own bucket and 10,000 a day. google
+The latest revision entry is dated 15 Oct 2026. google
+
+
+
+Storage. https://developers.google.com/youtube/terms/developer-policies, section III.E.4: “an API Client must not store statistics retrieved as Non-Authorized Data for more than 30 days.” Other Non-Authorized Data must be deleted or refreshed after 30 days. fandomgoogle
+
+A third-party GitHub issue dates the latest policy update to 14 Sep 2026 (2°). github
+Whether your own derived aggregates are exempt: NF. Treat them conservatively.
+
+
+
+
+
+Reddit
+
+
+Primary. https://support.reddithelp.com/hc/en-us/articles/54353370049684-Changelog-October-8-2026 (8 Oct 2026):
+
+“Reddit will stop supporting RSS feeds… November 13, 2026… If you use RSS for feeds outside of a community you moderate, there is no replacement.” reddithelp
+“public Data API apps and bots are moving to Reddit’s Developer Platform as part of efforts to reduce scraping and automated abuse.” reddithelp
+
+
+
+Dates (Reddit admin post in r/redditdev, 30 Sep 2026, as reported by TechCrunch’s Sarah Perez): new public API requests are not accepted after 31 Oct 2026, unregistered apps lose access from 12 Jan 2027, and remaining public access ends in March 2027. superframeworksberi Registration for the migration bounty closes 30 Nov 2026 (Unite.ai).
+Free tier (2°: secondary pages citing the Data API Wiki updated 11 May 2026): 100 queries per minute per OAuth client ID, averaged over 10 minutes, for approved non-commercial use. prowlo
+
+A pre-launch business content studio is arguably commercial use. snitchfeed That is a second reason not to rely on Reddit.
+
+
+
+Enforcement. Reddit v. SerpApi LLC et al. (SDNY 1:25-cv-8736, filed 22 Oct 2025): on 31 Jul 2026, Judge Paul A. Engelmayer dismissed only the §1201(b) trafficking claim and the unfair competition and unjust enrichment claims, letting the DMCA anti-circumvention claims proceed (MLex). He found that CAPTCHA and bot detection qualify as access controls “even if that same content is available to human users” (Loeb & Loeb, Aug 2026).
+
+This is the key legal risk for option B. Automated fetching that defeats bot defenses can be framed as circumvention, not just a contract breach.
+
+
+
+
+
+LinkedIn
+
+
+Primary. LinkedIn Marketing “Data Storage Requirements” (learn.microsoft.com, version li-lms-2026-06) defines “Members’ Social Activity Data” (posts, likes, comments). It says “nothing… shall permit you to cache this data in excess of 24 hours” for other members’ profile data. microsoft Secondary summaries report a 48-hour limit for social activity. outstand
+Secondary only:
+
+The Community Management API is application-gated and covers your own organization page’s posts, comments and analytics. social-api
+Data from it may not be used in “social feed” use cases. social-api
+The API Terms bar accessing content “outside the APIs.” social-api
+User Agreement §8.2 bans scraping (effective 3 Nov 2025). lobstr
+hiQ v. LinkedIn: the CFAA claim failed (Ninth Circuit, 2022), but hiQ was ultimately held to have breached the User Agreement before the case was settled, so ToS-based contract liability remains real (2°). lobstr
+
+
+
+
+
+TikTok, Meta researcher programs, Hacker News
+
+
+TikTok. https://developers.tiktok.com/doc/research-api-faq/ (undated): “the daily limit is set at 1000 requests per day, allowing you to obtain up to 100,000 records per day.” tiktoktiktok
+
+https://developers.tiktok.com/products/research-api/ requires applicants to “Be employed by a non-profit academic institution in the U.S. or Europe” and to commit to “non-commercial purposes.” TikTok
+
+
+
+Meta. https://transparency.meta.com/researchtools/meta-content-library/ (updated 30 Apr 2026) requires “Affiliation with an academic institution or other non-university organization… which operates as a not-for-profit entity and holds scientific or public interest research as a primary purpose.” meta
+Hacker News. https://hn.algolia.com/api (undated): “We are limiting the number of API requests from a single IP to 10,000 per hour.” algolia
+
+
+Licensed third-party providers (option C)
+
+
+X official partners. https://partners.x.com/en/find-a-partner (undated) lists Bloomberg, Brandwatch, Cision, Dataminr, Hootsuite, Synthesio, Khoros, Meltwater, NTT Data, Sprinklr, Sprout Social and Talkwalker. x
+Reddit data partners (vendor press releases):
+
+Meltwater joined “Reddit’s Official Data Partner program” (GlobeNewswire, 13 Feb 2026). Yahoo Finance
+Sprinklr (BusinessWire, 6 Jun 2024). businesswire
+Sprout Social (GlobeNewswire, 8 Feb 2024). tipranks
+Reddit’s own partner list: NF.
+
+
+
+Meta and TikTok commercial listening partner lists: NF. LinkedIn and YouTube: NF.
+Pricing.
+
+Meltwater’s blog says “Meltwater, Brandwatch, Sprinklr, and Synthesio all use custom, quote-based pricing… Brand24 is the only platform on this list with published self-serve pricing, starting at $199/month.” meltwater
+Vendr data quoted by Octolens (Sep 2026) puts the Brandwatch median at $50,000 a year across 40 purchases (range $19,542 to $81,200) and Meltwater at $25,800 a year across 126 purchases. Talkwalker is about $13.3k a year, from a “thin sample.”
+Cheap self-serve APIs are scraping-based, not licensed. Data365 says its APIs “scrape” and charges €300 a month for one network (data365.co, undated). Bright Data reportedly charges $1.50 per 1,000 records (2°). data365 +2
+
+
+
+
+
+Corrections to the March 2026 claims
+
+March 2026 claimVerdict (Oct 2026)EvidenceX: about $0.005 per post readConfirmed. Owned reads are $0.001 xdocs.x.com pricing (undated, read 30 Oct 2026)X: 7-day recent search on the Basic tierCorrected. Basic is no longer offered to new developers. Recent search covers 7 days for all pay-per-use developers, and full-archive search is also available on pay-per-use postproxyxdocs.x.com search intro (undated)Threads: keyword search at 500 queries per 7 daysCorrected. Now 2,200 queries per user per rolling 24 hours. Public results need threads_keyword_search approval facebookMeta Threads keyword-search doc (undated, read 30 Oct 2026)LinkedIn: member-feed reads closed to new applicants, no public post searchDirectionally confirmed, 2° only. No public post search. Member social data limited to short caching. The “closed to new applicants” wording: NF in primaryLinkedIn Data Storage Requirements (li-lms-2026-06), plus secondaryBluesky: public data is openConfirmed bskybsky.network relay doc: “No authentication is required”YouTube: search costs 100 units of a 10,000 daily quotaOutdated since 1 Jun 2026. search.list now has its own bucket of 100 calls a day at 1 unit each. Other methods share 10,000 units blotatoupload-postYouTube Data API Revision History (1 Jun 2026 entry)
+
+Options A–E against the constraints
+
+
+(A) Official read APIs only: viable, but only on about five platforms. Bluesky, HN, YouTube and Threads are free, and X costs a few dollars. Reddit closes tomorrow to new applicants. LinkedIn, TikTok and Facebook give an individual no public-search path.
+(B) APIs plus polite fetching of public pages: reject. Scraping is contractually barred on X, LinkedIn and Reddit, and enforcement is escalating (Reddit’s DMCA theory survived dismissal in 2026, and X sent the Nitter cease-and-desist). Bright Data’s wins rested on contract preemption and logged-out scraping, not on a right to bypass bot defenses. elgrith Logged-in browser automation is the worst case, because the account holder is bound by the ToS. lobstr
+(C) Licensed provider: reject on price. Licensed vendors are quote-based, with Vendr medians from about $13.3k a year (Talkwalker) to $50,000 a year (Brandwatch), per Octolens (Sep 2026). Affordable APIs are scraping-based, which simply moves option B’s risk onto a vendor.
+(D) Own posts, comments and metrics: adopt. It is cheapest and cleanest. X owned reads cost $0.001 each, YouTube authorized statistics may be kept with a re-authorization check every 30 days, and LinkedIn organization analytics and Threads insights need app approval. github
+(E) News, RSS, HN and arXiv: adopt as the base. It has no ToS friction for topic discovery and is free. HN’s Algolia API alone gives keyword, trend and comment-thread signals. dev
+Would-change conditions.
+
+Personal reads are neither banned nor overpriced on most platforms; about half are open and cheap. So E does not win outright, but it carries most of the weight.
+The only clear non-commercial permission was Reddit’s, and it closes to new applicants on 31 Oct 2026. Researcher programs (Meta, TikTok) exclude non-academic individuals.
+
+
+
+
+
+Recommended combination: E + D + a narrow A.
+
+
+Ingest HN (Algolia plus Firebase), arXiv, news RSS and Bluesky Jetstream filtered to keywords.
+Pull your own metrics on X (owned reads), YouTube Analytics and Threads insights.
+Add X recent search with a hard monthly spending limit of about $5 to $10, YouTube search.list (100 a day) and Threads keyword search if App Review passes.
+In Rust, store only derived topic aggregates (term counts, URLs, IDs). Expire any raw text within 24 to 48 hours, which is the strictest of the limits above (LinkedIn). Honor YouTube’s 30-day rule and Bluesky deletion events.
+Never use platform content to fine-tune a model.
+
+
+Caveats and open questions
+
+
+X’s monthly cap conflicts (2M vs 3M) across its own docs. X’s rules on inference and prompt input for LLMs: NF.
+Reddit’s Data API Terms and Wiki text and the exact closure timing were read only through secondary sources. Whether a Devvit app could serve personal research: NF.
+The full Bluesky Terms of Service on third-party AI use of public data: NF. The searchPosts and trending endpoints were not verified in primary docs.
+Primary Instagram and Facebook insights docs, the Meta Platform Terms clause on AI and scraping, the TikTok and YouTube ToS scraping clauses, YouTube channel RSS, and HN’s terms: NF in this research.
+LinkedIn §8.2, hiQ, Meta v. Bright Data, X v. Bright Data and Reddit v. SerpApi are all summarized from secondary legal commentary. Have counsel confirm them before relying on them.
+Whether a pre-launch company studio counts as “non-commercial” is a legal judgment. Assume it is commercial.
+
