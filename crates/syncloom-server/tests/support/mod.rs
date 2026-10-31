@@ -64,7 +64,7 @@ pub fn free_port() -> u16 {
 pub fn stored_token(expires_at: &str) -> Token {
     Token {
         access_token: Secret::new(fake_linkedin::DEFAULT_TOKEN),
-        expires_at: expires_at.to_owned(),
+        expires_at: Some(expires_at.to_owned()),
         member_id: fake_linkedin::MEMBER_ID.to_owned(),
         scope: "openid,profile,w_member_social".to_owned(),
         obtained_at: "2026-10-30T18:00:00Z".to_owned(),

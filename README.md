@@ -4,7 +4,7 @@ From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought
 
 ## Layout
 
-- `crates/syncloom-core/` - the rules: thought intake, drafting through a model provider, platform rules, review transitions, the dispatch outbox (contained, or delivered through a granted platform with the truthful outcome), the provenance log, the file store and the Keychain token store. The Claude adapter lives here behind the provider trait; the LinkedIn adapter behind the platform trait.
+- `crates/syncloom-core/` - the rules: thought intake, drafting through a model provider, platform rules, review transitions, the dispatch outbox (contained, or delivered through a granted platform with the truthful outcome), the provenance log, the file store and the Keychain token store. The Claude adapter lives here behind the provider trait; the LinkedIn and Mastodon adapters behind the platform trait; manual export is a separate local handoff, never a post.
 - `crates/syncloom-server/` - the loopback HTTP API (Axum), binary `syncloom-server`.
 - `crates/syncloom-cli/` - the command line, binary `syncloom`; it calls the same core functions and returns the same errors.
 - `contracts/` - fixtures the server tests against (`contracts/studio-api/`, owned by the capability `studio-api`).
@@ -72,8 +72,10 @@ python3 -I scripts/test_check_research_records.py   # the check's own tests
 | `ANTHROPIC_API_KEY` | none | Claude key, read only from the environment, never logged |
 | `SYNCLOOM_CLAUDE_BASE_URL` | `https://api.anthropic.com` | provider URL; `https` or `http://127.0.0.1:<port>` only |
 | `SYNCLOOM_CLAUDE_MODEL` | `claude-sonnet-5-5` | the pinned Claude Sonnet model id (unverified until the live check runs) |
-| `SYNCLOOM_DELIVERY` | none | comma-separated platforms allowed to deliver (`linkedin`); unset keeps every intent contained; an unknown name refuses startup |
-| `SYNCLOOM_KEYCHAIN_SERVICE` | `syncloom` | the Keychain service name of the token items (account `linkedin`); tests use `syncloom-test-<id>` |
+| `SYNCLOOM_DELIVERY` | none | comma-separated platforms allowed to deliver (`linkedin,mastodon`); unset keeps every intent contained; an unknown name refuses startup |
+| `SYNCLOOM_KEYCHAIN_SERVICE` | `syncloom` | the Keychain service name of the token items (account `linkedin` or instance-derived `mastodon:<hash>`); tests use `syncloom-test-<id>` |
+| `SYNCLOOM_MASTODON_INSTANCE` | none | explicitly allowed instance origin; HTTPS, or loopback HTTP for the fake only |
+| `SYNCLOOM_MASTODON_REDIRECT_URL` | `http://127.0.0.1:8792/mastodon/callback` | free loopback callback port registered per instance |
 | `SYNCLOOM_LINKEDIN_CLIENT_ID` | none | the developer app's client id, read only when a sign-in begins |
 | `SYNCLOOM_LINKEDIN_CLIENT_SECRET` | none | the developer app's client secret, read only when a sign-in begins, never logged |
 | `SYNCLOOM_LINKEDIN_REDIRECT_URL` | `http://127.0.0.1:8791/linkedin/callback` | the redirect URL registered in the app; `http://127.0.0.1:<port>/<path>` or `http://localhost:<port>/<path>` only |
@@ -93,7 +95,18 @@ cargo run -p syncloom-cli -- view <piece_id> --kind carousel > /tmp/piece.pdf
 cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <rendered_revision> --image-sha256 <image_sha256> --carousel-sha256 <carousel_sha256>
 ```
 
-The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Text/template changes and every rerender clear approval; visual publish stays contained, even with a delivery grant. Uploads wait for the first live text post.
+The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Text/template changes and every rerender clear approval. LinkedIn visual publish stays contained, even with a delivery grant; its uploads wait for the first live text post. Mastodon can deliver the approved first-slide PNG with alt text when explicitly granted; PDF carousels remain local export files.
+
+## Mastodon and manual handoff
+
+[Mastodon and export](docs/mastodon-and-export.md) documents instance-scoped OAuth, Keychain tokens, PNG publishing with alt text, and local Reddit/TikTok bundles. The channel table now includes `mastodon` and `manual_export`. Mastodon registration and publishing have been proven against a local fake only; a real sign-in or post requires separate captain authorization. Q6 is imported research only, not a reading integration.
+
+```sh
+cargo run -p syncloom-cli -- thought --text "<thought>" --channel manual_export
+cargo run -p syncloom-cli -- export <piece_id> --expected-revision <revision> --target reddit
+```
+
+Export requires current approval, produces text and optional PNG/PDF files plus platform notes under the data directory, and records `exported`, never `posted`.
 
 ## Going live with LinkedIn
 

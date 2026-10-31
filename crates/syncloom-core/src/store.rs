@@ -36,7 +36,7 @@ impl Store {
     /// Open or create the store directories.
     pub fn open(root: impl Into<PathBuf>) -> io::Result<Store> {
         let root = root.into();
-        for sub in [PIECES, OUTBOX, PROVENANCE, "assets"] {
+        for sub in [PIECES, OUTBOX, PROVENANCE, "assets", "exports"] {
             fs::create_dir_all(root.join(sub))?;
             if fs::symlink_metadata(root.join(sub))?
                 .file_type()
@@ -119,6 +119,66 @@ impl Lock<'_> {
         Ok(bytes)
     }
 
+    /// A complete manifest is the bundle commit marker; incomplete writes can be retried.
+    /// The intent is recorded only after this returns. Existing complete bundles are verified,
+    /// never silently repaired, and every destination component is checked before writing.
+    pub(crate) fn save_export(
+        &self,
+        key: &str,
+        files: &std::collections::BTreeMap<String, Vec<u8>>,
+        recorded: bool,
+    ) -> io::Result<PathBuf> {
+        if key.len() != 64 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(io::Error::other("invalid export key"));
+        }
+        let root = self.store.root.join("exports");
+        checked_directory(&root)?;
+        let bundle = root.join(key);
+        match fs::symlink_metadata(&bundle) {
+            Ok(meta) if !meta.is_dir() || meta.file_type().is_symlink() => {
+                return Err(io::Error::other("invalid export directory"));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound && !recorded => {
+                fs::create_dir(&bundle)?;
+            }
+            Err(e) => return Err(e),
+        }
+        let complete = recorded || bundle.join("manifest.json").symlink_metadata().is_ok();
+        for (name, bytes) in files
+            .iter()
+            .filter(|(n, _)| n.as_str() != "manifest.json")
+            .chain(files.iter().filter(|(n, _)| n.as_str() == "manifest.json"))
+        {
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
+                || name.starts_with('.')
+            {
+                return Err(io::Error::other("invalid export filename"));
+            }
+            let path = bundle.join(name);
+            match fs::symlink_metadata(&path) {
+                Ok(meta) if !meta.is_file() || meta.file_type().is_symlink() => {
+                    return Err(io::Error::other("invalid export file"));
+                }
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound && !complete => {}
+                Err(e) => return Err(e),
+            }
+            if complete {
+                if fs::read(&path)? != *bytes {
+                    return Err(io::Error::other("export integrity failed"));
+                }
+            } else {
+                atomic_write(&path, bytes)?;
+            }
+        }
+        File::open(&root)?.sync_all()?;
+        Ok(bundle)
+    }
+
     /// Append one event line and flush it to disk. Earlier lines are never touched.
     pub fn append_event(&self, event: &Event) -> io::Result<()> {
         let mut line = serde_json::to_vec(event).map_err(io::Error::other)?;
@@ -129,6 +189,15 @@ impl Lock<'_> {
             .open(self.store.root.join(PROVENANCE).join(EVENTS))?;
         file.write_all(&line)?;
         file.sync_all()
+    }
+}
+
+fn checked_directory(path: &Path) -> io::Result<()> {
+    let meta = fs::symlink_metadata(path)?;
+    if meta.is_dir() && !meta.file_type().is_symlink() {
+        Ok(())
+    } else {
+        Err(io::Error::other("invalid store directory"))
     }
 }
 

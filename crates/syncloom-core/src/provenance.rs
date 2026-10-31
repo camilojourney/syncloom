@@ -16,6 +16,7 @@ pub struct Usage {
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
     PieceCreated,
+    PieceExported,
     PieceReviewed,
     PieceEdited,
     IntentReserved,

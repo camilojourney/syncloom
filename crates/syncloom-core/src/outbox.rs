@@ -11,6 +11,8 @@ pub const OPERATION_PUBLISH: &str = "publish";
 pub enum IntentStatus {
     /// Reserved while no delivery grant names the platform; nothing left the machine.
     Contained,
+    /// Local manual handoff completed. Never a remote post.
+    Exported,
     /// Written before a platform request; found later, it means an unknown outcome.
     Posting,
     /// The platform answered with its post id.
@@ -31,6 +33,7 @@ impl IntentStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             IntentStatus::Contained => "contained",
+            IntentStatus::Exported => "exported",
             IntentStatus::Posting => "posting",
             IntentStatus::Posted => "posted",
             IntentStatus::Refused => "refused",

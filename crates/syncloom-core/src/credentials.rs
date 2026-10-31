@@ -31,7 +31,8 @@ impl fmt::Debug for Secret {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
     pub access_token: Secret,
-    pub expires_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
     pub member_id: String,
     pub scope: String,
     pub obtained_at: String,
@@ -40,7 +41,9 @@ pub struct Token {
 impl Token {
     /// Expired at or before `now` (both RFC 3339 UTC with whole seconds, so strings compare).
     pub fn is_expired_at(&self, now: &str) -> bool {
-        self.expires_at.as_str() <= now
+        self.expires_at
+            .as_deref()
+            .is_some_and(|expiry| expiry <= now)
     }
 }
 

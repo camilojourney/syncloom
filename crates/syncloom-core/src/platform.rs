@@ -8,6 +8,14 @@ use std::{future::Future, pin::Pin};
 pub struct PostRequest {
     pub request_id: String,
     pub text: String,
+    pub image: Option<PostImage>,
+}
+
+/// Verified image bytes, never a URL or caller-selected path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PostImage {
+    pub bytes: Vec<u8>,
+    pub alt_text: String,
 }
 
 /// The platform's own id for the post and the URL where the founder can see it.
@@ -33,9 +41,30 @@ pub enum PostFailure {
     Unknown,
 }
 
+pub(crate) fn transport_failure(error: reqwest::Error) -> PostFailure {
+    if error.is_connect() {
+        PostFailure::Unreachable
+    } else {
+        PostFailure::Unknown
+    }
+}
+
+pub(crate) fn http_failure(status: reqwest::StatusCode) -> Option<PostFailure> {
+    if status.is_success() {
+        return None;
+    }
+    Some(match status.as_u16() {
+        401 => PostFailure::ConsentRequired,
+        429 => PostFailure::RateLimited,
+        400..=499 => PostFailure::Refused,
+        _ => PostFailure::Unknown,
+    })
+}
+
 pub type PostFuture<'a> = Pin<Box<dyn Future<Output = Result<Posted, PostFailure>> + Send + 'a>>;
 
-/// A platform adapter. Exactly one platform request per call; dropping the future abandons it.
+/// A platform adapter. One status-creation request per call; media preparation may precede it.
+/// Dropping the future abandons it; the outbox treats the outcome as uncertain.
 pub trait Platform: Send + Sync {
     fn publish(&self, request: PostRequest) -> PostFuture<'_>;
 }

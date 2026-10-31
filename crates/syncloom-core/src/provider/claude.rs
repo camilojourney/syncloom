@@ -18,10 +18,10 @@ const MAX_TOKENS: u32 = 1200;
 const MAX_ANSWER_BYTES: usize = 1024 * 1024;
 
 /// Fixed instruction. The thought travels as the user message, never inside this text.
-const SYSTEM_INSTRUCTION: &str = "You write LinkedIn posts for a solo founder from one raw thought they wrote. \
+const SYSTEM_INSTRUCTION: &str = "You write concise posts for a solo founder from one raw thought they wrote. \
 Write in the founder's own voice: direct, concrete, first person, no hype and no filler. \
 Name only the products, people, numbers and facts the thought names; invent nothing. \
-Plain text, no markdown, no hashtags unless the thought has them, under 2500 characters, ready to post. \
+Plain text, no markdown, no hashtags unless the thought has them. \
 Return only the post text.";
 
 /// A provider base URL that passed [`provider_base`]; the rule is [`BaseUrl`]'s.
@@ -62,7 +62,7 @@ impl ClaudeProvider {
         let body = serde_json::json!({
             "model": self.model,
             "max_tokens": MAX_TOKENS,
-            "system": SYSTEM_INSTRUCTION,
+            "system": format!("{} Target channel: {}. Maximum {} characters; keep the draft concise.", SYSTEM_INSTRUCTION, request.channel.name(), request.channel.bounds().max_chars),
             "messages": [{"role": "user", "content": request.thought}],
         });
         let response = self

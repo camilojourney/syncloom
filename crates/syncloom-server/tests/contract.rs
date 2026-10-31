@@ -8,7 +8,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 29] = [
+const ERROR_TABLE: [(u16, &str); 30] = [
     (400, "invalid_request"),
     (403, "host_not_allowed"),
     (404, "not_found"),
@@ -28,6 +28,7 @@ const ERROR_TABLE: [(u16, &str); 29] = [
     (502, "sign_in_rejected"),
     (503, "provider_not_configured"),
     (503, "linkedin_not_configured"),
+    (503, "mastodon_not_configured"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
     (503, "renderer_missing"),
@@ -53,6 +54,10 @@ async fn with_id(request: reqwest::RequestBuilder) -> Answer {
 
 async fn produce(code: &str) -> Answer {
     match code {
+        "mastodon_not_configured" => {
+            let server = start(Scripted::new(text("x"))).await;
+            with_id(client().get(server.url("/v1/mastodon/connection"))).await
+        }
         "host_not_allowed" => {
             let server = start(Scripted::new(text("x"))).await;
             raw(

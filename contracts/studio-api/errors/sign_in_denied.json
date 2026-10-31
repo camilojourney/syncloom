@@ -3,7 +3,7 @@
   "body": {
     "error": {
       "code": "sign_in_denied",
-      "message": "LinkedIn did not grant consent for this sign-in.",
+      "message": "The platform did not grant consent for this sign-in.",
       "request_id": "fixture-request-id"
     }
   }

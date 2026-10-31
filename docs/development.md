@@ -30,7 +30,13 @@ The [visual asset guide](visual-assets.md) pins the installed browser and font a
 
 The Keychain tests write to the real login Keychain under a service named `syncloom-test-<pid>-...` and delete the item before they finish, also when they fail. Check for leftovers with `security dump-keychain | grep syncloom-test` and remove one with `security delete-generic-password -s <service> -a linkedin`. The Keychain binds an item to the code hash of the binary that created it, so the CLI test (a different binary from `syncloom`) checks presence with `security find-generic-password` and never reads the secret; the core credentials test reads it back through one binary. The same binding means a rebuilt `syncloom` or `syncloom-server` asks once, in a GUI terminal, before reading a token an earlier build stored; from a shell without a GUI session the read fails with `platform_failure` in the log.
 
-The fake LinkedIn (`crates/syncloom-core/tests/support/fake_linkedin.rs`, also the `fake_linkedin` example) and the fake Claude never leave the loopback; no test or example reaches api.linkedin.com or api.anthropic.com.
+The fake Mastodon (`crates/syncloom-core/tests/support/fake_mastodon.rs`), fake LinkedIn (`crates/syncloom-core/tests/support/fake_linkedin.rs`, also the `fake_linkedin` example) and fake Claude never leave the loopback; no test or example reaches api.linkedin.com or api.anthropic.com.
+
+## Mastodon and export checks
+
+`cargo test -p syncloom-server --test mastodon_export` runs the end-user HTTP journey: per-instance registration, consent, rendering, exact-byte approval, async media with alt text, status creation, restart/repeat and manual export. `cargo test -p syncloom-core --test mastodon --test manual_export` covers failure boundaries. The CLI suite covers manual export; the credentials suite round-trips both expiring and non-expiring tokens through a test-only Keychain item. No test signs in to a real platform.
+
+OAuth listener/state/JSON bounds are shared in `crates/syncloom-core/src/oauth.rs`; fixed platform errors and transport outcomes remain shared. An aborted callback listener is awaited before the waiting sign-in returns, so its port is actually free. Use the task's red, mutation and final-gate logs as receipts, not the presence of these instructions.
 
 ## Lessons applied
 

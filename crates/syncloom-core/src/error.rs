@@ -29,6 +29,7 @@ pub enum StudioError {
     AssetsRequired,
     AssetIntegrity,
     AssetConflict,
+    MastodonNotConfigured,
     Internal,
 }
 
@@ -40,7 +41,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 26] = [
+const ROWS: [Row; 27] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -84,15 +85,15 @@ const ROWS: [Row; 26] = [
     ),
     row(
         "sign_in_in_progress",
-        "A LinkedIn sign-in is already waiting for the browser. Finish it or wait for it to expire.",
+        "A platform sign-in is already waiting for the browser. Finish it or wait for it to expire.",
     ),
     row(
         "sign_in_not_started",
-        "No LinkedIn sign-in is waiting. Start one first.",
+        "No platform sign-in is waiting. Start one first.",
     ),
     row(
         "sign_in_denied",
-        "LinkedIn did not grant consent for this sign-in.",
+        "The platform did not grant consent for this sign-in.",
     ),
     row(
         "sign_in_state_mismatch",
@@ -104,7 +105,7 @@ const ROWS: [Row; 26] = [
     ),
     row(
         "sign_in_rejected",
-        "LinkedIn refused to issue a token for this sign-in. Check the app's client id, secret and redirect URL.",
+        "The platform refused to issue a token for this sign-in. Check the app's client id, secret and redirect URL.",
     ),
     row(
         "renderer_missing",
@@ -135,11 +136,15 @@ const ROWS: [Row; 26] = [
         "asset_conflict",
         "The expected asset hashes do not match the piece\'s current rendered assets.",
     ),
+    row(
+        "mastodon_not_configured",
+        "Mastodon needs an explicit SYNCLOOM_MASTODON_INSTANCE and a free loopback callback port.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 26] = [
+    pub const ALL: [StudioError; 27] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -165,6 +170,7 @@ impl StudioError {
         StudioError::AssetsRequired,
         StudioError::AssetIntegrity,
         StudioError::AssetConflict,
+        StudioError::MastodonNotConfigured,
         StudioError::Internal,
     ];
 

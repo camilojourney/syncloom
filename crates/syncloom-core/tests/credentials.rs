@@ -61,7 +61,7 @@ fn a_token_round_trips_through_the_keychain_and_is_deleted_without_a_trace() {
 
     let renewed = Token {
         access_token: Secret::new("second-token"),
-        expires_at: "2027-01-01T00:00:00Z".to_owned(),
+        expires_at: Some("2027-01-01T00:00:00Z".to_owned()),
         member_id: "M2".to_owned(),
         scope: "w_member_social".to_owned(),
         obtained_at: FIXED_AT.to_owned(),
@@ -69,9 +69,16 @@ fn a_token_round_trips_through_the_keychain_and_is_deleted_without_a_trace() {
     store.save("linkedin", &renewed).unwrap();
     assert_eq!(
         store.load("linkedin").unwrap(),
-        Some(renewed),
+        Some(renewed.clone()),
         "save overwrites"
     );
+    let nonexpiring = Token {
+        expires_at: None,
+        ..renewed
+    };
+    store.save("linkedin", &nonexpiring).unwrap();
+    assert_eq!(store.load("linkedin").unwrap(), Some(nonexpiring.clone()));
+    assert!(!nonexpiring.is_expired_at("2099-01-01T00:00:00Z"));
 
     store.delete("linkedin").unwrap();
     assert_eq!(store.load("linkedin").unwrap(), None);

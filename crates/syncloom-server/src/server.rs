@@ -40,6 +40,15 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         .route("/v1/thoughts", post(create_thought))
         .route("/v1/pieces/{piece_id}", get(show_piece).patch(review_piece))
         .route("/v1/pieces/{piece_id}/publish", post(publish_piece))
+        .route("/v1/pieces/{piece_id}/export", post(export_piece))
+        .route(
+            "/v1/mastodon/sign-in",
+            post(mastodon_sign_in_begin).get(mastodon_sign_in_wait),
+        )
+        .route(
+            "/v1/mastodon/connection",
+            get(mastodon_connection).delete(mastodon_sign_out),
+        )
         .route("/v1/pieces/{piece_id}/render", post(render_piece))
         .route(
             "/v1/pieces/{piece_id}/assets/image",
@@ -159,6 +168,30 @@ async fn publish_piece(
 ) -> Result<Response, Failure> {
     let response = state.studio.publish(&piece_id(path)?, request).await?;
     Ok(axum::Json(response).into_response())
+}
+
+async fn export_piece(
+    State(state): State<Arc<AppState>>,
+    path: PiecePath,
+    Strict(request): Strict<syncloom_core::manual_export::ExportRequest>,
+) -> Result<Response, Failure> {
+    Ok(axum::Json(state.studio.export(&piece_id(path)?, request)?).into_response())
+}
+async fn mastodon_sign_in_begin(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    Ok((
+        StatusCode::ACCEPTED,
+        axum::Json(state.studio.mastodon_sign_in_begin().await?),
+    )
+        .into_response())
+}
+async fn mastodon_sign_in_wait(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    Ok(axum::Json(state.studio.mastodon_sign_in_wait().await?).into_response())
+}
+async fn mastodon_connection(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    Ok(axum::Json(state.studio.mastodon_connection()?).into_response())
+}
+async fn mastodon_sign_out(State(state): State<Arc<AppState>>) -> Result<Response, Failure> {
+    Ok(axum::Json(state.studio.mastodon_sign_out()?).into_response())
 }
 
 async fn render_piece(
