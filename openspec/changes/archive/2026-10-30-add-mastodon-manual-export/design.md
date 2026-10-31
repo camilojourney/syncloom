@@ -4,7 +4,7 @@ References: security, data, integrations, llm, ui.
 
 ## Context
 
-See proposal.md and [decision 0004](../../../docs/decisions/0004-mastodon-manual-export.md). Existing Platform receives only text; visual assets already have revision-bound hashes. LinkedIn owns a reusable loopback OAuth mechanism embedded in its adapter.
+See proposal.md and [decision 0004](../../../../docs/decisions/0004-mastodon-manual-export.md). Existing Platform receives only text; visual assets already have revision-bound hashes. LinkedIn owns a reusable loopback OAuth mechanism embedded in its adapter.
 
 ## Goals / Non-Goals
 

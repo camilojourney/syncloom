@@ -4,7 +4,7 @@ References: design, security, data, integrations, ui (Code 5.0.0).
 
 ## Context
 
-See proposal.md. Evidence and choices are recorded in [decision 0005](../../../docs/decisions/0005-meta-integration.md).
+See proposal.md. Evidence and choices are recorded in [decision 0005](../../../../docs/decisions/0005-meta-integration.md).
 
 ## Goals / Non-Goals
 

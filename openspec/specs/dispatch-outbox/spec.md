@@ -92,8 +92,12 @@ An intent SHALL survive a restart with its `request_id`, `operation`, `piece_id`
 - **WHEN** `SYNCLOOM_DELIVERY` is `linkedin` and an approved `linkedin_text` piece is published
 - **THEN** one dispatch attempt is made
 
+#### Scenario: Meta grants
+- **WHEN** SYNCLOOM_DELIVERY names facebook or instagram
+- **THEN** the corresponding channel uses its Meta adapter and the other stays contained unless separately granted
+
 #### Scenario: Unknown platform
-- **WHEN** `SYNCLOOM_DELIVERY` is `linkedin,tiktok` or `instagram`
+- **WHEN** `SYNCLOOM_DELIVERY` is `linkedin,tiktok`
 - **THEN** the process exits with an error naming `SYNCLOOM_DELIVERY` and binds no port
 
 ### Requirement: Attempt recorded before the request
@@ -138,3 +142,39 @@ A platform call that exceeds `platform_deadline` SHALL be recorded as `unknown`.
 #### Scenario: Hanging platform
 - **WHEN** the platform does not answer within the deadline
 - **THEN** the response is `unknown`, the fake received exactly one request and the intent is `unknown`
+
+### Requirement: Mastodon delivery grant
+The `mastodon` delivery grant SHALL dispatch Mastodon text and verified visual pieces through `mastodon-integration`, leaving all other grants unchanged.
+
+#### Scenario: Mastodon and manual
+- **WHEN** delivery names `mastodon`
+- **THEN** an approved Mastodon piece makes one adapter attempt; without the grant it stays contained
+- **AND** manual-export pieces never become API posts, even when another platform is granted
+
+### Requirement: Concurrent attempts excluded
+Concurrent publishes SHALL claim a retryable intent once under the same durable guard before any network operation.
+
+#### Scenario: Duplicate during an attempt
+- **WHEN** two callers publish the same approved revision concurrently
+- **THEN** only one adapter call occurs and neither a stale approval nor a stale intent snapshot authorizes another attempt
+
+### Requirement: X pre-publish estimate
+X dry runs SHALL return an integer-micro-USD estimate requiring matching `accepted_cost_microusd` confirmation before delivery reserves an intent.
+
+#### Scenario: Published pricing
+- **WHEN** text has no URL-like token
+- **THEN** the estimate is USD 0.015, plus USD 0.005 if PNG alt metadata is needed
+- **AND** a URL-like token uses USD 0.200 instead of USD 0.015
+- **AND** the response names USD, the pricing date and that this is an estimate, not a charged amount
+
+#### Scenario: Explicit confirmation
+- **WHEN** an approved X revision is delivered without matching confirmation
+- **THEN** the answer is cost_confirmation_required, no intent is reserved and no request is sent
+- **AND** the review confirmation and CLI/API show the estimate before the founder supplies confirmation
+
+### Requirement: Durable X estimate
+The X estimate SHALL survive restart alongside each intent's outcome, including uncertain and failed outcomes, without claiming an actual charge.
+
+#### Scenario: Repeat
+- **WHEN** a posted or uncertain X intent is repeated after restart
+- **THEN** its original estimate and truthful outcome return without another request

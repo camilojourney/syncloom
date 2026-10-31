@@ -3,7 +3,7 @@
 **Date:** 2026-10-30
 **Status:** Proposed
 **Supersedes:** none
-**OpenSpec changes:** [render-visual-assets](../../openspec/changes/render-visual-assets/)
+**OpenSpec changes:** [render-visual-assets](../../openspec/changes/archive/2026-10-30-render-visual-assets/)
 **Agreed:** partly - the captain accepted the visual slice after Q7 in vision 6.2; the slice 3 implementation brief selects Chromium and excludes browser distribution and platform uploads
 **Recommended:** keep Chromium as production renderer; gate any Typst replacement on a later spike
 **Built:** implemented on branch `fm/syncloom-v2-slice3-visuals-20261030`; not yet landed
