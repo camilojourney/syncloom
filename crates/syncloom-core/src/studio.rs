@@ -97,6 +97,13 @@ pub struct PublishResponse {
     pub attempts: u32,
 }
 
+/// A bounded discovery page; the cursor is the last returned piece id.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PiecePage {
+    pub pieces: Vec<Piece>,
+    pub next_after: Option<String>,
+}
+
 pub struct Studio {
     store: Store,
     provider: Arc<dyn ModelProvider>,
@@ -411,6 +418,25 @@ impl Studio {
             )?;
         }
         Ok(ThoughtResponse { group_id, pieces })
+    }
+
+    pub fn list(&self, after: Option<&str>) -> Result<PiecePage, StudioError> {
+        const PAGE_SIZE: usize = 20;
+        if after.is_some_and(|id| !valid_piece_id(id)) {
+            return Err(StudioError::InvalidRequest);
+        }
+        let lock = self.store.lock()?;
+        let mut pieces = lock.pieces_after(after, PAGE_SIZE + 1)?;
+        if pieces.iter().any(|piece| !valid_piece_id(&piece.piece_id)) {
+            return Err(StudioError::Internal);
+        }
+        let next_after = if pieces.len() > PAGE_SIZE {
+            pieces.pop();
+            pieces.last().map(|piece| piece.piece_id.clone())
+        } else {
+            None
+        };
+        Ok(PiecePage { pieces, next_after })
     }
 
     pub fn show(&self, piece_id: &str) -> Result<Piece, StudioError> {

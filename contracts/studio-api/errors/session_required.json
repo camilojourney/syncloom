@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "session_required",
+      "message": "Reload the local studio to obtain a current session token.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

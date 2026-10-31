@@ -544,7 +544,7 @@ fn accepted_code(pending: &Pending, callback: Callback) -> Result<String, Studio
     let state_ok = callback
         .state
         .as_deref()
-        .is_some_and(|state| constant_time_eq(state.as_bytes(), pending.state.expose().as_bytes()));
+        .is_some_and(|state| pending.state.matches(state));
     if !state_ok {
         return Err(StudioError::SignInStateMismatch);
     }
@@ -649,12 +649,4 @@ fn random_token() -> Secret {
 /// The S256 code challenge of a verifier.
 fn s256(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
-}
-
-/// Equal without an early exit on the first differing byte.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }

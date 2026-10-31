@@ -1,11 +1,18 @@
 //! Routes and handlers. Errors are returned as `Failure` values; the request scope renders
 //! them. Bodies are read strictly: a body that is not exactly the documented object is
 //! `invalid_request`.
-use crate::{failure::Failure, request_scope};
+use crate::{
+    boundary::{self, Boundary},
+    failure::Failure,
+    page, request_scope,
+};
 use axum::{
     Router,
     body::Body,
-    extract::{FromRequest, Path, Request, State, rejection::PathRejection},
+    extract::{
+        FromRequest, Path, Query, Request, State,
+        rejection::{PathRejection, QueryRejection},
+    },
     http::{StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -24,18 +31,31 @@ use tower_http::catch_panic::CatchPanicLayer;
 /// Largest request body read. A thought or an edit is far smaller.
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 
-struct AppState {
-    studio: Arc<Studio>,
-    /// The only Host header value accepted: `127.0.0.1:<bound port>`.
-    host: String,
+pub(crate) struct AppState {
+    pub(crate) studio: Arc<Studio>,
+    pub(crate) boundary: Boundary,
 }
 
 pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Result<()> {
+    let address = listener.local_addr()?;
+    if address.ip() != std::net::Ipv4Addr::LOCALHOST {
+        return Err(std::io::Error::other("server listener must bind 127.0.0.1"));
+    }
     let state = Arc::new(AppState {
         studio,
-        host: listener.local_addr()?.to_string(),
+        boundary: Boundary::new(address.to_string()),
     });
     let app = Router::new()
+        .route("/", get(page::index))
+        .route("/studio.css", get(page::css))
+        .route("/review/{piece_id}", get(page::review))
+        .route(
+            "/review/{piece_id}/{action}",
+            get(page::editor).post(page::action),
+        )
+        .route("/actions/thought", post(page::thought))
+        .route("/v1/session", get(session))
+        .route("/v1/pieces", get(list_pieces))
         .route("/v1/health", get(health))
         .route("/v1/thoughts", post(create_thought))
         .route("/v1/pieces/{piece_id}", get(show_piece).patch(review_piece))
@@ -60,28 +80,25 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         .fallback(|| async { Failure::NotFound })
         .method_not_allowed_fallback(|| async { Failure::MethodNotAllowed })
         .layer(CatchPanicLayer::custom(|_| request_scope::internal_error()))
-        .layer(middleware::from_fn_with_state(state.clone(), host_check))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            boundary::middleware,
+        ))
         .layer(middleware::from_fn(request_scope::middleware))
         .with_state(state);
     axum::serve(listener, app).await
 }
 
-/// DNS-rebinding guard: a page that resolves its own name to 127.0.0.1 keeps its own Host.
-async fn host_check(
+async fn session(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    axum::Json(json!({"token": state.boundary.token()}))
+}
+
+async fn list_pieces(
     State(state): State<Arc<AppState>>,
-    request: Request,
-    next: middleware::Next,
-) -> Response {
-    let mut hosts = request.headers().get_all(header::HOST).iter();
-    let accepted = match (hosts.next(), hosts.next()) {
-        (Some(host), None) => host.as_bytes() == state.host.as_bytes(),
-        _ => false,
-    };
-    if accepted {
-        next.run(request).await
-    } else {
-        Failure::HostNotAllowed.into_response()
-    }
+    query: Result<Query<page::Cursor>, QueryRejection>,
+) -> Result<Response, Failure> {
+    let page = state.studio.list(page::cursor(query)?.after.as_deref())?;
+    Ok(axum::Json(page).into_response())
 }
 
 async fn health() -> impl IntoResponse {
@@ -107,7 +124,7 @@ where
     }
 }
 
-async fn read_bounded(mut body: Body) -> Result<Vec<u8>, Failure> {
+pub(crate) async fn read_bounded(mut body: Body) -> Result<Vec<u8>, Failure> {
     let mut bytes = Vec::new();
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|_| Failure::Studio(StudioError::InvalidRequest))?;

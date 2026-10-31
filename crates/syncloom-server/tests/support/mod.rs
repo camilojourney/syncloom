@@ -27,6 +27,7 @@ pub const THOUGHT: &str = "Agents write better when the spec names one owner per
 pub struct TestServer {
     pub addr: SocketAddr,
     pub dir: TempDir,
+    pub token: String,
 }
 
 impl TestServer {
@@ -133,7 +134,15 @@ pub async fn start_studio(
             .await
             .unwrap()
     });
-    TestServer { addr, dir }
+    let mut server = TestServer {
+        addr,
+        dir,
+        token: String::new(),
+    };
+    let session = get(&server, "/v1/session").await;
+    assert_eq!(session.status, 200, "{}", session.raw);
+    server.token = session.body["token"].as_str().unwrap().to_owned();
+    server
 }
 
 pub async fn start(provider: Arc<Scripted>) -> TestServer {
@@ -192,7 +201,9 @@ pub async fn send_json(
     path: &str,
     body: Value,
 ) -> Answer {
-    let request = client().request(method, server.url(path));
+    let request = client()
+        .request(method, server.url(path))
+        .header("x-syncloom-token", &server.token);
     let request = if body.is_null() {
         request
     } else {
@@ -207,7 +218,15 @@ pub async fn post(server: &TestServer, path: &str, body: Value) -> Answer {
 
 /// A POST with no body, as the sign-in operation takes.
 pub async fn post_empty(server: &TestServer, path: &str) -> Answer {
-    answer(client().post(server.url(path)).send().await.unwrap()).await
+    answer(
+        client()
+            .post(server.url(path))
+            .header("x-syncloom-token", &server.token)
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await
 }
 
 pub async fn patch(server: &TestServer, path: &str, body: Value) -> Answer {

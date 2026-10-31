@@ -1,6 +1,8 @@
 //! syncloom-server: the loopback HTTP API of the studio (`studio-api`).
+mod boundary;
 mod config;
 mod failure;
+mod page;
 mod request_scope;
 mod server;
 

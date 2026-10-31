@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "origin_not_allowed",
+      "message": "Requests must come from the local studio origin.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

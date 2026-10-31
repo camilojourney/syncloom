@@ -89,6 +89,13 @@ fn request_id(headers: &HeaderMap) -> String {
 fn route_label(path: &str) -> &'static str {
     let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
     match segments.as_slice() {
+        [""] => "/",
+        ["studio.css"] => "/studio.css",
+        ["actions", "thought"] => "/actions/thought",
+        ["review", _] => "/review/{piece_id}",
+        ["review", _, _] => "/review/{piece_id}/{action}",
+        ["v1", "session"] => "/v1/session",
+        ["v1", "pieces"] => "/v1/pieces",
         ["v1", "health"] => "/v1/health",
         ["v1", "thoughts"] => "/v1/thoughts",
         ["v1", "pieces", _] => "/v1/pieces/{piece_id}",
@@ -103,6 +110,7 @@ fn route_label(path: &str) -> &'static str {
 }
 
 pub(crate) async fn middleware(request: Request, next: Next) -> Response {
+    let is_page = crate::boundary::is_page_path(request.uri().path());
     let scope = Scope(Arc::new(Inner {
         id: request_id(request.headers()),
         route: route_label(request.uri().path()),
@@ -114,7 +122,11 @@ pub(crate) async fn middleware(request: Request, next: Next) -> Response {
     match response.extensions_mut().remove::<Failure>() {
         Some(failure) => {
             scope.finish(failure.status().as_u16(), Some(failure.code()));
-            response = failure.envelope(&scope.0.id);
+            response = if is_page {
+                crate::page::error(failure, &scope.0.id)
+            } else {
+                failure.envelope(&scope.0.id)
+            };
         }
         None => scope.finish(response.status().as_u16(), None),
     }
@@ -122,6 +134,7 @@ pub(crate) async fn middleware(request: Request, next: Next) -> Response {
         "x-request-id",
         HeaderValue::from_str(&scope.0.id).expect("request ids are visible ASCII"),
     );
+    crate::boundary::protect(&mut response);
     response
 }
 

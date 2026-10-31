@@ -82,6 +82,40 @@ impl Lock<'_> {
     pub fn load_piece(&self, piece_id: &str) -> io::Result<Option<Piece>> {
         read_json(&self.piece_path(piece_id))
     }
+    /// Keep only the smallest requested names, so discovery never accumulates all records.
+    pub fn pieces_after(&self, after: Option<&str>, limit: usize) -> io::Result<Vec<Piece>> {
+        let mut names = std::collections::BTreeSet::new();
+        for entry in fs::read_dir(self.store.root.join(PIECES))? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let Some(id) = name.to_str().and_then(|name| name.strip_suffix(".json")) else {
+                continue;
+            };
+            if after.is_some_and(|after| id <= after) {
+                continue;
+            }
+            if !entry.file_type()?.is_file() {
+                return Err(io::Error::other("piece record is not a regular file"));
+            }
+            names.insert(id.to_owned());
+            if names.len() > limit {
+                names.pop_last();
+            }
+        }
+        names
+            .into_iter()
+            .map(|id| {
+                let piece = self
+                    .load_piece(&id)?
+                    .ok_or_else(|| io::Error::other("piece disappeared"))?;
+                if piece.piece_id != id {
+                    return Err(io::Error::other("piece id disagrees with record"));
+                }
+                Ok(piece)
+            })
+            .collect()
+    }
+
     pub fn save_piece(&self, piece: &Piece) -> io::Result<()> {
         write_json(&self.piece_path(&piece.piece_id), piece)
     }

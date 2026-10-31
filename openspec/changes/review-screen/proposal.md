@@ -1,10 +1,14 @@
-# Request
+## Request
 
 > aslo build synchroloom rebuild it all as we mentioned and also the integrations wtih al lthe social media apis to make deep research onthem too ... use hte openspec last version with the instruciont conf think about what is next and start building all thos features.
 
 ## Approval
 
 pending
+
+New capability requested: none.
+
+Duplicate kept: contracts/studio-api/errors/ fixtures and failure.rs, because independent fixtures pin the public error contract.
 
 ## Why
 

@@ -42,6 +42,6 @@ pub use provenance::{Event, EventKind, Usage};
 pub use provider::{Draft, DraftFuture, DraftRequest, ModelProvider, ProviderError};
 pub use store::Store;
 pub use studio::{
-    MIN_THOUGHT_CHARS, PublishRequest, PublishResponse, ReviewRequest, Settings, Studio,
+    MIN_THOUGHT_CHARS, PiecePage, PublishRequest, PublishResponse, ReviewRequest, Settings, Studio,
     ThoughtRequest, ThoughtResponse, normalize_thought,
 };

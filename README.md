@@ -5,7 +5,7 @@ From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought
 ## Layout
 
 - `crates/syncloom-core/` - the rules: thought intake, drafting through a model provider, platform rules, review transitions, the dispatch outbox (contained, or delivered through a granted platform with the truthful outcome), the provenance log, the file store and the Keychain token store. The Claude adapter lives here behind the provider trait; the LinkedIn adapter behind the platform trait.
-- `crates/syncloom-server/` - the loopback HTTP API (Axum), binary `syncloom-server`.
+- `crates/syncloom-server/` - the loopback HTTP API and Rust-rendered browser studio (Axum), binary `syncloom-server`.
 - `crates/syncloom-cli/` - the command line, binary `syncloom`; it calls the same core functions and returns the same errors.
 - `contracts/` - fixtures the server tests against (`contracts/studio-api/`, owned by the capability `studio-api`).
 - `openspec/` - specs and changes; `openspec/specs/` is the only specification authority.
@@ -23,6 +23,8 @@ cargo run -p syncloom-server            # binds 127.0.0.1:8790, override with SY
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
+Open **http://127.0.0.1:8790/** in the laptop browser to see thoughts and pieces, edit a draft, render phone-sized PNG/PDF previews, approve the exact revision and hashes, and explicitly publish through the existing outbox. Edits open on a separate screen so unsaved text cannot be mistaken for an approved draft. [Browser studio and HTTP session protection](docs/studio.md).
+
 Command line, same core, same errors:
 
 ```sh
@@ -35,6 +37,8 @@ cargo run -p syncloom-cli -- linkedin sign-in     # prints the authorization URL
 cargo run -p syncloom-cli -- linkedin status      # signed_out | awaiting_consent | signed_in | expired, from the Keychain and the clock
 cargo run -p syncloom-cli -- linkedin sign-out    # deletes the token
 ```
+
+HTTP clients first call `GET /v1/session` and pass its `token` once in `X-Syncloom-Token` for POST, PATCH and DELETE. `GET /v1/pieces?after=<last_piece_id>` discovers twenty saved pieces per page. All routes reject foreign Host/Origin and cross-site browser requests, with no CORS opening. The direct-core CLI needs no HTTP token.
 
 The API has the same four LinkedIn operations: `POST /v1/linkedin/sign-in` (202, the URL), `GET /v1/linkedin/sign-in` (waits, 200 the connection), `GET /v1/linkedin/connection`, `DELETE /v1/linkedin/connection`.
 

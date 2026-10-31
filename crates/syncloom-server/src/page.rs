@@ -1,0 +1,377 @@
+//! Rust-rendered browser adapters. Studio owns every content, revision and dispatch rule.
+use crate::{failure::Failure, server::AppState};
+use axum::{
+    Form,
+    extract::{
+        Path, Query, State,
+        rejection::{FormRejection, PathRejection, QueryRejection},
+    },
+    http::StatusCode,
+    response::{Html, IntoResponse, Redirect, Response},
+};
+use serde::Deserialize;
+use std::sync::Arc;
+use syncloom_core::{
+    AssetHashes, Piece, PublishRequest, PublishResponse, RenderRequest, ReviewRequest, Status,
+    StudioError, ThoughtRequest,
+};
+
+pub(crate) fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn document(title: &str, content: &str) -> Html<String> {
+    Html(format!(
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{} | Syncloom</title><link rel="stylesheet" href="/studio.css"></head><body><header class="topbar"><a class="brand" href="/">syncloom<span class="brand-dot">.</span></a><span class="local">Laptop only <span aria-hidden="true">·</span> 127.0.0.1</span></header><main>{content}</main><footer>One thought. Your voice. Your decision.<span>Local studio / LinkedIn</span></footer></body></html>"#,
+        escape(title)
+    ))
+}
+
+pub(crate) fn error(failure: Failure, request_id: &str) -> Response {
+    (failure.status(), document("Something needs attention", &format!(r#"<section class="error card"><p class="eyebrow">Nothing was assumed</p><h1>Something needs attention.</h1><p>{}</p><p><code>{}</code></p><p class="muted">Request <code>{}</code></p><a class="button" href="/">Back to studio</a><p class="muted">Reopen the piece to see its current saved revision before trying again.</p></section>"#, failure.message(), failure.code(), escape(request_id)))).into_response()
+}
+
+pub(crate) async fn css() -> impl IntoResponse {
+    (
+        [("content-type", "text/css; charset=utf-8")],
+        include_str!("studio.css"),
+    )
+}
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Cursor {
+    pub(crate) after: Option<String>,
+}
+
+pub(crate) fn cursor(query: Result<Query<Cursor>, QueryRejection>) -> Result<Cursor, Failure> {
+    query
+        .map(|Query(query)| query)
+        .map_err(|_| StudioError::InvalidRequest.into())
+}
+
+pub(crate) async fn index(
+    State(state): State<Arc<AppState>>,
+    query: Result<Query<Cursor>, QueryRejection>,
+) -> Result<Html<String>, Failure> {
+    let page = state.studio.list(cursor(query)?.after.as_deref())?;
+    let mut saved = String::new();
+    for piece in page.pieces {
+        saved.push_str(&format!(r#"<a class="piece-card" href="/review/{}"><div class="card-meta"><span>LinkedIn / text</span><span class="status">{}</span></div><h3>{}</h3><p class="thought-excerpt">{}</p><span class="open-piece">Review piece ↗</span></a>"#, escape(&piece.piece_id), status(piece.status), escape(&piece.text), escape(&piece.source.raw_input)));
+    }
+    if saved.is_empty() {
+        saved.push_str("<div class=\"empty card\"><h3>No pieces yet</h3><p>Your next piece starts with a thought. Add one to draft for LinkedIn.</p></div>");
+    }
+    if let Some(after) = page.next_after {
+        saved.push_str(&format!(
+            r#"<a class="button secondary" href="/?after={}">Next page</a>"#,
+            escape(&after)
+        ));
+    }
+    Ok(document(
+        "Studio",
+        &format!(
+            r#"<section class="intro"><p class="eyebrow">The founder's studio</p><h1>Make the thought<br>worth sharing.</h1><p class="lede">Draft with intention. Review the exact version. Publish only when you decide.</p></section><div class="home-grid"><section class="card composer"><span class="step">01 / Start here</span><h2>What's on your mind?</h2><form method="post" action="/actions/thought">{}<label for="thought">Your raw thought</label><textarea id="thought" name="text" rows="8" required placeholder="An observation, a lesson, a point of view…"></textarea><p class="hint">One LinkedIn text draft. The model may take up to a minute; nothing publishes here.</p><button type="submit">Draft a piece <span aria-hidden="true">↗</span></button></form></section><section aria-labelledby="saved"><div class="section-heading"><h2 id="saved">Thoughts &amp; pieces</h2><span class="muted">Saved on this laptop</span></div><div class="pieces">{saved}</div></section></div>"#,
+            csrf(&state)
+        ),
+    ))
+}
+
+fn csrf(state: &AppState) -> String {
+    hidden("csrf", state.boundary.token())
+}
+fn hidden(name: &str, value: &str) -> String {
+    format!(
+        r#"<input type="hidden" name="{name}" value="{}">"#,
+        escape(value)
+    )
+}
+fn revision_fields(state: &AppState, piece: &Piece) -> String {
+    format!(
+        "{}{}",
+        csrf(state),
+        hidden("expected_revision", &piece.revision)
+    )
+}
+fn status(status: Status) -> &'static str {
+    match status {
+        Status::PendingReview => "Pending review",
+        Status::Approved => "Approved",
+        Status::Rejected => "Rejected",
+    }
+}
+
+pub(crate) async fn review(
+    State(state): State<Arc<AppState>>,
+    path: Result<Path<String>, PathRejection>,
+) -> Result<Html<String>, Failure> {
+    let Path(id) = path.map_err(|_| StudioError::PieceNotFound)?;
+    let piece = state.studio.show(&id)?;
+    Ok(piece_page(&state, &piece, None))
+}
+
+pub(crate) async fn editor(
+    State(state): State<Arc<AppState>>,
+    path: Result<Path<(String, String)>, PathRejection>,
+) -> Result<Html<String>, Failure> {
+    let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
+    if !matches!(action.as_str(), "edit" | "render") {
+        return Err(Failure::MethodNotAllowed);
+    }
+    let piece = state.studio.show(&id)?;
+    if action == "render" {
+        return Ok(visual_editor(&state, &piece));
+    }
+    Ok(document(
+        "Edit draft",
+        &format!(
+            r#"<a class="back" href="/review/{id}">← Cancel and return to saved draft</a><section class="card edit-card"><p class="eyebrow">Edit the next revision</p><h1>Keep it in your voice.</h1><p>Saving a change clears approval and rendered assets. Review and approve the new version afterward.</p><form method="post" action="/review/{id}/edit">{}<label for="draft">Draft text</label><textarea id="draft" name="text" rows="14" required>{}</textarea><button type="submit">Save changes</button></form></section>"#,
+            revision_fields(&state, &piece),
+            escape(&piece.text)
+        ),
+    ))
+}
+
+fn visual_editor(state: &AppState, piece: &Piece) -> Html<String> {
+    let slides = piece
+        .visual
+        .as_ref()
+        .map(|v| v.slides.join("\n"))
+        .unwrap_or_else(|| piece.text.clone());
+    let paper = if piece.visual.as_ref().is_some_and(|v| v.template == "paper") {
+        " selected"
+    } else {
+        ""
+    };
+    let id = escape(&piece.piece_id);
+    document(
+        "Render previews",
+        &format!(
+            r#"<a class="back" href="/review/{id}">← Cancel and return to saved draft</a><section class="card edit-card"><p class="eyebrow">Configure the next revision</p><h1>Give the thought a shape.</h1><p>Rendering clears earlier approval. Return to the review page to inspect the saved assets before approving.</p><form method="post" action="/review/{id}/render">{}<label for="template">Template</label><select id="template" name="template"><option value="midnight">Midnight</option><option value="paper"{paper}>Paper</option></select><label for="slides">Slides, one per line</label><textarea id="slides" name="slides" rows="8" required>{}</textarea><p class="hint">Creates a PNG and a PDF carousel. Rendering may take 30 seconds.</p><button type="submit">Render previews</button></form></section>"#,
+            revision_fields(state, piece),
+            escape(&slides)
+        ),
+    )
+}
+
+fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
+    let id = escape(&piece.piece_id);
+    let fields = revision_fields(state, piece);
+    let mut hashes = String::new();
+    if let Some(assets) = &piece.assets {
+        hashes = format!(
+            "{}{}",
+            hidden("image_sha256", &assets.image_sha256),
+            hidden("carousel_sha256", &assets.carousel_sha256)
+        );
+    }
+    let approval_disabled = if piece.status != Status::PendingReview
+        || (piece.visual.is_some() && piece.assets.is_none())
+    {
+        " disabled"
+    } else {
+        ""
+    };
+    let publish_disabled = if piece.status != Status::Approved {
+        " disabled"
+    } else {
+        ""
+    };
+    let approval_note = match piece.status {
+        Status::Approved => "This saved revision is approved. Publishing is a separate action.",
+        Status::Rejected => "This piece is rejected. Edit it to start a new review.",
+        Status::PendingReview if piece.visual.is_some() && piece.assets.is_none() => {
+            "Render current assets before approval."
+        }
+        Status::PendingReview => {
+            "Approval applies only to this saved revision and the exact asset hashes shown."
+        }
+    };
+    let receipt = receipt.map(publish_receipt).unwrap_or_default();
+    let last_outcome = piece
+        .publish_status
+        .as_deref()
+        .map(|s| {
+            format!(
+                "<p class=\"muted\">Last saved publish outcome: <strong>{}</strong></p>",
+                escape(s)
+            )
+        })
+        .unwrap_or_default();
+    document(
+        "Review piece",
+        &format!(
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">LinkedIn / text</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} characters / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Publishing uses the existing outbox. Without a delivery grant, nothing leaves this laptop. Visual uploads remain contained.</p><form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><div class="section-heading"><div><p class="eyebrow">A smaller screen. The same content.</p><h2>Phone previews</h2></div><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            status(piece.status),
+            escape(&piece.source.raw_input),
+            escape(&piece.text),
+            piece.fit.char_count,
+            piece.fit.max_chars,
+            piece.fit.verdict,
+            escape(&piece.revision),
+            previews(piece)
+        ),
+    )
+}
+
+fn previews(piece: &Piece) -> String {
+    let id = escape(&piece.piece_id);
+    match &piece.assets {
+        Some(assets) => format!(
+            r#"<div class="preview-grid"><article class="preview-card"><div class="preview-label">Image / PNG</div><img class="asset-image" src="/v1/pieces/{id}/assets/image" alt="Rendered first slide for this exact revision"><div class="preview-details"><a href="/v1/pieces/{id}/assets/image" target="_blank" rel="noreferrer">Open verified PNG ↗</a><p class="label">Image SHA-256</p><code class="hash">{}</code></div></article><article class="preview-card"><div class="preview-label">Carousel / PDF · {} pages</div><iframe title="Rendered PDF carousel" src="/v1/pieces/{id}/assets/carousel#toolbar=0&amp;navpanes=0&amp;view=FitH"></iframe><div class="preview-details"><a href="/v1/pieces/{id}/assets/carousel" target="_blank" rel="noreferrer">Open verified PDF ↗</a><p class="hint">Scroll inside the PDF to inspect every page. If your browser cannot embed PDFs, use the link above.</p><p class="label">Carousel SHA-256</p><code class="hash">{}</code></div></article></div>"#,
+            escape(&assets.image_sha256),
+            assets.pages,
+            escape(&assets.carousel_sha256)
+        ),
+        None => format!(
+            r#"<article class="text-phone"><div class="preview-label">LinkedIn / text preview</div><p class="draft-text">{}</p></article><div class="empty visual-empty"><h3>No current visual assets</h3><p>Render previews to inspect the image and carousel before approving.</p></div>"#,
+            escape(&piece.text)
+        ),
+    }
+}
+
+fn publish_receipt(receipt: &PublishResponse) -> String {
+    let explanation = match receipt.status.as_str() {
+        "contained" => "Nothing was sent. The publish intent is saved in the local outbox.",
+        "posted" => "The platform returned a post id. This is the recorded delivery outcome.",
+        "unknown" => {
+            "Delivery is unknown. Do not retry blindly; check the platform before taking action."
+        }
+        "refused" => "The platform refused the request. Nothing is claimed as posted.",
+        "consent_required" => "Sign-in or consent is required. Nothing is claimed as posted.",
+        "rate_limited" => "The platform rate-limited the request. Nothing is claimed as posted.",
+        "unreachable" => "The platform was unreachable. Nothing is claimed as posted.",
+        _ => "See the core outcome below. No delivery is assumed.",
+    };
+    format!(
+        r#"<section class="receipt" aria-label="Publish receipt"><p class="eyebrow">Publish receipt</p><h2>{}</h2><p>{explanation}</p><p>Request: <code>{}</code> · Attempts: {}</p><p>Post id: {} · Post URL: {}</p></section>"#,
+        escape(&receipt.status),
+        escape(receipt.request_id.as_deref().unwrap_or("none")),
+        receipt.attempts,
+        escape(receipt.post_id.as_deref().unwrap_or("none")),
+        escape(receipt.post_url.as_deref().unwrap_or("none"))
+    )
+}
+
+// Transport data only: all domain validation remains in Studio and its existing request types.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ThoughtForm {
+    csrf: String,
+    text: String,
+}
+
+pub(crate) async fn thought(
+    State(state): State<Arc<AppState>>,
+    form: Result<Form<ThoughtForm>, FormRejection>,
+) -> Result<Redirect, Failure> {
+    let Form(form) = form.map_err(|_| StudioError::InvalidRequest)?;
+    let _ = form.csrf; // The boundary already authenticated it before parsing this adapter.
+    let response = state
+        .studio
+        .create_thought(ThoughtRequest {
+            text: form.text,
+            channels: vec!["linkedin_text".into()],
+        })
+        .await?;
+    Ok(Redirect::to(&format!(
+        "/review/{}",
+        response.pieces[0].piece_id
+    )))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PieceForm {
+    csrf: String,
+    expected_revision: String,
+    text: Option<String>,
+    template: Option<String>,
+    slides: Option<String>,
+    image_sha256: Option<String>,
+    carousel_sha256: Option<String>,
+}
+
+pub(crate) async fn action(
+    State(state): State<Arc<AppState>>,
+    path: Result<Path<(String, String)>, PathRejection>,
+    form: Result<Form<PieceForm>, FormRejection>,
+) -> Result<Response, Failure> {
+    let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
+    let Form(form) = form.map_err(|_| StudioError::InvalidRequest)?;
+    let _ = form.csrf;
+    let revision = form.expected_revision;
+    match action.as_str() {
+        "edit" => {
+            state.studio.review(
+                &id,
+                ReviewRequest {
+                    text: Some(form.text.ok_or(StudioError::InvalidRequest)?),
+                    status: None,
+                    expected_revision: revision,
+                    expected_assets: None,
+                },
+            )?;
+        }
+        "render" => {
+            state
+                .studio
+                .render(
+                    &id,
+                    RenderRequest {
+                        expected_revision: revision,
+                        template: form.template.ok_or(StudioError::InvalidRequest)?,
+                        slides: form
+                            .slides
+                            .ok_or(StudioError::InvalidRequest)?
+                            .lines()
+                            .map(str::to_owned)
+                            .collect(),
+                    },
+                )
+                .await?;
+        }
+        "approve" => {
+            let expected_assets = match (form.image_sha256, form.carousel_sha256) {
+                (None, None) => None,
+                (Some(image_sha256), Some(carousel_sha256)) => Some(AssetHashes {
+                    image_sha256,
+                    carousel_sha256,
+                }),
+                _ => return Err(StudioError::InvalidRequest.into()),
+            };
+            state.studio.review(
+                &id,
+                ReviewRequest {
+                    status: Some(Status::Approved),
+                    text: None,
+                    expected_revision: revision,
+                    expected_assets,
+                },
+            )?;
+        }
+        "publish" => {
+            let receipt = state
+                .studio
+                .publish(
+                    &id,
+                    PublishRequest {
+                        expected_revision: revision,
+                        dry_run: false,
+                    },
+                )
+                .await?;
+            return Ok((
+                StatusCode::OK,
+                piece_page(&state, &receipt.piece, Some(&receipt)),
+            )
+                .into_response());
+        }
+        _ => return Err(Failure::NotFound),
+    }
+    Ok(Redirect::to(&format!("/review/{id}")).into_response())
+}

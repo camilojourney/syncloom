@@ -8,7 +8,9 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 29] = [
+const ERROR_TABLE: [(u16, &str); 31] = [
+    (403, "origin_not_allowed"),
+    (403, "session_required"),
     (400, "invalid_request"),
     (403, "host_not_allowed"),
     (404, "not_found"),
@@ -41,6 +43,23 @@ const ERROR_TABLE: [(u16, &str); 29] = [
 ];
 
 async fn with_id(request: reqwest::RequestBuilder) -> Answer {
+    let url = request
+        .try_clone()
+        .unwrap()
+        .build()
+        .unwrap()
+        .url()
+        .join("/v1/session")
+        .unwrap();
+    let session: serde_json::Value = client()
+        .get(url)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let request = request.header("x-syncloom-token", session["token"].as_str().unwrap());
     answer(
         request
             .header("X-Request-Id", FIXTURE_ID)
@@ -53,6 +72,27 @@ async fn with_id(request: reqwest::RequestBuilder) -> Answer {
 
 async fn produce(code: &str) -> Answer {
     match code {
+        "session_required" => {
+            let server = start(Scripted::new(text("x"))).await;
+            answer(
+                client()
+                    .post(server.url("/v1/thoughts"))
+                    .header("X-Request-Id", FIXTURE_ID)
+                    .send()
+                    .await
+                    .unwrap(),
+            )
+            .await
+        }
+        "origin_not_allowed" => {
+            let server = start(Scripted::new(text("x"))).await;
+            with_id(
+                client()
+                    .get(server.url("/v1/health"))
+                    .header("origin", "https://evil.invalid"),
+            )
+            .await
+        }
         "host_not_allowed" => {
             let server = start(Scripted::new(text("x"))).await;
             raw(

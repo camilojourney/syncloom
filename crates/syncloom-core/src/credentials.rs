@@ -18,6 +18,11 @@ impl Secret {
     pub fn expose(&self) -> &str {
         &self.0
     }
+    /// Shared secret comparison for OAuth state and the local HTTP session.
+    pub fn matches(&self, candidate: &str) -> bool {
+        use subtle::ConstantTimeEq;
+        bool::from(self.0.as_bytes().ct_eq(candidate.as_bytes()))
+    }
 }
 
 impl fmt::Debug for Secret {

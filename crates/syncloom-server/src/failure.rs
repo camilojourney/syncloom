@@ -11,6 +11,8 @@ use syncloom_core::StudioError;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Failure {
     HostNotAllowed,
+    OriginNotAllowed,
+    SessionRequired,
     NotFound,
     MethodNotAllowed,
     Studio(StudioError),
@@ -55,7 +57,9 @@ const STUDIO_STATUSES: [StatusCode; 26] = [
 impl Failure {
     pub(crate) fn status(self) -> StatusCode {
         match self {
-            Failure::HostNotAllowed => StatusCode::FORBIDDEN,
+            Failure::HostNotAllowed | Failure::OriginNotAllowed | Failure::SessionRequired => {
+                StatusCode::FORBIDDEN
+            }
             Failure::NotFound => StatusCode::NOT_FOUND,
             Failure::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Failure::Studio(error) => STUDIO_STATUSES[error as usize],
@@ -64,6 +68,8 @@ impl Failure {
     pub(crate) fn code(self) -> &'static str {
         match self {
             Failure::HostNotAllowed => "host_not_allowed",
+            Failure::OriginNotAllowed => "origin_not_allowed",
+            Failure::SessionRequired => "session_required",
             Failure::NotFound => "not_found",
             Failure::MethodNotAllowed => "method_not_allowed",
             Failure::Studio(error) => error.code(),
@@ -72,6 +78,10 @@ impl Failure {
     pub(crate) fn message(self) -> &'static str {
         match self {
             Failure::HostNotAllowed => "Requests must be sent to 127.0.0.1 on the server port.",
+            Failure::OriginNotAllowed => "Requests must come from the local studio origin.",
+            Failure::SessionRequired => {
+                "Reload the local studio to obtain a current session token."
+            }
             Failure::NotFound => "The requested endpoint does not exist.",
             Failure::MethodNotAllowed => "This HTTP method is not supported for this endpoint.",
             Failure::Studio(error) => error.message(),

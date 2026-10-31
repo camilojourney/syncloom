@@ -206,6 +206,7 @@ async fn error_messages_are_fixed_and_never_echo_request_content() {
                     .post(server.url("/v1/thoughts"))
                     .header("Content-Type", "application/json")
                     .header("X-Canary", canary)
+                    .header("x-syncloom-token", &server.token)
                     .body(format!("{{\"text\": \"{canary}\" and junk"))
                     .send()
                     .await
@@ -272,6 +273,7 @@ async fn malformed_thought_bodies_are_invalid_requests_without_a_provider_call()
         client()
             .post(server.url("/v1/thoughts"))
             .header("Content-Type", "text/plain")
+            .header("x-syncloom-token", &server.token)
             .body("not json")
             .send()
             .await
