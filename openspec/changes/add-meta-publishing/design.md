@@ -19,7 +19,7 @@ Keep one outbox and one credential policy. No real sign-in, post, hosting or sch
 - MediaDelivery owns external byte availability and accepts only bytes, never a caller path/URL; the production default refuses. Reject invented hosting because public exposure and retention need an owner decision.
 - Graph calls use fixed origin, bounded JSON, fixed errors, shared HTTP timeout/no-redirect policy and no hidden retry. After a possibly committed publish, any failure remains unknown so outbox prevents duplicates.
 - Keep scheduling local by not creating containers before a dispatch. No native scheduling parameters or durable containers.
-- Kept: channel-specific text bounds in channel.rs and runtime media checks in Meta, because draft fit and external media protocol have independent owners.
+- Shared OAuth session now owns its immutable credential account, callback configuration and connection/sign-out policy, and TokenStore owns usable-token lookup; adapters retain only platform-specific exchange and publishing knowledge. This removes repeated lifecycle policy rather than waiving copy findings.
 
 ## Security boundaries
 

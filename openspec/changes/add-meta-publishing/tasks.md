@@ -9,8 +9,8 @@
 - [x] 2.1 Add Meta channels, grants, business login and selected Page token derivation through shared OAuth/Keychain policy.
 - [x] 2.2 Add approved JPEG slides, integrity checks and public media delivery port with unconfigured production default.
 - [x] 2.3 Implement typed Graph Page and Instagram publishing with truthful failure semantics and no hidden retries.
-- [ ] 2.4 Prove full HTTP consent, rendering, exact approval, delivery and restart/repeat against stateful fake Graph.
-- [ ] 2.5 Test credential/permission/task failures, media processing, partial failure, malformed results and access guards; mutate added guards.
+- [x] 2.4 Prove full HTTP consent, rendering, exact approval, delivery and restart/repeat against stateful fake Graph.
+- [x] 2.5 Test credential/permission/task failures, media processing, partial failure, malformed results and access guards; mutate added guards.
 
 ## 3. Validation
 - [ ] 3.1 Refactor protocol boundaries without changing behavior; update docs and run fmt, clippy, all tests, specs, research, links and secret scans.

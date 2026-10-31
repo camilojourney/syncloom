@@ -9,6 +9,8 @@ Decision records for syncloom.v2, one file per decision: `NNNN-<topic>.md`, numb
 | [0003 Pinned headless Chromium for local images and document carousels](0003-visual-renderer.md) | Proposed |
 | [0004 Mastodon API add-on and manual handoff target](0004-mastodon-manual-export.md) | Proposed |
 
+| [0005 Owned Facebook Page and linked Instagram delivery](0005-meta-integration.md) | Proposed |
+
 ## Rules
 
 - A decision records what was decided, why, the real alternatives rejected, its scope and boundaries, the exact identities it used, and its evidence and unresolved gaps. It does not restate requirements: the OpenSpec specs own behavior.

@@ -106,8 +106,34 @@ async fn instagram_checks_ready_status_and_never_publishes_failed_or_expired_con
                 .is_err()
         );
         assert!(fake.calls("202/media_publish").is_empty());
-        assert!(fake.all().len() <= 22);
+        assert!(fake.all().len() <= 7);
+        if status == "IN_PROGRESS" {
+            assert_eq!(fake.calls("600").len(), 6);
+        }
     }
+}
+#[tokio::test]
+async fn processing_is_polled_once_per_minute_then_published_when_ready() {
+    let fake = fake_meta::start(fake_meta::Config {
+        ready_after: 1,
+        ..Default::default()
+    })
+    .await;
+    let meta = adapter(
+        &fake,
+        MemoryStore::with("meta:101", stored()),
+        Arc::new(Media::default()),
+    );
+    let start = std::time::Instant::now();
+    assert!(
+        meta.target(MetaTarget::Instagram)
+            .publish(request(1))
+            .await
+            .is_ok()
+    );
+    assert!(start.elapsed() >= std::time::Duration::from_secs(60));
+    assert_eq!(fake.calls("600").len(), 2);
+    assert_eq!(fake.calls("202/media_publish").len(), 1);
 }
 #[tokio::test]
 async fn carousel_orders_children_then_parent_and_ai_disclosure_never_on_children() {
@@ -235,6 +261,87 @@ async fn missing_host_and_failed_child_prevent_status_creation() {
     assert!(fake.calls("202/media_publish").is_empty());
 }
 #[test]
+fn meta_configuration_rejects_path_injection_and_external_callback_hosts() {
+    for (variable, value) in [
+        ("SYNCLOOM_META_PAGE_ID", "101/evil"),
+        ("SYNCLOOM_META_PAGE_ID", "1".repeat(129).as_str()),
+        (
+            "SYNCLOOM_META_REDIRECT_URL",
+            "https://external.invalid/meta/callback",
+        ),
+        (
+            "SYNCLOOM_META_REDIRECT_URL",
+            "http://127.0.0.1/meta/callback",
+        ),
+    ] {
+        let result = syncloom_core::meta::MetaConfig::parse(|name| {
+            (name == variable).then(|| value.to_owned())
+        });
+        assert!(result.unwrap_err().contains(variable));
+    }
+}
+
+#[tokio::test]
+async fn jpeg_byte_bound_format_and_alt_text_are_checked_before_any_media_delivery() {
+    let fake = fake_meta::start(Default::default()).await;
+    let media = Arc::new(Media::default());
+    let meta = adapter(
+        &fake,
+        MemoryStore::with("meta:101", stored()),
+        media.clone(),
+    );
+    let mut invalid_format = request(1);
+    invalid_format.slides[0].bytes = b"not jpeg".to_vec();
+    let mut empty_alt = request(1);
+    empty_alt.slides[0].alt_text = "  ".into();
+    let mut oversized = request(1);
+    oversized.slides[0].bytes = vec![255; 8 * 1024 * 1024 + 1];
+    oversized.slides[0].bytes[..2].copy_from_slice(&[255, 216]);
+    for r in [invalid_format, empty_alt, oversized] {
+        assert_eq!(
+            meta.target(MetaTarget::Instagram).publish(r).await,
+            Err(PostFailure::Refused)
+        );
+    }
+    assert!(fake.all().is_empty());
+    assert!(media.images.lock().unwrap().is_empty());
+    let mut exact = request(1);
+    exact.slides[0].bytes = vec![255; 8 * 1024 * 1024];
+    exact.slides[0].bytes[..2].copy_from_slice(&[255, 216]);
+    assert!(
+        meta.target(MetaTarget::Instagram)
+            .publish(exact)
+            .await
+            .is_ok()
+    );
+    assert_eq!(fake.calls("202/media_publish").len(), 1);
+}
+
+#[test]
+fn meta_text_bounds_are_inclusive_and_never_truncate() {
+    for (channel, limit) in [
+        (syncloom_core::Channel::FacebookPage, 63206),
+        (syncloom_core::Channel::Instagram, 2200),
+    ] {
+        assert_eq!(
+            syncloom_core::fit(channel, "").verdict,
+            syncloom_core::Verdict::Review
+        );
+        assert_eq!(
+            syncloom_core::fit(channel, "x").verdict,
+            syncloom_core::Verdict::Pass
+        );
+        assert_eq!(
+            syncloom_core::fit(channel, &"x".repeat(limit)).verdict,
+            syncloom_core::Verdict::Pass
+        );
+        let exceeded = syncloom_core::fit(channel, &"x".repeat(limit + 1));
+        assert_eq!(exceeded.verdict, syncloom_core::Verdict::Review);
+        assert_eq!(exceeded.char_count, limit + 1);
+    }
+}
+
+#[test]
 fn public_media_url_refuses_local_and_credential_urls() {
     for url in [
         "http://media.invalid/a.jpg",
@@ -243,6 +350,7 @@ fn public_media_url_refuses_local_and_credential_urls() {
         "https://localhost/a",
         "https://host.local/a",
         "https://u:p@media.invalid/a",
+        "https://u@media.invalid/a",
         "https://media.invalid/a#fragment",
     ] {
         assert!(PublicMediaUrl::parse(url).is_none(), "{url}");

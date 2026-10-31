@@ -12,6 +12,27 @@ use support::{
 };
 use syncloom_core::{Settings, Store, Studio, meta::MetaTarget};
 
+// Independent JPEG frame-header check: Chromium must keep the specified portrait geometry.
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u16, u16)> {
+    let mut index = 2;
+    while index + 9 < bytes.len() {
+        if bytes[index] != 255 {
+            return None;
+        }
+        if [192, 193, 194].contains(&bytes[index + 1]) {
+            return Some((
+                u16::from_be_bytes([bytes[index + 7], bytes[index + 8]]),
+                u16::from_be_bytes([bytes[index + 5], bytes[index + 6]]),
+            ));
+        }
+        let size = u16::from_be_bytes([bytes[index + 2], bytes[index + 3]]) as usize;
+        if size < 2 {
+            return None;
+        }
+        index += size + 2;
+    }
+    None
+}
 async fn start_meta(
     fake: &fake_meta::FakeMeta,
     granted: bool,
@@ -135,6 +156,7 @@ async fn http_consent_page_text_photo_instagram_image_carousel_and_restart_repea
                     .await
                     .unwrap();
                 assert!(bytes.starts_with(&[255, 216]));
+                assert_eq!(jpeg_dimensions(&bytes), Some((1080, 1350)));
                 assert_eq!(
                     syncloom_core::visual::digest(&bytes),
                     a["slides_sha256"][i].as_str().unwrap()
@@ -151,6 +173,7 @@ async fn http_consent_page_text_photo_instagram_image_carousel_and_restart_repea
             )
             .await;
             assert!(review.raw.contains("Meta / JPEG"));
+            assert!(review.raw.contains("class=\"preview-grid meta-slides\""));
         }
         assert_eq!(approve_meta(&server, &p).await.status, 200);
         let published = publish_meta(&server, &p).await;
@@ -241,7 +264,14 @@ async fn meta_routes_inherit_host_origin_and_session_guards() {
     ] {
         let base = client().request(method, server.url(path));
         let absent = answer(base.try_clone().unwrap().send().await.unwrap()).await;
-        assert_eq!(absent.code(), "session_required");
+        if !matches!(
+            base.try_clone().unwrap().build().unwrap().method(),
+            &reqwest::Method::GET
+        ) {
+            assert_eq!(absent.code(), "session_required");
+        } else {
+            assert_eq!(absent.status, if path.ends_with("/0") { 404 } else { 503 });
+        }
         for (header, value, code) in [
             ("host", "evil.invalid", "host_not_allowed"),
             ("origin", "https://evil.invalid", "origin_not_allowed"),

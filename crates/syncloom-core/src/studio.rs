@@ -129,7 +129,7 @@ fn valid_piece_id(piece_id: &str) -> bool {
     (1..=MAX_PIECE_ID_LEN).contains(&piece_id.len())
         && piece_id
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_".contains(&byte))
 }
 
 /// What the reviewer asked for, once the body has been checked.
@@ -210,33 +210,8 @@ impl Studio {
         piece_id: &str,
         request: crate::visual::RenderRequest,
     ) -> Result<Piece, StudioError> {
-        use crate::visual::{Assets, TEMPLATE_VERSION};
         let content = request.content()?;
-        let configured = {
-            let lock = self.store.lock()?;
-            let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
-            let changed = piece.visual.as_ref() != Some(&content);
-            piece.revision = crate::piece::revision_with_visual(
-                piece.channel,
-                &piece.piece_id,
-                &piece.text,
-                Some(&content),
-            );
-            piece.visual = Some(content.clone());
-            // Starting any rerender invalidates approval and old bytes, even if it fails.
-            piece.invalidate_review();
-            self.save_change(
-                &lock,
-                if changed {
-                    EventKind::VisualConfigured
-                } else {
-                    EventKind::AssetsInvalidated
-                },
-                &mut piece,
-                Extra::default(),
-            )?;
-            piece
-        };
+        let configured = self.configure_visual(piece_id, &request, &content)?;
         let rendered = match self
             .renderer
             .render(
@@ -263,6 +238,48 @@ impl Studio {
                 return Err(error);
             }
         };
+        self.save_rendered(piece_id, &configured, &content, rendered)
+    }
+
+    fn configure_visual(
+        &self,
+        piece_id: &str,
+        request: &crate::visual::RenderRequest,
+        content: &crate::visual::VisualContent,
+    ) -> Result<Piece, StudioError> {
+        let lock = self.store.lock()?;
+        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+        let changed = piece.visual.as_ref() != Some(content);
+        piece.revision = crate::piece::revision_with_visual(
+            piece.channel,
+            &piece.piece_id,
+            &piece.text,
+            Some(content),
+        );
+        piece.visual = Some(content.clone());
+        // Starting any rerender invalidates approval and old bytes, even if it fails.
+        piece.invalidate_review();
+        self.save_change(
+            &lock,
+            if changed {
+                EventKind::VisualConfigured
+            } else {
+                EventKind::AssetsInvalidated
+            },
+            &mut piece,
+            Extra::default(),
+        )?;
+        Ok(piece)
+    }
+
+    fn save_rendered(
+        &self,
+        piece_id: &str,
+        configured: &Piece,
+        content: &crate::visual::VisualContent,
+        rendered: crate::visual::Rendered,
+    ) -> Result<Piece, StudioError> {
+        use crate::visual::{Assets, TEMPLATE_VERSION};
         let lock = self.store.lock()?;
         let mut piece = self.load_at(&lock, piece_id, &configured.revision)?;
         let image_sha256 = lock.save_asset(&rendered.image)?;
@@ -837,6 +854,20 @@ impl Studio {
         Ok(crate::manual_export::files(piece, target, image, carousel))
     }
 
+    fn post_request(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+        intent: &DispatchIntent,
+    ) -> Result<PostRequest, StudioError> {
+        Ok(PostRequest {
+            request_id: intent.request_id.clone(),
+            text: intent.payload.content.clone(),
+            image: self.post_image(lock, piece)?,
+            slides: self.post_slides(lock, piece)?,
+        })
+    }
+
     /// Atomically recheck approval and claim the durable intent before any network operation.
     fn claim_attempt(
         &self,
@@ -859,13 +890,7 @@ impl Studio {
                 piece, &intent, false,
             ))));
         }
-        let image = self.post_image(&lock, &piece)?;
-        let request = PostRequest {
-            request_id: intent.request_id.clone(),
-            text: intent.payload.content.clone(),
-            image,
-            slides: self.post_slides(&lock, &piece)?,
-        };
+        let request = self.post_request(&lock, &piece, &intent)?;
         self.start_attempt(&lock, key, &mut piece, &mut intent)?;
         Ok(Claim::Send {
             intent: Box::new(intent),

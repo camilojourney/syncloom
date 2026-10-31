@@ -11,9 +11,8 @@ impl Meta {
     }
     pub(super) async fn json<T: DeserializeOwned>(
         &self,
-        builder: reqwest::RequestBuilder,
+        response: reqwest::Response,
     ) -> Result<T, PostFailure> {
-        let response = builder.send().await.map_err(transport_failure)?;
         let status = response.status();
         let body: Value = crate::oauth::read_json_body(response)
             .await
@@ -41,7 +40,10 @@ impl Meta {
             self.client
                 .get(self.url(path))
                 .bearer_auth(token.expose())
-                .query(fields),
+                .query(fields)
+                .send()
+                .await
+                .map_err(transport_failure)?,
         )
         .await
     }
@@ -55,7 +57,10 @@ impl Meta {
             self.client
                 .post(self.url(path))
                 .bearer_auth(token.expose())
-                .json(&body),
+                .json(&body)
+                .send()
+                .await
+                .map_err(transport_failure)?,
         )
         .await
     }

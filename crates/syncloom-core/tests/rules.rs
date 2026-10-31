@@ -367,7 +367,14 @@ fn the_delivery_grant_names_known_platforms_or_nothing() {
     assert!(delivery_grant(Some("  ")).unwrap().is_empty());
     let granted = delivery_grant(Some(" linkedin ")).unwrap();
     assert_eq!(granted.iter().collect::<Vec<_>>(), ["linkedin"]);
-    assert_eq!(delivery_grant(Some("facebook,instagram")).unwrap().iter().map(String::as_str).collect::<Vec<_>>(),["facebook","instagram"]);
+    assert_eq!(
+        delivery_grant(Some("facebook,instagram"))
+            .unwrap()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["facebook", "instagram"]
+    );
     for refused in ["linkedin,tiktok", "youtube", "LinkedIn"] {
         let error = delivery_grant(Some(refused)).expect_err(refused);
         assert!(error.contains("SYNCLOOM_DELIVERY"), "{refused}: {error}");

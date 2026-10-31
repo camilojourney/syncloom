@@ -102,9 +102,6 @@ pub fn post_url(post_id: &str) -> String {
 /// The LinkedIn integration: sign-in, connection and the Posts API adapter.
 pub struct Linkedin {
     config: LinkedinConfig,
-    store: Arc<dyn TokenStore>,
-    clock: Arc<dyn Clock>,
-    sign_in_deadline: Duration,
     client: reqwest::Client,
     session: Session,
 }
@@ -117,12 +114,15 @@ impl Linkedin {
         sign_in_deadline: Duration,
     ) -> Self {
         Self {
+            session: Session::new(
+                config.redirect.clone(),
+                store,
+                ACCOUNT.into(),
+                clock,
+                sign_in_deadline,
+            ),
             config,
-            store,
-            clock,
-            sign_in_deadline,
             client: crate::config::http_client(),
-            session: Session::default(),
         }
     }
 
@@ -153,20 +153,15 @@ impl Linkedin {
             .append_pair("client_id", client_id)
             .append_pair("redirect_uri", self.config.redirect.as_str())
             .append_pair("scope", SCOPES);
-        self.session.begin(
-            &self.config.redirect,
-            url,
-            self.config.flow == AuthFlow::NativePkce,
-            self.clock.as_ref(),
-            self.sign_in_deadline,
-        )
+        self.session
+            .begin(url, self.config.flow == AuthFlow::NativePkce)
     }
 
     pub async fn sign_in_wait(&self) -> Result<Connection, StudioError> {
         let (code, verifier) = self.session.wait().await?;
         let issued = self.exchange(verifier.as_ref(), &code).await?;
         let member_id = self.member_id(&issued.access_token).await?;
-        let now = self.clock.now();
+        let now = self.session.now();
         let token = Token {
             access_token: Secret::new(issued.access_token),
             expires_at: Some(rfc3339(now + Duration::from_secs(issued.expires_in))),
@@ -174,7 +169,7 @@ impl Linkedin {
             scope: issued.scope,
             obtained_at: rfc3339(now),
         };
-        self.store.save(ACCOUNT, &token)?;
+        self.session.save_token(&token)?;
         self.connection()
     }
 
@@ -222,27 +217,17 @@ impl Linkedin {
 
     /// The connection from the stored token and the clock; no platform call.
     pub fn connection(&self) -> Result<Connection, StudioError> {
-        Ok(Connection::from_token(
-            self.store.load(ACCOUNT)?,
-            &self.clock.now_rfc3339(),
-            self.session.active(),
-        ))
+        self.session.connection()
     }
 
     /// Delete only this platform's token.
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
-        self.session.cancel();
-        self.store.delete(ACCOUNT)?;
-        self.connection()
+        self.session.sign_out()
     }
 
     /// Exactly one `POST /rest/posts`. The caller (the studio) applies the deadline.
     async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
-        let token = crate::credentials::usable_token(
-            self.store.as_ref(),
-            ACCOUNT,
-            &self.clock.now_rfc3339(),
-        )?;
+        let token = self.session.usable_token()?;
         let response = self
             .client
             .post(format!("{}/rest/posts", self.config.api_base.as_str()))

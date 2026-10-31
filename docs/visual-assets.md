@@ -1,5 +1,7 @@
 # Local visual assets
 
+Meta pieces additionally render ordered JPEG slides before approval; their viewing, exact-hash approval and media-delivery boundary are documented in [Meta integration](meta.md). Existing PNG/PDF-only records remain readable.
+
 Slice 3 renders locally, not to a social platform. Q7's renderer decision is [0003](decisions/0003-visual-renderer.md); behavior is in the [render-visual-assets change](../openspec/changes/render-visual-assets/).
 
 ## Render, view, approve

@@ -15,46 +15,34 @@ impl Meta {
             .append_pair("redirect_uri", self.config.redirect.as_str())
             .append_pair("config_id", configuration)
             .append_pair("response_type", "code");
-        self.session.begin(
-            &self.config.redirect,
-            url,
-            false,
-            self.clock.as_ref(),
-            self.deadline,
-        )
+        self.session.begin(url, false)
     }
     pub async fn sign_in_wait(&self) -> Result<Connection, StudioError> {
         self.config.require()?;
         let (code, _) = self.session.wait().await?;
-        let token = tokio::time::timeout(self.deadline, self.derive_token(&code))
+        let token = tokio::time::timeout(self.session.deadline(), self.derive_token(&code))
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
-        self.store.save(&self.account(), &token)?;
+        self.session.save_token(&token)?;
         self.connection()
     }
     async fn derive_token(&self, code: &str) -> Result<Token, StudioError> {
-        let (client, secret, _, page_id) = self.config.require()?;
-        let short: Issued = self
-            .json(self.client.get(self.url("oauth/access_token")).query(&[
-                ("client_id", client),
-                ("client_secret", secret.expose()),
+        let (_, _, _, page_id) = self.config.require()?;
+        let short = self
+            .exchange_user_token(&[
                 ("redirect_uri", self.config.redirect.as_str()),
                 ("code", code),
-            ]))
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
+            ])
+            .await?;
         if short.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
         }
-        let long: Issued = self
-            .json(self.client.get(self.url("oauth/access_token")).query(&[
-                ("client_id", client),
-                ("client_secret", secret.expose()),
+        let long = self
+            .exchange_user_token(&[
                 ("grant_type", "fb_exchange_token"),
                 ("fb_exchange_token", short.access_token.expose()),
-            ]))
-            .await
-            .map_err(|_| StudioError::SignInRejected)?;
+            ])
+            .await?;
         if long.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
         }
@@ -72,27 +60,21 @@ impl Meta {
             return Err(StudioError::SignInRejected);
         }
         let page = self.selected_page(&long.access_token, page_id).await?;
-        if page.access_token.expose().is_empty()
-            || !["CREATE_CONTENT", "MANAGE", "MODERATE"]
-                .iter()
-                .all(|t| page.tasks.iter().any(|p| p == t))
-        {
-            return Err(StudioError::SignInRejected);
-        }
-        let instagram = page
-            .instagram_business_account
-            .map(|a| a.id)
-            .unwrap_or_default();
-        if !instagram.is_empty() && !numeric_id(&instagram) {
-            return Err(StudioError::SignInRejected);
-        }
-        Ok(Token {
-            access_token: page.access_token,
-            expires_at: None,
-            member_id: instagram,
-            scope: SCOPES.join(" "),
-            obtained_at: self.clock.now_rfc3339(),
-        })
+        page.into_token(self.session.now_rfc3339())
+    }
+    async fn exchange_user_token(&self, params: &[(&str, &str)]) -> Result<Issued, StudioError> {
+        let (client, secret, _, _) = self.config.require()?;
+        let response = self
+            .client
+            .get(self.url("oauth/access_token"))
+            .query(&[("client_id", client), ("client_secret", secret.expose())])
+            .query(params)
+            .send()
+            .await
+            .map_err(|_| StudioError::SignInRejected)?;
+        self.json(response)
+            .await
+            .map_err(|_| StudioError::SignInRejected)
     }
     async fn selected_page(&self, token: &Secret, page_id: &str) -> Result<Page, StudioError> {
         let mut after = String::new();
@@ -124,18 +106,10 @@ impl Meta {
         Err(StudioError::SignInRejected)
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
-        self.config.require()?;
-        Ok(Connection::from_token(
-            self.store.load(&self.account())?,
-            &self.clock.now_rfc3339(),
-            self.session.active(),
-        ))
+        self.configured_session()?.connection()
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
-        self.config.require()?;
-        self.session.cancel();
-        self.store.delete(&self.account())?;
-        self.connection()
+        self.configured_session()?.sign_out()
     }
 }
 #[derive(Deserialize)]
@@ -170,6 +144,31 @@ struct Page {
     access_token: Secret,
     tasks: Vec<String>,
     instagram_business_account: Option<Account>,
+}
+impl Page {
+    fn into_token(self, obtained_at: String) -> Result<Token, StudioError> {
+        if self.access_token.expose().is_empty()
+            || !["CREATE_CONTENT", "MANAGE", "MODERATE"]
+                .iter()
+                .all(|t| self.tasks.iter().any(|p| p == t))
+        {
+            return Err(StudioError::SignInRejected);
+        }
+        let instagram = self
+            .instagram_business_account
+            .map(|a| a.id)
+            .unwrap_or_default();
+        if !instagram.is_empty() && !numeric_id(&instagram) {
+            return Err(StudioError::SignInRejected);
+        }
+        Ok(Token {
+            access_token: self.access_token,
+            expires_at: None,
+            member_id: instagram,
+            scope: SCOPES.join(" "),
+            obtained_at,
+        })
+    }
 }
 #[derive(Deserialize)]
 struct Account {

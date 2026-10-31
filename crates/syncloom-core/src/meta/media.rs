@@ -13,10 +13,9 @@ impl PublicMediaUrl {
             || url.password().is_some()
             || url.fragment().is_some()
             || !host.contains('.')
-            || host.ends_with(".local")
-            || host.ends_with(".localhost")
-            || host.ends_with(".internal")
-            || host.ends_with('.')
+            || [".local", ".localhost", ".internal", "."]
+                .iter()
+                .any(|suffix| host.ends_with(suffix))
         {
             return None;
         }

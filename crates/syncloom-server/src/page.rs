@@ -244,9 +244,14 @@ fn jpeg_previews(piece: &Piece) -> String {
         return String::new();
     };
     let id = escape(&piece.piece_id);
-    assets.slides_sha256.iter().enumerate().map(|(index,hash)|format!(
+    let slides:String=assets.slides_sha256.iter().enumerate().map(|(index,hash)|format!(
         r#"<article class="preview-card"><div class="preview-label">Meta / JPEG · slide {}</div><img class="asset-image" src="/v1/pieces/{id}/assets/slides/{index}" alt="Rendered slide {}"><div class="preview-details"><p class="label">JPEG SHA-256</p><code class="hash">{}</code></div></article>"#,
-        index+1,index+1,escape(hash))).collect()
+        index+1,index+1,escape(hash))).collect();
+    if slides.is_empty() {
+        slides
+    } else {
+        format!(r#"<div class="preview-grid meta-slides">{slides}</div>"#)
+    }
 }
 
 fn publish_receipt(receipt: &PublishResponse) -> String {

@@ -128,11 +128,59 @@ impl Drop for Pending {
         self.stop();
     }
 }
-#[derive(Default)]
 pub(crate) struct Session {
     pending: Mutex<Option<Arc<Pending>>>,
+    redirect: RedirectUrl,
+    clock: Arc<dyn Clock>,
+    deadline: Duration,
+    store: Arc<dyn crate::TokenStore>,
+    account: String,
 }
 impl Session {
+    pub fn new(
+        redirect: RedirectUrl,
+        store: Arc<dyn crate::TokenStore>,
+        account: String,
+        clock: Arc<dyn Clock>,
+        deadline: Duration,
+    ) -> Self {
+        Self {
+            pending: Mutex::new(None),
+            redirect,
+            store,
+            account,
+            clock,
+            deadline,
+        }
+    }
+    pub fn deadline(&self) -> Duration {
+        self.deadline
+    }
+    pub fn now(&self) -> time::OffsetDateTime {
+        self.clock.now()
+    }
+    pub fn now_rfc3339(&self) -> String {
+        self.clock.now_rfc3339()
+    }
+    pub fn save_token(&self, token: &Token) -> Result<(), StudioError> {
+        self.store.save(&self.account, token).map_err(Into::into)
+    }
+    pub fn usable_token(&self) -> Result<Token, crate::PostFailure> {
+        self.store
+            .usable_token(&self.account, &self.clock.now_rfc3339())
+    }
+    pub fn connection(&self) -> Result<Connection, StudioError> {
+        Ok(Connection::from_token(
+            self.store.load(&self.account)?,
+            &self.clock.now_rfc3339(),
+            self.active(),
+        ))
+    }
+    pub fn sign_out(&self) -> Result<Connection, StudioError> {
+        self.cancel();
+        self.store.delete(&self.account)?;
+        self.connection()
+    }
     pub fn cancel(&self) {
         if let Some(pending) = self.pending.lock().unwrap().take() {
             pending.stop();
@@ -145,14 +193,9 @@ impl Session {
             .as_ref()
             .is_some_and(|p| Instant::now() < p.deadline)
     }
-    pub fn begin(
-        &self,
-        redirect: &RedirectUrl,
-        mut url: reqwest::Url,
-        pkce: bool,
-        clock: &dyn Clock,
-        deadline: Duration,
-    ) -> Result<SignInStart, StudioError> {
+    pub fn begin(&self, mut url: reqwest::Url, pkce: bool) -> Result<SignInStart, StudioError> {
+        let redirect = &self.redirect;
+        let deadline = self.deadline;
         // Hold one guard through bind and reservation, including across OS threads.
         let mut slot = self.pending.lock().unwrap();
         if slot.as_ref().is_some_and(|p| Instant::now() < p.deadline) {
@@ -191,7 +234,7 @@ impl Session {
         Ok(SignInStart {
             status: ConnectionStatus::AwaitingConsent,
             authorization_url: url.to_string(),
-            expires_at: crate::clock::rfc3339(clock.now() + deadline),
+            expires_at: crate::clock::rfc3339(self.clock.now() + deadline),
         })
     }
     pub async fn wait(&self) -> Result<(String, Option<Secret>), StudioError> {

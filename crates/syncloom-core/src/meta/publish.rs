@@ -11,14 +11,10 @@ impl Meta {
         target: MetaTarget,
         request: PostRequest,
     ) -> Result<Posted, PostFailure> {
-        self.config
-            .require()
-            .map_err(|_| PostFailure::ConsentRequired)?;
-        let token = crate::credentials::usable_token(
-            self.store.as_ref(),
-            &self.account(),
-            &self.clock.now_rfc3339(),
-        )?;
+        let token = self
+            .configured_session()
+            .map_err(|_| PostFailure::ConsentRequired)?
+            .usable_token()?;
         match target {
             MetaTarget::Facebook => self.facebook(&token, request).await,
             MetaTarget::Instagram => self.instagram(&token, request).await,
@@ -56,15 +52,29 @@ impl Meta {
         if !numeric_id(&token.member_id) {
             return Err(PostFailure::ConsentRequired);
         }
-        if !(1..=10).contains(&request.slides.len())
-            || request.slides.iter().any(|image| {
-                image.bytes.len() > 8 * 1024 * 1024
-                    || !image.bytes.starts_with(&[255, 216])
-                    || image.alt_text.trim().is_empty()
-            })
-        {
-            return Err(PostFailure::Refused);
+        validate_slides(&request.slides)?;
+        let creation_id = self.instagram_container(token, request).await?;
+        let published: Id = self
+            .post(
+                &format!("{}/media_publish", token.member_id),
+                &token.access_token,
+                json!({"creation_id":creation_id}),
+            )
+            .await?;
+        if !numeric_id(&published.id) {
+            return Err(PostFailure::Unknown);
         }
+        let url = self.instagram_permalink(token, &published.id).await?;
+        Ok(Posted {
+            post_id: published.id,
+            url,
+        })
+    }
+    async fn instagram_container(
+        &self,
+        token: &Token,
+        request: PostRequest,
+    ) -> Result<String, PostFailure> {
         let carousel = request.slides.len() > 1;
         let mut ids = Vec::new();
         for image in request.slides {
@@ -76,44 +86,20 @@ impl Meta {
                 body["caption"] = json!(request.text);
                 body["is_ai_generated"] = json!(true);
             }
-            let id = self.container(token, body).await?;
-            ids.push(id);
+            ids.push(self.container(token, body).await?);
         }
-        let creation_id = if carousel {
-            self.container(token,json!({"media_type":"CAROUSEL","children":ids.join(","),"caption":request.text,"is_ai_generated":true})).await?
+        if carousel {
+            self.container(token,json!({"media_type":"CAROUSEL","children":ids.join(","),"caption":request.text,"is_ai_generated":true})).await
         } else {
-            ids.remove(0)
-        };
-        let published: Id = self
-            .post(
-                &format!("{}/media_publish", token.member_id),
-                &token.access_token,
-                json!({"creation_id":creation_id}),
-            )
-            .await?;
-        if !numeric_id(&published.id) {
-            return Err(PostFailure::Unknown);
+            Ok(ids.remove(0))
         }
-        // No fabricated Instagram URL: Graph's id is not its public shortcode.
+    }
+    async fn instagram_permalink(&self, token: &Token, id: &str) -> Result<String, PostFailure> {
         let permalink: Permalink = self
-            .get(
-                &published.id,
-                &token.access_token,
-                &[("fields", "permalink")],
-            )
+            .get(id, &token.access_token, &[("fields", "permalink")])
             .await
             .map_err(|_| PostFailure::Unknown)?;
-        let url = crate::config::plain_url(&permalink.permalink).ok_or(PostFailure::Unknown)?;
-        if url.scheme() != "https"
-            || !matches!(url.host_str(), Some("www.instagram.com" | "instagram.com"))
-            || !url.path().starts_with("/p/")
-        {
-            return Err(PostFailure::Unknown);
-        }
-        Ok(Posted {
-            post_id: published.id,
-            url: permalink.permalink,
-        })
+        checked_permalink(permalink.permalink)
     }
     async fn container(
         &self,
@@ -134,17 +120,42 @@ impl Meta {
         Ok(container.id)
     }
     async fn wait_ready(&self, token: &Secret, id: &str) -> Result<(), PostFailure> {
-        for _ in 0..20 {
+        // Meta recommends one status query per minute, for no more than five minutes.
+        for remaining in (0..=5).rev() {
             let status: ContainerStatus = self.get(id, token, &[("fields", "status_code")]).await?;
             match status.status_code.as_str() {
                 "FINISHED" => return Ok(()),
                 "ERROR" | "EXPIRED" => return Err(PostFailure::Refused),
-                "IN_PROGRESS" => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
+                "IN_PROGRESS" if remaining > 0 => {
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await
+                }
                 _ => return Err(PostFailure::Unknown),
             }
         }
         Err(PostFailure::Unknown)
     }
+}
+fn validate_slides(slides: &[crate::platform::PostImage]) -> Result<(), PostFailure> {
+    if !(1..=10).contains(&slides.len())
+        || slides.iter().any(|image| {
+            image.bytes.len() > 8 * 1024 * 1024
+                || !image.bytes.starts_with(&[255, 216])
+                || image.alt_text.trim().is_empty()
+        })
+    {
+        return Err(PostFailure::Refused);
+    }
+    Ok(())
+}
+fn checked_permalink(permalink: String) -> Result<String, PostFailure> {
+    let url = crate::config::plain_url(&permalink).ok_or(PostFailure::Unknown)?;
+    if url.scheme() != "https"
+        || !matches!(url.host_str(), Some("www.instagram.com" | "instagram.com"))
+        || !url.path().starts_with("/p/")
+    {
+        return Err(PostFailure::Unknown);
+    }
+    Ok(permalink)
 }
 #[derive(Deserialize)]
 struct Id {

@@ -5,7 +5,7 @@
 //! `provenance-log` under `openspec/specs/`; Mastodon and manual export are specified in
 //! `openspec/changes/add-mastodon-manual-export/` until archive. Rules are plain functions over plain values;
 //! file access lives in [`store`], the Keychain in [`credentials`], and network access in
-//! [`provider::claude`], [`linkedin`] and [`mastodon`].
+//! [`provider::claude`], [`linkedin`], [`mastodon`] and [`meta`].
 pub mod channel;
 pub mod clock;
 pub mod config;

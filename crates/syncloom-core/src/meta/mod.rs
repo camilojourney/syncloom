@@ -19,10 +19,7 @@ pub const SCOPES: &[&str] = &[
 
 pub struct Meta {
     config: MetaConfig,
-    store: Arc<dyn TokenStore>,
-    clock: Arc<dyn Clock>,
     session: Session,
-    deadline: Duration,
     client: reqwest::Client,
     media: Arc<dyn MediaDelivery>,
 }
@@ -34,24 +31,23 @@ impl Meta {
         deadline: Duration,
         media: Arc<dyn MediaDelivery>,
     ) -> Self {
+        let account = format!("meta:{}", config.page_id.as_deref().unwrap_or(""));
         Self {
-            config,
-            store,
-            clock,
-            session: Session::default(),
-            deadline,
-            client: crate::config::http_client(),
+            config: config.clone(),
             media,
+            client: crate::config::http_client(),
+            session: Session::new(config.redirect, store, account, clock, deadline),
         }
+    }
+    fn configured_session(&self) -> Result<&Session, crate::StudioError> {
+        self.config.require()?;
+        Ok(&self.session)
     }
     pub fn target(self: &Arc<Self>, target: MetaTarget) -> Arc<dyn Platform> {
         Arc::new(Delivery {
             meta: self.clone(),
             target,
         })
-    }
-    fn account(&self) -> String {
-        format!("meta:{}", self.config.page_id.as_deref().unwrap_or(""))
     }
 }
 #[derive(Clone, Copy)]

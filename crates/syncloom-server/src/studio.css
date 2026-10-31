@@ -350,6 +350,9 @@ hr {
   gap:16px;
   align-items:start
 }
+.meta-slides {
+  margin-top:16px
+}
 .preview-card {
   width:100%;
   border:1px solid var(--line);

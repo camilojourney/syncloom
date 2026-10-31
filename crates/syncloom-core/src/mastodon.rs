@@ -50,9 +50,6 @@ struct Issued {
 }
 pub struct Mastodon {
     config: MastodonConfig,
-    store: Arc<dyn TokenStore>,
-    clock: Arc<dyn Clock>,
-    deadline: Duration,
     client: reqwest::Client,
     session: Session,
     app: tokio::sync::Mutex<Option<App>>,
@@ -64,13 +61,11 @@ impl Mastodon {
         clock: Arc<dyn Clock>,
         deadline: Duration,
     ) -> Self {
+        let account = account_for(&config);
         Self {
+            session: Session::new(config.redirect.clone(), store, account, clock, deadline),
             config,
-            store,
-            clock,
-            deadline,
             client: crate::config::http_client(),
-            session: Session::default(),
             app: tokio::sync::Mutex::new(None),
         }
     }
@@ -83,17 +78,7 @@ impl Mastodon {
     }
     /// Stable, private account key. Different instance origins cannot share a token.
     pub fn account(&self) -> String {
-        format!(
-            "mastodon:{}",
-            crate::visual::digest(
-                self.config
-                    .instance
-                    .as_ref()
-                    .map(BaseUrl::as_str)
-                    .unwrap_or("")
-                    .as_bytes()
-            )
-        )
+        account_for(&self.config)
     }
     pub async fn sign_in_begin(&self) -> Result<SignInStart, StudioError> {
         let instance = self.instance()?;
@@ -102,7 +87,7 @@ impl Mastodon {
             return Err(StudioError::SignInInProgress);
         }
         let response = tokio::time::timeout(
-            self.deadline,
+            self.session.deadline(),
             self.client
                 .post(format!("{instance}/api/v1/apps"))
                 .form(&[
@@ -128,13 +113,7 @@ impl Mastodon {
             .append_pair("client_id", &app.client_id)
             .append_pair("redirect_uri", self.config.redirect.as_str())
             .append_pair("scope", SCOPES);
-        let start = self.session.begin(
-            &self.config.redirect,
-            url,
-            false,
-            self.clock.as_ref(),
-            self.deadline,
-        )?;
+        let start = self.session.begin(url, false)?;
         *slot = Some(app);
         Ok(start)
     }
@@ -165,7 +144,7 @@ impl Mastodon {
                 .await
                 .ok_or(StudioError::SignInRejected)
         };
-        let issued = tokio::time::timeout(self.deadline, exchange)
+        let issued = tokio::time::timeout(self.session.deadline(), exchange)
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
         if issued.access_token.expose().is_empty()
@@ -180,24 +159,18 @@ impl Mastodon {
             expires_at: None,
             member_id: String::new(),
             scope: issued.scope,
-            obtained_at: self.clock.now_rfc3339(),
+            obtained_at: self.session.now_rfc3339(),
         };
-        self.store.save(&self.account(), &token)?;
+        self.session.save_token(&token)?;
         self.connection()
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
         self.instance()?;
-        Ok(Connection::from_token(
-            self.store.load(&self.account())?,
-            &self.clock.now_rfc3339(),
-            self.session.active(),
-        ))
+        self.session.connection()
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.instance()?;
-        self.session.cancel();
-        self.store.delete(&self.account())?;
-        self.connection()
+        self.session.sign_out()
     }
     async fn json<T: serde::de::DeserializeOwned>(
         &self,
@@ -300,11 +273,7 @@ impl Platform for Mastodon {
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
-            let token = crate::credentials::usable_token(
-                self.store.as_ref(),
-                &self.account(),
-                &self.clock.now_rfc3339(),
-            )?;
+            let token = self.session.usable_token()?;
             let instance: Instance = self
                 .json(self.client.get(format!("{base}/api/v2/instance")))
                 .await?;
@@ -317,6 +286,19 @@ impl Platform for Mastodon {
             self.create_status(&token.access_token, request, ids).await
         })
     }
+}
+fn account_for(config: &MastodonConfig) -> String {
+    format!(
+        "mastodon:{}",
+        crate::visual::digest(
+            config
+                .instance
+                .as_ref()
+                .map(BaseUrl::as_str)
+                .unwrap_or("")
+                .as_bytes()
+        )
+    )
 }
 fn valid_id(id: &str) -> bool {
     !id.is_empty()

@@ -6,7 +6,7 @@
 **OpenSpec changes:** [add-meta-publishing](../../openspec/changes/add-meta-publishing/)
 **Agreed:** no - implementation brief authorizes fake-only work, not live actions or hosting
 **Recommended:** Facebook Login for Business, Page token, explicit public-media port
-**Built:** not built
+**Built:** fake-proven implementation on the task branch; not yet landed on main
 **Live-proven:** no
 
 ## Context

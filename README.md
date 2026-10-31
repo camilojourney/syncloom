@@ -4,7 +4,7 @@ From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought
 
 ## Layout
 
-- `crates/syncloom-core/` - the rules: thought intake, drafting through a model provider, platform rules, review transitions, the dispatch outbox (contained, or delivered through a granted platform with the truthful outcome), the provenance log, the file store and the Keychain token store. The Claude adapter lives here behind the provider trait; the LinkedIn and Mastodon adapters behind the platform trait; manual export is a separate local handoff, never a post.
+- `crates/syncloom-core/` - the rules: thought intake, drafting through a model provider, platform rules, review transitions, the dispatch outbox (contained, or delivered through a granted platform with the truthful outcome), the provenance log, the file store and the Keychain token store. The Claude adapter lives here behind the provider trait; the LinkedIn, Mastodon and Meta adapters behind the platform trait; manual export is a separate local handoff, never a post.
 - `crates/syncloom-server/` - the loopback HTTP API and Rust-rendered browser studio (Axum), binary `syncloom-server`.
 - `crates/syncloom-cli/` - the command line, binary `syncloom`; it calls the same core functions and returns the same errors.
 - `contracts/` - fixtures the server tests against (`contracts/studio-api/`, owned by the capability `studio-api`).
@@ -76,8 +76,8 @@ python3 -I scripts/test_check_research_records.py   # the check's own tests
 | `ANTHROPIC_API_KEY` | none | Claude key, read only from the environment, never logged |
 | `SYNCLOOM_CLAUDE_BASE_URL` | `https://api.anthropic.com` | provider URL; `https` or `http://127.0.0.1:<port>` only |
 | `SYNCLOOM_CLAUDE_MODEL` | `claude-sonnet-5-5` | the pinned Claude Sonnet model id (unverified until the live check runs) |
-| `SYNCLOOM_DELIVERY` | none | comma-separated platforms allowed to deliver (`linkedin,mastodon`); unset keeps every intent contained; an unknown name refuses startup |
-| `SYNCLOOM_KEYCHAIN_SERVICE` | `syncloom` | the Keychain service name of the token items (account `linkedin` or instance-derived `mastodon:<hash>`); tests use `syncloom-test-<id>` |
+| `SYNCLOOM_DELIVERY` | none | comma-separated platforms allowed to deliver (`linkedin,mastodon,facebook,instagram`); unset keeps every intent contained; an unknown name refuses startup |
+| `SYNCLOOM_KEYCHAIN_SERVICE` | `syncloom` | the Keychain service name of the token items (account `linkedin`, instance-derived `mastodon:<hash>` or Page-scoped `meta:<Page id>`); tests use `syncloom-test-<id>` |
 | `SYNCLOOM_MASTODON_INSTANCE` | none | explicitly allowed instance origin; HTTPS, or loopback HTTP for the fake only |
 | `SYNCLOOM_MASTODON_REDIRECT_URL` | `http://127.0.0.1:8792/mastodon/callback` | free loopback callback port registered per instance |
 | `SYNCLOOM_LINKEDIN_CLIENT_ID` | none | the developer app's client id, read only when a sign-in begins |
@@ -99,7 +99,7 @@ cargo run -p syncloom-cli -- view <piece_id> --kind carousel > /tmp/piece.pdf
 cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <rendered_revision> --image-sha256 <image_sha256> --carousel-sha256 <carousel_sha256>
 ```
 
-The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Text/template changes and every rerender clear approval. LinkedIn visual publish stays contained, even with a delivery grant; its uploads wait for the first live text post. Mastodon can deliver the approved first-slide PNG with alt text when explicitly granted; PDF carousels remain local export files.
+The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Meta pieces additionally require the ordered `slides_sha256` JPEG hashes (CLI: repeated `--slide-sha256`); see [Meta integration](docs/meta.md). Text/template changes and every rerender clear approval. LinkedIn visual publish stays contained, even with a delivery grant; its uploads wait for the first live text post. Mastodon can deliver the approved first-slide PNG with alt text when explicitly granted; PDF carousels remain local export files.
 
 ## Mastodon and manual handoff
 
@@ -111,6 +111,10 @@ cargo run -p syncloom-cli -- export <piece_id> --expected-revision <revision> --
 ```
 
 Export requires current approval, produces text and optional PNG/PDF files plus platform notes under the data directory, and records `exported`, never `posted`.
+
+## Facebook Pages and Instagram
+
+[Meta integration](docs/meta.md) documents the `facebook_page` and `instagram` channels, shared Facebook Login for Business consent, Keychain-only Page tokens and approved JPEG slides. Page text/photo and Instagram image/carousel flows are proven against a local fake only. Real media hosting is deliberately unconfigured, and real app/redirect eligibility is unproven. No real Meta app, sign-in or post was used.
 
 ## Going live with LinkedIn
 

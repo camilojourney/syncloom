@@ -30,6 +30,7 @@ pub struct Config {
     pub no_tasks: bool,
     pub no_instagram: bool,
     pub container_status: Option<String>,
+    pub ready_after: usize,
     pub fault_path: Option<String>,
     pub fault_status: u16,
     pub fault_code: u16,
@@ -155,7 +156,19 @@ async fn graph_get(
         }
         _ => {
             assert!(i.containers.lock().unwrap().iter().any(|id| id == &path));
-            json!({"status_code":c.container_status.as_deref().unwrap_or("FINISHED")})
+            let checks = i
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|call| call.path == path)
+                .count();
+            let status = if checks <= c.ready_after {
+                "IN_PROGRESS"
+            } else {
+                c.container_status.as_deref().unwrap_or("FINISHED")
+            };
+            json!({"status_code":status})
         }
     };
     axum::Json(answer).into_response()
