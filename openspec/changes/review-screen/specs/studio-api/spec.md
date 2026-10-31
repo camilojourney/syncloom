@@ -94,4 +94,3 @@ Every API error response SHALL be a JSON object `{"error":{"code","message","req
 - **WHEN** a browser page or form operation fails
 - **THEN** the HTTP status, fixed code and fixed message equal the API failure
 - **AND** an HTML error page shows its request id and a link back to the studio without reflecting the submitted content
-

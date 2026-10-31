@@ -11,18 +11,11 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use syncloom_core::html::escape;
 use syncloom_core::{
     AssetHashes, Piece, PublishRequest, PublishResponse, RenderRequest, ReviewRequest, Status,
     StudioError, ThoughtRequest,
 };
-
-pub(crate) fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
 
 fn document(title: &str, content: &str) -> Html<String> {
     Html(format!(
@@ -158,6 +151,19 @@ fn visual_editor(state: &AppState, piece: &Piece) -> Html<String> {
     )
 }
 
+fn approval_note(piece: &Piece) -> &'static str {
+    match piece.status {
+        Status::Approved => "This saved revision is approved. Publishing is a separate action.",
+        Status::Rejected => "This piece is rejected. Edit it to start a new review.",
+        Status::PendingReview if piece.visual.is_some() && piece.assets.is_none() => {
+            "Render current assets before approval."
+        }
+        Status::PendingReview => {
+            "Approval applies only to this saved revision and the exact asset hashes shown."
+        }
+    }
+}
+
 fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
     let id = escape(&piece.piece_id);
     let fields = revision_fields(state, piece);
@@ -181,16 +187,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     } else {
         ""
     };
-    let approval_note = match piece.status {
-        Status::Approved => "This saved revision is approved. Publishing is a separate action.",
-        Status::Rejected => "This piece is rejected. Edit it to start a new review.",
-        Status::PendingReview if piece.visual.is_some() && piece.assets.is_none() => {
-            "Render current assets before approval."
-        }
-        Status::PendingReview => {
-            "Approval applies only to this saved revision and the exact asset hashes shown."
-        }
-    };
+    let approval_note = approval_note(piece);
     let receipt = receipt.map(publish_receipt).unwrap_or_default();
     let last_outcome = piece
         .publish_status
@@ -296,6 +293,67 @@ pub(crate) struct PieceForm {
     carousel_sha256: Option<String>,
 }
 
+impl PieceForm {
+    fn review(self, action: &str) -> Result<ReviewRequest, StudioError> {
+        let (status, text, expected_assets) = if action == "edit" {
+            (
+                None,
+                Some(self.text.ok_or(StudioError::InvalidRequest)?),
+                None,
+            )
+        } else {
+            let hashes = match (self.image_sha256, self.carousel_sha256) {
+                (None, None) => None,
+                (Some(image_sha256), Some(carousel_sha256)) => Some(AssetHashes {
+                    image_sha256,
+                    carousel_sha256,
+                }),
+                _ => return Err(StudioError::InvalidRequest),
+            };
+            (Some(Status::Approved), None, hashes)
+        };
+        Ok(ReviewRequest {
+            status,
+            text,
+            expected_assets,
+            expected_revision: self.expected_revision,
+        })
+    }
+
+    fn rendering(self) -> Result<RenderRequest, StudioError> {
+        Ok(RenderRequest {
+            expected_revision: self.expected_revision,
+            template: self.template.ok_or(StudioError::InvalidRequest)?,
+            slides: self
+                .slides
+                .ok_or(StudioError::InvalidRequest)?
+                .lines()
+                .map(str::to_owned)
+                .collect(),
+        })
+    }
+}
+
+/// Transport parsing produces the same core request types used by JSON and CLI callers.
+enum SubmittedAction {
+    Review(ReviewRequest),
+    Render(RenderRequest),
+    Publish(PublishRequest),
+}
+
+fn submitted_action(action: &str, form: PieceForm) -> Result<SubmittedAction, Failure> {
+    let _ = &form.csrf; // Authenticated by the boundary before any adapter runs.
+    match action {
+        "edit" | "approve" => Ok(SubmittedAction::Review(form.review(action)?)),
+        "render" => Ok(SubmittedAction::Render(form.rendering()?)),
+        "publish" => Ok(SubmittedAction::Publish(PublishRequest {
+            expected_revision: form.expected_revision,
+            dry_run: false,
+        })),
+        _ => Err(Failure::NotFound),
+    }
+}
+
 pub(crate) async fn action(
     State(state): State<Arc<AppState>>,
     path: Result<Path<(String, String)>, PathRejection>,
@@ -303,75 +361,38 @@ pub(crate) async fn action(
 ) -> Result<Response, Failure> {
     let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
     let Form(form) = form.map_err(|_| StudioError::InvalidRequest)?;
-    let _ = form.csrf;
-    let revision = form.expected_revision;
-    match action.as_str() {
-        "edit" => {
-            state.studio.review(
-                &id,
-                ReviewRequest {
-                    text: Some(form.text.ok_or(StudioError::InvalidRequest)?),
-                    status: None,
-                    expected_revision: revision,
-                    expected_assets: None,
-                },
-            )?;
-        }
-        "render" => {
-            state
-                .studio
-                .render(
-                    &id,
-                    RenderRequest {
-                        expected_revision: revision,
-                        template: form.template.ok_or(StudioError::InvalidRequest)?,
-                        slides: form
-                            .slides
-                            .ok_or(StudioError::InvalidRequest)?
-                            .lines()
-                            .map(str::to_owned)
-                            .collect(),
-                    },
-                )
-                .await?;
-        }
-        "approve" => {
-            let expected_assets = match (form.image_sha256, form.carousel_sha256) {
-                (None, None) => None,
-                (Some(image_sha256), Some(carousel_sha256)) => Some(AssetHashes {
-                    image_sha256,
-                    carousel_sha256,
-                }),
-                _ => return Err(StudioError::InvalidRequest.into()),
-            };
-            state.studio.review(
-                &id,
-                ReviewRequest {
-                    status: Some(Status::Approved),
-                    text: None,
-                    expected_revision: revision,
-                    expected_assets,
-                },
-            )?;
-        }
-        "publish" => {
-            let receipt = state
-                .studio
-                .publish(
-                    &id,
-                    PublishRequest {
-                        expected_revision: revision,
-                        dry_run: false,
-                    },
-                )
-                .await?;
-            return Ok((
-                StatusCode::OK,
-                piece_page(&state, &receipt.piece, Some(&receipt)),
-            )
-                .into_response());
-        }
-        _ => return Err(Failure::NotFound),
+    match submitted_action(&action, form)? {
+        SubmittedAction::Review(request) => review_action(&state, &id, request),
+        SubmittedAction::Render(request) => render_action(&state, &id, request).await,
+        SubmittedAction::Publish(request) => publish_action(&state, &id, request).await,
     }
-    Ok(Redirect::to(&format!("/review/{id}")).into_response())
+}
+
+fn saved_piece_response(piece: Result<Piece, StudioError>) -> Result<Response, Failure> {
+    Ok(Redirect::to(&format!("/review/{}", piece?.piece_id)).into_response())
+}
+
+fn review_action(state: &AppState, id: &str, request: ReviewRequest) -> Result<Response, Failure> {
+    saved_piece_response(state.studio.review(id, request))
+}
+
+async fn render_action(
+    state: &AppState,
+    id: &str,
+    request: RenderRequest,
+) -> Result<Response, Failure> {
+    saved_piece_response(state.studio.render(id, request).await)
+}
+
+async fn publish_action(
+    state: &AppState,
+    id: &str,
+    request: PublishRequest,
+) -> Result<Response, Failure> {
+    let receipt = state.studio.publish(id, request).await?;
+    Ok((
+        StatusCode::OK,
+        piece_page(state, &receipt.piece, Some(&receipt)),
+    )
+        .into_response())
 }

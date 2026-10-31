@@ -10,6 +10,7 @@ pub mod clock;
 pub mod config;
 pub mod credentials;
 pub mod error;
+pub mod html;
 pub mod linkedin;
 pub mod outbox;
 pub mod piece;

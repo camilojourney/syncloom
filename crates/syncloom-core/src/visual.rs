@@ -422,14 +422,6 @@ fn normalize_pdf(bytes: &[u8]) -> Result<Vec<u8>, StudioError> {
     Ok(output)
 }
 
-fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
-
 fn gradient(paper: bool) -> Result<Vec<u8>, StudioError> {
     let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 3) as usize);
     let (start, end): ([u32; 3], [u32; 3]) = if paper {
@@ -484,7 +476,7 @@ font-size:23px;display:flex;justify-content:space-between }}
 </style></head><body>"#
     );
     for (i, slide) in content.slides.iter().enumerate() {
-        html.push_str(&format!(r#"<section><div class="label">FIELD NOTES</div><div class="copy">{}</div><footer><span>SYNCLOOM</span><span>{:02} / {:02}</span></footer></section>"#,escape(slide), i+1, content.slides.len()));
+        html.push_str(&format!(r#"<section><div class="label">FIELD NOTES</div><div class="copy">{}</div><footer><span>SYNCLOOM</span><span>{:02} / {:02}</span></footer></section>"#,crate::html::escape(slide), i+1, content.slides.len()));
     }
     html.push_str("</body></html>");
     Ok(html)

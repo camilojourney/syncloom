@@ -102,18 +102,18 @@ impl Lock<'_> {
                 names.pop_last();
             }
         }
-        names
-            .into_iter()
-            .map(|id| {
-                let piece = self
-                    .load_piece(&id)?
-                    .ok_or_else(|| io::Error::other("piece disappeared"))?;
-                if piece.piece_id != id {
-                    return Err(io::Error::other("piece id disagrees with record"));
-                }
-                Ok(piece)
-            })
-            .collect()
+        names.into_iter().map(|id| self.named_piece(&id)).collect()
+    }
+
+    /// Discovery never trusts a record whose stored identity disagrees with its file name.
+    fn named_piece(&self, id: &str) -> io::Result<Piece> {
+        let piece = self
+            .load_piece(id)?
+            .ok_or_else(|| io::Error::other("piece disappeared"))?;
+        if piece.piece_id != id {
+            return Err(io::Error::other("piece id disagrees with record"));
+        }
+        Ok(piece)
     }
 
     pub fn save_piece(&self, piece: &Piece) -> io::Result<()> {
