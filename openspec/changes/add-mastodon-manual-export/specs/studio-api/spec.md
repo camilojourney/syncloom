@@ -44,7 +44,7 @@ The loopback API SHALL expose Mastodon connection operations and approved-piece 
 - **AND** missing session, wrong Host, foreign Origin, cross-site metadata and malformed bodies send no platform request
 
 ### Requirement: Saved-channel browser identity
-The browser SHALL identify saved pieces using their actual channel and SHALL not claim that every visual publish remains contained.
+The browser SHALL identify saved pieces using their actual channel without claiming that every visual publish remains contained.
 
 #### Scenario: Non-LinkedIn pieces
 - **WHEN** a Mastodon or manual-export piece saved by the CLI or API is opened in the browser
