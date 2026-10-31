@@ -1,6 +1,6 @@
 # Design
 
-References: security, data, integrations, llm.
+References: security, data, integrations, llm, ui.
 
 ## Context
 
@@ -28,7 +28,7 @@ Preserve existing stores and public LinkedIn names. No live credentials, real pu
 
 ## Security boundaries
 
-Only the local operator acts. API Host guards cover every new route; OAuth state is checked before exchange, callback output is fixed and contains no CORS. Tokens never reach piece files, receipts, events, stdout or errors. Export uses the same id/revision/approval/asset owners, writes no caller-chosen path, and logs only ids/hashes/statuses. Fake content and generic client headers contain no personal data.
+Only the local operator acts. The shared HTTP session, Host and Origin guards cover every new route; OAuth state is checked before exchange, callback output is fixed and contains no CORS. Tokens never reach piece files, receipts, events, stdout or errors. Export uses the same id/revision/approval/asset owners, writes no caller-chosen path, and logs only ids/hashes/statuses. Fake content and generic client headers contain no personal data.
 
 ## Risks / Trade-offs
 
@@ -39,7 +39,7 @@ Only the local operator acts. API Host guards cover every new route; OAuth state
 
 ## Validation review
 
-The weakened-check analyzer flags six candidates, none accepted as a weakened check: LinkedIn's expiry equality now compares the same expected instant through `Option::as_deref`; the log count increases from eight to ten for two added requests; four `fit(...)` boundary assertions are mistaken for focused test calls. The latter assertions actively verify the new channel bounds and do not skip or focus tests. No suppression or findings waiver remains. Guard mutations were rerun after the named-step refactor.
+The weakened-check analyzer flags six candidates, none accepted as a weakened check: LinkedIn's expiry equality now compares the same expected instant through `Option::as_deref`; the log count increases from nine to eleven for two added requests; four `fit(...)` boundary assertions are mistaken for focused test calls. The latter assertions actively verify the new channel bounds and do not skip or focus tests. No suppression or findings waiver remains. Guard mutations were rerun after the named-step refactor. Rebasing onto the protected review studio exposed unauthenticated test callers (403), corrected by using its shared session-aware test helpers, not weakening the boundary. Added API assertions cover missing session, foreign Host/Origin and cross-site metadata on the new routes. Saved Mastodon/manual pieces no longer inherit hard-coded LinkedIn labels or a false visual-containment promise; browser labels use the channel owner and the existing layout is unchanged.
 
 ## Migration Plan
 
