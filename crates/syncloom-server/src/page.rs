@@ -10,12 +10,70 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use syncloom_core::html::escape;
 use syncloom_core::{
     AssetHashes, Piece, PublishRequest, PublishResponse, RenderRequest, ReviewRequest, Status,
     StudioError, ThoughtRequest,
 };
+
+/// Browser-only form state. Restart requires fresh acceptance; core dispatch still checks cost.
+#[derive(Default)]
+pub(crate) struct CostConsents(Mutex<HashMap<String, CostConsent>>);
+
+#[derive(PartialEq, Eq)]
+struct CostConsent {
+    revision: String,
+    estimate: syncloom_core::social::CostEstimate,
+}
+
+impl CostConsent {
+    fn current(piece: &Piece) -> Self {
+        Self {
+            revision: piece.revision.clone(),
+            estimate: syncloom_core::social::estimate(&piece.text, piece.visual.is_some()),
+        }
+    }
+}
+
+impl CostConsents {
+    fn accepted(&self, piece: &Piece) -> Option<u64> {
+        let current = CostConsent::current(piece);
+        let mut records = self.0.lock().expect("cost consent lock");
+        if piece.channel == syncloom_core::Channel::X
+            && records.get(&piece.piece_id) == Some(&current)
+        {
+            Some(current.estimate.microusd)
+        } else {
+            // Never reuse a stale acceptance after content or pricing changes.
+            records.remove(&piece.piece_id);
+            None
+        }
+    }
+
+    fn accept(&self, piece: &Piece, form: &PieceForm) -> Result<(), StudioError> {
+        if piece.channel != syncloom_core::Channel::X {
+            return Err(StudioError::InvalidRequest);
+        }
+        if piece.revision != form.expected_revision {
+            return Err(StudioError::RevisionConflict);
+        }
+        let current = CostConsent::current(piece);
+        if form.accepted_cost_microusd != Some(current.estimate.microusd)
+            || form.pricing_as_of.as_deref() != Some(current.estimate.pricing_as_of.as_str())
+        {
+            return Err(StudioError::CostConfirmationRequired);
+        }
+        self.0
+            .lock()
+            .expect("cost consent lock")
+            .insert(piece.piece_id.clone(), current);
+        Ok(())
+    }
+}
 
 fn document(title: &str, content: &str) -> Html<String> {
     Html(format!(
@@ -54,7 +112,7 @@ pub(crate) async fn index(
     let page = state.studio.list(cursor(query)?.after.as_deref())?;
     let mut saved = String::new();
     for piece in page.pieces {
-        saved.push_str(&format!(r#"<a class="piece-card" href="/review/{}"><div class="card-meta"><span>{}</span><span class="status">{}</span></div><h3>{}</h3><p class="thought-excerpt">{}</p><span class="open-piece">Review piece ↗</span></a>"#, escape(&piece.piece_id), piece.channel.name(), status(piece.status), escape(&piece.text), escape(&piece.source.raw_input)));
+        saved.push_str(&format!(r#"<a class="piece-card" href="/review/{}"><div class="card-meta"><span>{}</span><span class="status">{}</span></div><h3>{}</h3><p class="thought-excerpt">{}</p><span class="open-piece">Review piece ↗</span></a>"#, escape(&piece.piece_id), piece.channel.display_name(), status(piece.status), escape(&piece.text), escape(&piece.source.raw_input)));
     }
     if saved.is_empty() {
         saved.push_str("<div class=\"empty card\"><h3>No pieces yet</h3><p>Your next piece starts with a thought. Add one to draft for LinkedIn.</p></div>");
@@ -166,7 +224,7 @@ fn approval_note(piece: &Piece) -> &'static str {
 
 fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
     let id = escape(&piece.piece_id);
-    let channel = piece.channel.name();
+    let channel = piece.channel.display_name();
     let fields = revision_fields(state, piece);
     let mut hashes = String::new();
     if let Some(assets) = &piece.assets {
@@ -189,26 +247,8 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     } else {
         ""
     };
-    let unavailable_image =
-        piece.channel == syncloom_core::Channel::Threads && piece.visual.is_some();
-    let delivery_note = delivery_note(piece, unavailable_image);
-    let publish_disabled = if piece.status != Status::Approved || unavailable_image {
-        " disabled"
-    } else {
-        ""
-    };
     let approval_note = approval_note(piece);
-    let cost_confirmation = if piece.channel == syncloom_core::Channel::X {
-        let cost = syncloom_core::social::estimate(&piece.text, piece.visual.is_some());
-        format!(
-            r#"<p class="hint">X estimated cost: <strong>{}</strong>. Pricing as of {}. This is not an actual charge; URL-like text uses the link rate.</p><label class="cost-confirmation"><input type="checkbox" name="accepted_cost_microusd" value="{}" required> I accept this estimated cost for this revision.</label>"#,
-            cost.usd(),
-            cost.pricing_as_of,
-            cost.microusd
-        )
-    } else {
-        String::new()
-    };
+    let publish_controls = publish_controls(state, piece);
     let receipt = receipt.map(publish_receipt).unwrap_or_default();
     let last_outcome = piece
         .publish_status
@@ -223,7 +263,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} {} / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr><p class="hint">Without a delivery grant, nothing leaves this laptop. {delivery_note}</p><form method="post" action="/review/{id}/publish">{fields}{cost_confirmation}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} {} / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr>{publish_controls}{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
             status(piece.status),
             escape(&piece.source.raw_input),
             escape(&piece.text),
@@ -234,6 +274,47 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
             escape(&piece.revision),
             format_args!("{}{}", previews(piece), jpeg_previews(piece))
         ),
+    )
+}
+
+/// Keep delivery availability, cost acceptance and the Publish control together.
+fn publish_controls(state: &AppState, piece: &Piece) -> String {
+    let id = escape(&piece.piece_id);
+    let fields = revision_fields(state, piece);
+    let unavailable_image =
+        piece.channel == syncloom_core::Channel::Threads && piece.visual.is_some();
+    let delivery_note = delivery_note(piece, unavailable_image);
+    let accepted_cost = state.cost_consents.accepted(piece);
+    let publish_disabled = if piece.status != Status::Approved
+        || unavailable_image
+        || (piece.channel == syncloom_core::Channel::X && accepted_cost.is_none())
+    {
+        " disabled"
+    } else {
+        ""
+    };
+    let cost_confirmation = if piece.channel == syncloom_core::Channel::X {
+        let cost = syncloom_core::social::estimate(&piece.text, piece.visual.is_some());
+        let acceptance = if accepted_cost.is_some() {
+            r#"<p class="hint">Estimated cost accepted for this revision.</p>"#.to_owned()
+        } else {
+            format!(
+                r#"<form class="cost-confirmation" method="post" action="/review/{id}/accept-cost">{fields}{}{}<button class="secondary" type="submit">Accept estimated cost</button></form>"#,
+                hidden("accepted_cost_microusd", &cost.microusd.to_string()),
+                hidden("pricing_as_of", &cost.pricing_as_of)
+            )
+        };
+        format!(
+            r#"<p class="hint">X estimated cost: <strong>{}</strong>. Pricing as of <time class="pricing-date" datetime="{}">{}</time>. This is not an actual charge; URL-like text uses the link rate.</p>{acceptance}"#,
+            cost.usd(),
+            escape(&cost.pricing_as_of),
+            escape(&cost.pricing_as_of)
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<p class="hint">Without a delivery grant, nothing leaves this laptop. {delivery_note}</p>{cost_confirmation}<form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>"#
     )
 }
 
@@ -259,7 +340,7 @@ fn delivery_note(piece: &Piece, unavailable_image: bool) -> &'static str {
 
 fn previews(piece: &Piece) -> String {
     let id = escape(&piece.piece_id);
-    let channel = piece.channel.name();
+    let channel = piece.channel.display_name();
     match &piece.assets {
         Some(assets) => format!(
             r#"<div class="preview-grid"><article class="preview-card"><div class="preview-label">Image / PNG</div><img class="asset-image" src="/v1/pieces/{id}/assets/image" alt="Rendered first slide for this exact revision"><div class="preview-details"><a href="/v1/pieces/{id}/assets/image" target="_blank" rel="noreferrer">Open verified PNG ↗</a><p class="label">Image SHA-256</p><code class="hash">{}</code></div></article><article class="preview-card"><div class="preview-label">Carousel / PDF · {} pages</div><div class="pdf-preview"><iframe title="Rendered PDF carousel" src="/v1/pieces/{id}/assets/carousel#toolbar=0&amp;navpanes=0&amp;view=FitH"></iframe></div><div class="preview-details"><a href="/v1/pieces/{id}/assets/carousel" target="_blank" rel="noreferrer">Open verified PDF ↗</a><p class="hint">Scroll inside the PDF to inspect every page. If your browser cannot embed PDFs, use the link above.</p><p class="label">Carousel SHA-256</p><code class="hash">{}</code></div></article></div>"#,
@@ -361,6 +442,7 @@ pub(crate) struct PieceForm {
     carousel_sha256: Option<String>,
     slides_sha256: Option<String>,
     accepted_cost_microusd: Option<u64>,
+    pricing_as_of: Option<String>,
 }
 
 impl PieceForm {
@@ -439,6 +521,11 @@ pub(crate) async fn action(
 ) -> Result<Response, Failure> {
     let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
     let Form(form) = form.map_err(|_| StudioError::InvalidRequest)?;
+    if action == "accept-cost" {
+        let piece = state.studio.show(&id)?;
+        state.cost_consents.accept(&piece, &form)?;
+        return saved_piece_response(Ok(piece));
+    }
     match submitted_action(&action, form)? {
         SubmittedAction::Review(request) => review_action(&state, &id, request),
         SubmittedAction::Render(request) => render_action(&state, &id, request).await,
@@ -465,12 +552,84 @@ async fn render_action(
 async fn publish_action(
     state: &AppState,
     id: &str,
-    request: PublishRequest,
+    mut request: PublishRequest,
 ) -> Result<Response, Failure> {
+    // Browser publish uses only server-recorded consent, never a forged form amount.
+    let piece = state.studio.show(id)?;
+    if piece.revision != request.expected_revision {
+        return Err(StudioError::RevisionConflict.into());
+    }
+    request.accepted_cost_microusd = state.cost_consents.accepted(&piece);
+    if piece.channel == syncloom_core::Channel::X && request.accepted_cost_microusd.is_none() {
+        return Err(StudioError::CostConfirmationRequired.into());
+    }
     let receipt = state.studio.publish(id, request).await?;
     Ok((
         StatusCode::OK,
         piece_page(state, &receipt.piece, Some(&receipt)),
     )
         .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn piece() -> Piece {
+        serde_json::from_value(serde_json::json!({
+            "piece_id":"thought-test-x", "group_id":"test", "channel":"x",
+            "platform":"x", "text":"A draft.", "revision":"revision-1",
+            "status":"approved", "review_decision_id":"review-1", "publish_status":null,
+            "fit":{"verdict":"PASS", "char_count":8,"min_chars":1,"max_chars":280},
+            "source":{"type":"text","raw_input":"A thought."},
+            "created_at":"2026-10-31T00:00:00Z", "updated_at":"2026-10-31T00:00:00Z"
+        }))
+        .unwrap()
+    }
+
+    // [utest->req~studio-api.browser-x-cost-consent~1]
+    #[test]
+    fn changed_estimate_or_date_invalidates_consent_even_for_the_same_revision() {
+        let piece = piece();
+        for change in ["amount", "date"] {
+            let records = CostConsents::default();
+            let mut old = CostConsent::current(&piece);
+            if change == "amount" {
+                old.estimate.microusd = 14999;
+            } else {
+                old.estimate.pricing_as_of = "2026-10-30".into();
+            }
+            records
+                .0
+                .lock()
+                .unwrap()
+                .insert(piece.piece_id.clone(), old);
+            assert_eq!(records.accepted(&piece), None, "{change}");
+            assert!(
+                records.0.lock().unwrap().is_empty(),
+                "stale record must be cleared"
+            );
+        }
+    }
+
+    // [utest->req~studio-api.browser-x-cost-consent~1]
+    #[test]
+    fn consent_is_piece_and_session_scoped() {
+        let piece = piece();
+        let records = CostConsents::default();
+        records
+            .0
+            .lock()
+            .unwrap()
+            .insert(piece.piece_id.clone(), CostConsent::current(&piece));
+        assert_eq!(records.accepted(&piece), Some(15000));
+        let mut other = piece.clone();
+        other.piece_id = "thought-other-x".into();
+        assert_eq!(records.accepted(&other), None);
+        assert_eq!(
+            CostConsents::default().accepted(&piece),
+            None,
+            "new session requires consent"
+        );
+    }
 }

@@ -199,7 +199,7 @@ async fn export_requires_approval_and_returns_a_real_local_bundle_never_a_post()
 #[tokio::test]
 async fn saved_new_channels_are_not_mislabeled_as_linkedin_in_the_browser() {
     let server = start(Scripted::new(text("A saved draft about evidence."))).await;
-    for channel in ["mastodon", "manual_export"] {
+    for (channel, display) in [("mastodon", "Mastodon"), ("manual_export", "Manual export")] {
         let created = post(
             &server,
             "/v1/thoughts",
@@ -211,15 +211,15 @@ async fn saved_new_channels_are_not_mislabeled_as_linkedin_in_the_browser() {
         assert_eq!(created.status, 201, "{}", created.raw);
         let id = created.body["pieces"][0]["piece_id"].as_str().unwrap();
         let home = get(&server, "/").await;
-        assert!(home.raw.contains(&format!("<span>{channel}</span>")));
+        assert!(home.raw.contains(&format!("<span>{display}</span>")));
         let review = get(&server, &format!("/review/{id}")).await;
         assert_eq!(review.status, 200);
         assert!(
             review
                 .raw
-                .contains(&format!("class=\"eyebrow\">{channel}</p>"))
+                .contains(&format!("class=\"eyebrow\">{display}</p>"))
         );
-        assert!(review.raw.contains(&format!("{channel} preview")));
+        assert!(review.raw.contains(&format!("{display} preview")));
         assert!(!review.raw.contains("Visual uploads remain contained."));
     }
 }

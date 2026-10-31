@@ -50,6 +50,19 @@ impl Channel {
             Channel::Threads => "threads",
         }
     }
+    /// User-facing platform name; machine identities remain stable in `name`.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Channel::LinkedinText => "LinkedIn",
+            Channel::Mastodon => "Mastodon",
+            Channel::ManualExport => "Manual export",
+            Channel::FacebookPage => "Facebook",
+            Channel::Instagram => "Instagram",
+            Channel::Bluesky => "Bluesky",
+            Channel::X => "X",
+            Channel::Threads => "Threads",
+        }
+    }
     /// The platform the channel posts to.
     pub fn platform(self) -> &'static str {
         match self {

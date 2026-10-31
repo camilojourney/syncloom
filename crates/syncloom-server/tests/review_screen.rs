@@ -600,3 +600,238 @@ async fn browser_visual_approval_uses_displayed_revision_and_exact_hashes() {
     assert_eq!(current["status"], "pending_review");
     assert!(current.get("assets").is_none());
 }
+
+// [itest->req~studio-api.saved-channel-browser-identity~1]
+#[tokio::test]
+async fn platform_display_names_are_shared_by_review_preview_and_discovery() {
+    let server = start(Scripted::new(scripted::text("A saved platform draft."))).await;
+    for (channel, display) in [
+        ("x", "X"),
+        ("bluesky", "Bluesky"),
+        ("threads", "Threads"),
+        ("mastodon", "Mastodon"),
+        ("linkedin_text", "LinkedIn"),
+        ("facebook_page", "Facebook"),
+        ("instagram", "Instagram"),
+        ("manual_export", "Manual export"),
+    ] {
+        let created = post(
+            &server,
+            "/v1/thoughts",
+            json!({"text":THOUGHT,"channels":[channel]}),
+        )
+        .await;
+        assert_eq!(created.status, 201, "{}", created.raw);
+        let p = piece_of(&created);
+        let page = get(&server, &format!("/review/{}", id_of(&p))).await;
+        assert!(
+            page.raw
+                .contains(&format!("<p class=\"eyebrow\">{display}</p>")),
+            "{channel}: {}",
+            page.raw
+        );
+        assert!(page.raw.contains(&format!("{display} preview")));
+        assert!(
+            get(&server, "/")
+                .await
+                .raw
+                .contains(&format!("<span>{display}</span>"))
+        );
+        assert_eq!(
+            p["channel"], channel,
+            "machine identity must stay unchanged"
+        );
+    }
+}
+
+// [itest->req~studio-api.browser-x-cost-consent~1]
+#[tokio::test]
+async fn browser_cost_consent_rejects_foreign_origin_missing_fields_and_non_x_piece() {
+    let server = start(Scripted::new(scripted::text("A saved draft."))).await;
+    let p = approved_x(&server).await;
+    let path = format!("/review/{}/accept-cost", id_of(&p));
+    let fields = [
+        ("csrf", server.token.as_str()),
+        ("expected_revision", p["revision"].as_str().unwrap()),
+        ("accepted_cost_microusd", "15000"),
+        ("pricing_as_of", "2026-10-31"),
+    ];
+    for origin in ["https://foreign.invalid", "null"] {
+        let refused = answer(
+            client()
+                .post(server.url(&path))
+                .header("origin", origin)
+                .form(&fields)
+                .send()
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(refused.status, 403);
+        assert!(refused.raw.contains("origin_not_allowed"));
+    }
+    for index in [2, 3] {
+        let partial: Vec<_> = fields
+            .iter()
+            .enumerate()
+            .filter_map(|(i, f)| (i != index).then_some(*f))
+            .collect();
+        let refused = form(&server, &path, &partial).await;
+        assert_eq!(refused.status, 409);
+        assert!(refused.raw.contains("cost_confirmation_required"));
+    }
+    let other = piece_of(
+        &post(
+            &server,
+            "/v1/thoughts",
+            json!({"text":THOUGHT,"channels":["bluesky"]}),
+        )
+        .await,
+    );
+    let refused = form(
+        &server,
+        &format!("/review/{}/accept-cost", id_of(&other)),
+        &fields,
+    )
+    .await;
+    assert_eq!(refused.status, 400);
+    assert!(refused.raw.contains("invalid_request"));
+    let page = get(&server, &format!("/review/{}", id_of(&p))).await;
+    assert!(
+        page.raw
+            .contains("class=\"publish\" type=\"submit\" disabled")
+    );
+}
+
+async fn approved_x(server: &TestServer) -> Value {
+    let p = piece_of(
+        &post(
+            server,
+            "/v1/thoughts",
+            json!({"text":THOUGHT,"channels":["x"]}),
+        )
+        .await,
+    );
+    let approved = send_json(
+        server,
+        reqwest::Method::PATCH,
+        &format!("/v1/pieces/{}", id_of(&p)),
+        json!({"expected_revision":p["revision"],"status":"approved"}),
+    )
+    .await;
+    assert_eq!(approved.status, 200, "{}", approved.raw);
+    approved.body
+}
+
+// [itest->req~studio-api.browser-x-cost-consent~1]
+#[tokio::test]
+async fn x_publish_is_natively_disabled_before_cost_consent() {
+    let server = start(Scripted::new(scripted::text("A saved X draft."))).await;
+    let p = approved_x(&server).await;
+    let page = get(&server, &format!("/review/{}", id_of(&p))).await;
+    assert!(
+        page.raw
+            .contains("class=\"publish\" type=\"submit\" disabled"),
+        "Publish must really be disabled"
+    );
+    assert!(
+        page.raw
+            .contains("<time class=\"pricing-date\" datetime=\"2026-10-31\">2026-10-31</time>")
+    );
+    assert!(!page.raw.contains("<script"));
+}
+
+// [itest->req~studio-api.browser-x-cost-consent~1]
+#[tokio::test]
+async fn x_cost_consent_records_only_matching_quote_and_clears_on_revision() {
+    let server = start(Scripted::new(scripted::text("A saved X draft."))).await;
+    let p = approved_x(&server).await;
+    let path = format!("/review/{}", id_of(&p));
+    let revision = p["revision"].as_str().unwrap();
+    let fields = [
+        ("csrf", server.token.as_str()),
+        ("expected_revision", revision),
+        ("accepted_cost_microusd", "15000"),
+        ("pricing_as_of", "2026-10-31"),
+    ];
+    for (index, bad, code) in [
+        (1, "stale", "revision_conflict"),
+        (2, "14999", "cost_confirmation_required"),
+        (2, "15001", "cost_confirmation_required"),
+        (3, "2026-10-30", "cost_confirmation_required"),
+        (0, "wrong-session", "session_required"),
+    ] {
+        let mut invalid = fields;
+        invalid[index].1 = bad;
+        let refused = form(&server, &format!("{path}/accept-cost"), &invalid).await;
+        assert!(refused.raw.contains(code), "{}", refused.raw);
+        assert!(
+            get(&server, &path)
+                .await
+                .raw
+                .contains("class=\"publish\" type=\"submit\" disabled")
+        );
+    }
+    let forged = form(&server, &format!("{path}/publish"), &fields[..3]).await;
+    assert!(forged.raw.contains("cost_confirmation_required"));
+    let accepted = form(&server, &format!("{path}/accept-cost"), &fields).await;
+    assert_eq!(accepted.status, 200, "{}", accepted.raw);
+    assert!(
+        accepted
+            .raw
+            .contains("Estimated cost accepted for this revision.")
+    );
+    assert!(
+        accepted
+            .raw
+            .contains("class=\"publish\" type=\"submit\">Publish")
+    );
+    assert_eq!(
+        std::fs::read_dir(server.dir.path().join("outbox"))
+            .unwrap()
+            .count(),
+        0,
+        "acceptance must not publish"
+    );
+    let published = form(&server, &format!("{path}/publish"), &fields[..2]).await;
+    assert_eq!(published.status, 200, "{}", published.raw);
+    assert!(published.raw.contains("contained"));
+    let edited = send_json(
+        &server,
+        reqwest::Method::PATCH,
+        &format!("/v1/pieces/{}", id_of(&p)),
+        json!({"expected_revision":revision,"text":"A changed X draft, same estimate."}),
+    )
+    .await;
+    assert_eq!(edited.status, 200, "{}", edited.raw);
+    let updated = edited.body;
+    let approved = send_json(
+        &server,
+        reqwest::Method::PATCH,
+        &format!("/v1/pieces/{}", id_of(&p)),
+        json!({"expected_revision":updated["revision"],"status":"approved"}),
+    )
+    .await;
+    assert_eq!(approved.status, 200);
+    let page = get(&server, &path).await;
+    assert!(
+        page.raw
+            .contains("class=\"publish\" type=\"submit\" disabled")
+    );
+    assert!(
+        !page
+            .raw
+            .contains("Estimated cost accepted for this revision.")
+    );
+    let refused = form(
+        &server,
+        &format!("{path}/publish"),
+        &[
+            ("csrf", &server.token),
+            ("expected_revision", updated["revision"].as_str().unwrap()),
+            ("accepted_cost_microusd", "15000"),
+        ],
+    )
+    .await;
+    assert!(refused.raw.contains("cost_confirmation_required"));
+}

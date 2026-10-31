@@ -34,6 +34,7 @@ const MAX_BODY_BYTES: usize = 1024 * 1024;
 pub(crate) struct AppState {
     pub(crate) studio: Arc<Studio>,
     pub(crate) boundary: Boundary,
+    pub(crate) cost_consents: page::CostConsents,
 }
 
 pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Result<()> {
@@ -44,6 +45,7 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
     let state = Arc::new(AppState {
         studio,
         boundary: Boundary::new(address.to_string()),
+        cost_consents: page::CostConsents::default(),
     });
     let app = Router::new()
         .merge(crate::meta::routes())

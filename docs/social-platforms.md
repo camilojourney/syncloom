@@ -75,7 +75,7 @@ cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision> -
 cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision> --accepted-cost-microusd 15000
 ```
 
-HTTP uses the same optional `accepted_cost_microusd` field. Without matching confirmation, granted X delivery returns 409 `cost_confirmation_required` before reserving an intent. The review page displays the estimate with a required acceptance checkbox. The intent retains the estimate for contained, posted, failed and unknown outcomes across restarts. Repeating a posted/unknown intent does not send again and retains its original estimate. No actual-charge amount is invented.
+HTTP uses the same optional `accepted_cost_microusd` field. Without matching confirmation, granted X delivery returns 409 `cost_confirmation_required` before reserving an intent. The review page displays the dated estimate and a separate **Accept estimated cost** form before enabling Publish. Browser consent is bound to the exact revision and full estimate for the server session; changed content or pricing and server restart require acceptance again. It never approves or publishes by itself. The intent retains the estimate for contained, posted, failed and unknown outcomes across restarts. Repeating a posted/unknown intent does not send again and retains its original estimate. No actual-charge amount is invented.
 
 ## Open questions and real-use prerequisites
 
