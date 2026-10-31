@@ -52,3 +52,13 @@ A failed event append SHALL answer 500 `internal_error`; the piece write that pr
 - **WHEN** the provenance directory refuses writes and a thought is drafted
 - **THEN** status is 500 with code `internal_error`
 - **AND** the piece exists when shown, so the operator can see what was drafted
+
+### Requirement: Visual evidence
+The provenance log SHALL record visual configuration, render outcomes, byte viewing and approval with revisions and asset hashes, never slide text or local paths.
+
+#### Scenario: Render, view, approve
+- **WHEN** a visual piece is rendered, viewed and approved
+- **THEN** events include visual_configured, assets_rendered, assets_viewed and piece_reviewed
+- **AND** successful render, view and approval events carry the exact image and carousel hashes
+- **AND** a renderer failure records render_failed with its fixed outcome code
+- **AND** starting a same-content rerender records assets_invalidated when it clears the earlier render and approval

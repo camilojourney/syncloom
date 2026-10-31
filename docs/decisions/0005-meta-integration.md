@@ -3,7 +3,7 @@
 **Date:** 2026-10-31
 **Status:** Proposed
 **Supersedes:** none
-**OpenSpec changes:** [add-meta-publishing](../../openspec/changes/add-meta-publishing/)
+**OpenSpec changes:** [add-meta-publishing](../../openspec/changes/archive/2026-10-30-add-meta-publishing/)
 **Agreed:** no - implementation brief authorizes fake-only work, not live actions or hosting
 **Recommended:** Facebook Login for Business, Page token, explicit public-media port
 **Built:** fake-proven implementation on the task branch; not yet landed on main
@@ -15,7 +15,7 @@ Q3 answers vision 3.2's research prerequisite for slice 5 Meta channels.
 
 ## Decision
 
-Use [meta-integration](../../openspec/changes/add-meta-publishing/specs/meta-integration/spec.md), with platform-credentials and dispatch-outbox retaining ownership of secrets and repeat safety.
+Use [meta-integration](../../openspec/changes/archive/2026-10-30-add-meta-publishing/specs/meta-integration/spec.md), with platform-credentials and dispatch-outbox retaining ownership of secrets and repeat safety.
 
 ## Rationale
 
@@ -50,4 +50,4 @@ Open question: which public media host, retention duration and deletion policy i
 
 ## References
 
-- [Design](../../openspec/changes/add-meta-publishing/design.md)
+- [Design](../../openspec/changes/archive/2026-10-30-add-meta-publishing/design.md)

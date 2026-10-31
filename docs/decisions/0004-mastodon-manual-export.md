@@ -3,7 +3,7 @@
 **Date:** 2026-10-31
 **Status:** Proposed
 **Supersedes:** none
-**OpenSpec changes:** [add-mastodon-manual-export](../../openspec/changes/add-mastodon-manual-export/)
+**OpenSpec changes:** [add-mastodon-manual-export](../../openspec/changes/archive/2026-10-30-add-mastodon-manual-export/)
 **Agreed:** no - proposal approval remains pending; the firstmate task brief authorizes this fake-only implementation, not live sign-in or publication
 **Recommended:** Mastodon API publishing plus generic Reddit/TikTok manual handoff; no Pinterest or Reddit/TikTok publishing APIs
 **Built:** partly: implemented on the local task branch; landing is not yet claimed
@@ -19,7 +19,7 @@ Vision 6.2 adds channels when their research arrives. Q5 is now imported verbati
 
 ## Decision
 
-The proposed capabilities [mastodon-integration](../../openspec/changes/add-mastodon-manual-export/specs/mastodon-integration/spec.md) and [manual-export](../../openspec/changes/add-mastodon-manual-export/specs/manual-export/spec.md) own the new behavior. Existing credentials, rules, outbox, CLI and API owners are extended in the same change; Q6 reading integrations remain out of scope.
+The proposed capabilities [mastodon-integration](../../openspec/changes/archive/2026-10-30-add-mastodon-manual-export/specs/mastodon-integration/spec.md) and [manual-export](../../openspec/changes/archive/2026-10-30-add-mastodon-manual-export/specs/manual-export/spec.md) own the new behavior. Existing credentials, rules, outbox, CLI and API owners are extended in the same change; Q6 reading integrations remain out of scope.
 
 ---
 
@@ -69,4 +69,4 @@ Open gaps: real-instance compatibility, account permissions and effective per-in
 ## References
 
 - [Mastodon and export operator guide](../mastodon-and-export.md)
-- [Design](../../openspec/changes/add-mastodon-manual-export/design.md)
+- [Design](../../openspec/changes/archive/2026-10-30-add-mastodon-manual-export/design.md)

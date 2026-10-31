@@ -63,7 +63,13 @@ The server SHALL expose exactly the operations in its scenario, each answering w
 - **AND** `POST /v1/linkedin/sign-in` answers 202 (`linkedin-integration`) or 409 `sign_in_in_progress`, 503 `linkedin_not_configured`
 - **AND** `GET /v1/linkedin/sign-in` answers 200 (`linkedin-integration`) or 403 `sign_in_denied`, 403 `sign_in_state_mismatch`, 409 `sign_in_not_started`, 502 `sign_in_rejected`, 504 `sign_in_timed_out`
 - **AND** `GET /v1/linkedin/connection` and `DELETE /v1/linkedin/connection` answer 200 (`platform-credentials`)
-- **AND** every operation may answer 403 `host_not_allowed` or 500 `internal_error`; other paths answer 404 `not_found` and other methods 405 `method_not_allowed`
+- **AND** `POST /v1/pieces/{piece_id}/render` takes exactly `expected_revision`, `template` and `slides` and answers 200 with the piece, or 400 `invalid_request`, 404 `piece_not_found`, 409 `revision_conflict`, 503 `renderer_missing`, 503 `renderer_version_mismatch`, 503 `renderer_font_mismatch`, 504 `renderer_timeout`, 502 `renderer_failed`
+- **AND** `GET /v1/pieces/{piece_id}/assets/image` and `/assets/carousel` answer 200 with verified PNG or PDF bytes and SHA-256 ETag, no-store and nosniff headers, or 404 `piece_not_found`, 409 `assets_required`, 409 `asset_integrity`
+- **AND** visual approval through existing PATCH review supplies expected_assets with image_sha256 and carousel_sha256, and can also answer 409 `assets_required`, `asset_integrity` or `asset_conflict`
+- **AND** Mastodon sign-in, connection and export operations follow `Mastodon and export operations` below
+- **AND** `GET /v1/pieces` answers 200 or 400 `invalid_request` (`draft-review`), and `GET /v1/session` answers 200 with a session token
+- **AND** `GET /`, `GET /review/{piece_id}`, `GET /review/{piece_id}/edit|render`, `POST /actions/thought`, `POST /review/{piece_id}/{action}` and `GET /studio.css` serve the browser studio; actions are `edit`, `render`, `approve` and `publish`
+- **AND** every operation may answer 403 `host_not_allowed`, `origin_not_allowed`, `session_required` or 500 `internal_error`; other paths answer 404 `not_found` and other methods 405 `method_not_allowed`
 
 ### Requirement: Request id
 The server SHALL return in the `X-Request-Id` response header a request id kept from a valid request header or generated as a UUID v4.
@@ -77,7 +83,7 @@ The server SHALL return in the `X-Request-Id` response header a request id kept 
 - **THEN** the response header carries a UUID v4
 
 ### Requirement: Error envelope
-Every error response SHALL be a JSON object `{"error":{"code","message","request_id"}}` with a fixed message per code.
+Every API error response SHALL be a JSON object `{"error":{"code","message","request_id"}}` with a fixed message per code.
 
 #### Scenario: Message never echoes the request
 - **WHEN** a request carrying canary text in its path, headers and body fails
@@ -88,6 +94,11 @@ Every error response SHALL be a JSON object `{"error":{"code","message","request
 - **WHEN** each error code is produced against the server with `X-Request-Id: fixture-request-id`
 - **THEN** status and body equal the fixture file for that code
 - **AND** the fixture directory holds exactly the documented codes
+
+#### Scenario: Browser errors
+- **WHEN** a browser page or form operation fails
+- **THEN** the HTTP status, fixed code and fixed message equal the API failure
+- **AND** an HTML error page shows its request id and a link back to the studio without reflecting the submitted content
 
 ### Requirement: Invalid request body
 A documented operation SHALL answer 400 `invalid_request` when its body is not a JSON object with exactly the documented fields and types.
@@ -125,8 +136,9 @@ The server SHALL write one JSON log line per request with the request id, a fixe
 #### Scenario: Content stays out of the logs
 - **WHEN** a thought carrying canary text is drafted, shown, approved and published, and a LinkedIn sign-in and connection read happen
 - **THEN** each request produced one line with `request_id`, `route`, `status`, `total_ms` and `outcome`
-- **AND** the route labels are `/v1/thoughts`, `/v1/pieces/{piece_id}`, `/v1/pieces/{piece_id}/publish`, `/v1/linkedin/sign-in`, `/v1/linkedin/connection` or `unmatched`
-- **AND** the canary text, the draft text, the provider key, the LinkedIn token and the client secret appear in no log line
+- **AND** the route labels are `/v1/thoughts`, `/v1/pieces/{piece_id}`, `/v1/pieces/{piece_id}/publish`, `/v1/linkedin/sign-in`, `/v1/linkedin/connection`, `/v1/pieces/{piece_id}/export`, `/v1/mastodon/sign-in`, `/v1/mastodon/connection` or `unmatched`
+- **AND** the session, browser and asset route labels added by their capabilities remain unchanged
+- **AND** the canary text, the draft text, the provider key, both platform tokens, the session token and the client secret appear in no log line
 
 ### Requirement: Hermetic tests
 `cargo test` SHALL use temporary directories only and leave `git status --porcelain --ignored` unchanged.
@@ -141,3 +153,88 @@ A change SHALL land only when fmt, clippy with denied warnings, the tests and st
 #### Scenario: Gate commands
 - **WHEN** `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` and `openspec validate --all --strict --no-interactive` run on the change
 - **THEN** every command exits 0
+
+### Requirement: Browser studio
+`GET /` and `GET /review/{piece_id}` SHALL show saved thoughts and pieces, draft editing, visual rendering, exact approval and explicit publishing through existing core operations.
+
+#### Scenario: Founder reviews a piece
+- **WHEN** the founder opens the page on the laptop
+- **THEN** saved thoughts and pieces are discoverable, including pieces created by the CLI
+- **AND** a selected piece shows its source, saved draft, status and full revision; a separate editor has no approval controls
+- **AND** ordinary forms create drafts, save edits, render visuals, approve and publish without client-side scripts
+- **AND** empty and error states explain recovery, and the browser indicates loading during navigation
+
+### Requirement: Phone-sized asset previews
+The review page SHALL display current PNG and PDF assets at phone-sized widths with their full SHA-256 hashes and links to their verified bytes.
+
+#### Scenario: Render and edit
+- **WHEN** a rendered piece is opened
+- **THEN** the PNG and PDF are previewed at no more than 360 CSS pixels wide, with the PDF's page count
+- **AND** approval submits the displayed revision and both displayed hashes, as required by `visual-assets`
+- **AND** editing clears approval and old previews according to `draft-review` and `visual-assets`
+- **AND** narrow layouts have no horizontal page overflow
+
+### Requirement: Truthful browser outcomes
+The review page SHALL display the core's publish outcome without equating contained, refused or unknown outcomes with posted.
+
+#### Scenario: Contained publish
+- **WHEN** an approved piece is published without a delivery grant
+- **THEN** the page says `contained`, explains that nothing was sent, and shows the request id and attempt count
+- **AND** repeating returns the same intent, and an unapproved piece cannot be published
+
+### Requirement: Origin and browser-site checks
+Every request SHALL reject foreign, null or repeated Origin headers and cross-site browser fetches with 403 `origin_not_allowed` before any core operation.
+
+#### Scenario: Local origin only
+- **WHEN** Origin is present
+- **THEN** only the single exact `http://127.0.0.1:<bound port>` is accepted
+- **AND** foreign ports, localhost, opaque null and multiple origins are rejected, even with a valid session token
+- **AND** absent Origin is accepted for non-browser clients, but `Sec-Fetch-Site: cross-site` or `same-site` is rejected
+- **AND** rejected requests store nothing, invoke no provider and never echo supplied values
+
+### Requirement: Server-session token
+Every state-changing HTTP request SHALL require the current server-session token, otherwise answering 403 `session_required` without invoking core operations.
+
+#### Scenario: Session handshake
+- **WHEN** a client calls `GET /v1/session` through the guarded loopback origin
+- **THEN** it receives 200 with `{"token":<unpredictable token>}`
+- **AND** API mutations send it once in `X-Syncloom-Token`; browser forms send it once in `csrf`
+- **AND** missing, incorrect, repeated or another server's tokens fail
+- **AND** the token changes on restart, is not placed in URLs, and is never logged
+
+### Requirement: Browser response protections
+Every response SHALL prevent caching, MIME sniffing, framing by other pages, off-origin referrer disclosure, scripts and off-origin resource loading.
+
+#### Scenario: Stored markup is inert
+- **WHEN** saved thoughts, draft text or slide text contain HTML metacharacters
+- **THEN** the page displays them as text rather than executable markup
+- **AND** responses include no-store, nosniff, same-origin referrer policy and a restrictive Content-Security-Policy; pages deny framing, while verified PDFs permit only same-origin framing
+- **AND** no CORS response headers are added
+
+### Requirement: Mastodon and export operations
+The loopback API SHALL expose Mastodon connection operations and approved-piece export under the existing Host, Origin, server-session, no-CORS and fixed-error boundary.
+
+#### Scenario: Operations
+- **WHEN** a client calls the API with the correct Host, permitted Origin and session token for mutations
+- **THEN** `POST /v1/mastodon/sign-in` returns 202 with authorization URL and expiry; `GET` waits and returns 200 with connection
+- **AND** `GET /v1/mastodon/connection` and `DELETE /v1/mastodon/connection` return 200 connection results
+- **AND** `POST /v1/pieces/{piece_id}/export` accepts `expected_revision` and `target` and returns the 200 export receipt
+- **AND** failures use the existing review, sign-in and storage codes; an unconfigured instance returns 503 `mastodon_not_configured`
+- **AND** missing session, wrong Host, foreign Origin, cross-site metadata and malformed bodies send no platform request
+
+### Requirement: Saved-channel browser identity
+The browser SHALL identify saved pieces using their actual channel without claiming that every visual publish remains contained.
+
+#### Scenario: Non-LinkedIn pieces
+- **WHEN** a Mastodon or manual-export piece saved by the CLI or API is opened in the browser
+- **THEN** the discovery card, review heading and text preview show its actual channel, not LinkedIn
+- **AND** publish guidance distinguishes contained LinkedIn visuals from granted Mastodon PNG delivery and local-only carousels/manual export
+
+### Requirement: Q1 connection surface
+The API SHALL expose the three Q1 integration operations through the existing boundary and fixed error envelope.
+
+#### Scenario: Operations and errors
+- **WHEN** a client calls the Bluesky, X or Threads operations defined by their integration capabilities
+- **THEN** existing Host, Origin and mutation-session checks apply without CORS
+- **AND** missing app settings return 503 platform_not_configured; unconfirmed X delivery returns 409 cost_confirmation_required
+- **AND** error responses match their fixed contract fixtures and never echo secret input

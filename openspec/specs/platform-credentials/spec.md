@@ -52,3 +52,20 @@ No response body, event, log line, error message or command output SHALL contain
 #### Scenario: Canary secrets
 - **WHEN** the fake platform issues a token containing a canary word and the sign-in uses a client secret containing another canary word
 - **THEN** neither word appears in any API response, in `provenance/events.jsonl`, in the server log lines or in the CLI's stdout and stderr
+
+### Requirement: Instance-scoped non-expiring token
+Mastodon credentials SHALL use an account keyed by the instance origin and remain signed in until deleted or refused, without fabricating an expiry.
+
+#### Scenario: Independent instances
+- **WHEN** one instance is signed in and another instance is selected
+- **THEN** the second instance has no token and publishing sends nothing
+- **AND** the first connection reports `signed_in` without `expires_at`; sign-out deletes only its token
+- **AND** app secrets live in memory during sign-in only, never in the data directory
+
+### Requirement: Explicit renewable-session refresh
+Renewable integrations SHALL refresh only on explicit request, replacing credentials durably before reuse and preserving existing credentials when refresh fails.
+
+#### Scenario: No implicit renewal
+- **WHEN** a dispatch finds an expired access token
+- **THEN** the existing absent-or-expired policy applies and no network request is made
+- **AND** the founder can explicitly refresh X or Bluesky credentials, or unexpired eligible Threads credentials

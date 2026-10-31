@@ -3,7 +3,7 @@
 **Date:** 2026-10-31
 **Status:** Proposed
 **Supersedes:** none
-**OpenSpec changes:** [add-bluesky-x-threads](../../openspec/changes/add-bluesky-x-threads/)
+**OpenSpec changes:** [add-bluesky-x-threads](../../openspec/changes/archive/2026-10-30-add-bluesky-x-threads/)
 **Agreed:** no - implementation brief authorizes building; artifact review remains pending
 **Recommended:** ATrium typed Bluesky APIs, X v2 with explicit cost confirmation, Threads text only
 **Built:** yes - implemented and independently fake-proven on the rebased tree; final committed-tree receipt is recorded in the task report
@@ -15,7 +15,7 @@ Q1 arrived after the first two adapters. Its single-provider provenance limits c
 
 ## Decision
 
-Use the [integration delta specs](../../openspec/changes/add-bluesky-x-threads/specs/) with existing outbox, credential and channel owners. Threads image delivery and redirect hosting are not implemented.
+Use the [integration delta specs](../../openspec/changes/archive/2026-10-30-add-bluesky-x-threads/specs/) with existing outbox, credential and channel owners. Threads image delivery and redirect hosting are not implemented.
 
 ## Rationale
 
@@ -70,5 +70,5 @@ Open questions: Which Threads HTTPS redirect host and local handoff? Which publi
 
 ## References
 
-- [Design](../../openspec/changes/add-bluesky-x-threads/design.md)
+- [Design](../../openspec/changes/archive/2026-10-30-add-bluesky-x-threads/design.md)
 - [Research convention](../research/README.md)
