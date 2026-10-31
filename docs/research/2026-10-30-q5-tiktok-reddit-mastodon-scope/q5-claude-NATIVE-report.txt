@@ -1,0 +1,316 @@
+Publishing scope for a solo content studio: TikTok, Reddit, Mastodon, Pinterest (as of 30 October 2026)
+
+Bottom line: of the four platforms, only Mastodon lets an unaudited, single-user app publish publicly through its official API, and that is the only one worth wiring up now. Reddit’s API is closed to new apps: new requests stop being accepted on 31 October 2026 and public access ends in March 2027. bigideasdb TikTok’s Direct Post audit explicitly rejects tools that only post to the developer’s own accounts. Pinterest is technically feasible, but no evidence was found that software or AI professionals use it.
+
+TL;DR
+
+
+Mastodon: build it (API publish). There is no app review, the documented limits are generous (300 requests per 5 minutes; 30 media uploads per 30 minutes), and there is a maintained Rust crate. It costs about 2–4 dev-days and almost no upkeep. The audience is small: 734,000 monthly active accounts as of 14 Oct 2026, from Mastodon’s own statistics API as reported by Postory. But it is concentrated in OSS and security circles, so treat it as a cheap add-on, not a priority channel.
+Reddit: manual paste, and read in the browser. The founder can still post and comment by hand. The API is gated by the Responsible Builder Policy (since 11 Nov 2025), and new public API requests close 31 Oct 2026, with public access ending March 2027. Broadcasting finished posts into subreddits also goes against Reddit’s spam norms. TikTok: skip until short video ships, then at most do inbox/draft upload or a “download file + copy caption” handoff.
+Pinterest: skip. The API can publish image, video and 2–5-image carousel Pins after a Standard-access video-demo review, which explicitly accepts solo users. But Trial-access Pins are visible only to their creator, and no evidence was found that the audience is there. The March 2026 notes are mostly confirmed. The main correction is that unaudited TikTok Direct Post doesn’t just force posts to private: it blocks posting to public accounts entirely.
+
+
+Key Findings
+
+PlatformCan an unaudited solo app publish publicly?GateVerdictBuild effortOngoing maintenanceMastodonYesNone (per-instance OAuth app registration)API publish~2–4 dev-daysVery lowRedditNo: no new API access after 31 Oct 2026; public API ends March 2027Responsible Builder Policy approval (since 11 Nov 2025)Manual paste + manual read-only research~0.5 day (copy/export helper)NoneTikTokNo: unaudited Direct Post is SELF_ONLY and only to private accountsContent Posting audit; “intended use” excludes own-account toolsSkip now → draft-upload or manual handoff when video shipsManual: ~0.5 day; inbox upload: ~4–6 days + app reviewMedium (24-hour tokens, review risk)PinterestNo on Trial (Pins visible only to creator); yes after StandardStandard access via video demoSkip (revisit only if audience evidence appears)~4–6 dev-days + reviewLow–medium (60-day continuous refresh)
+
+Corrections to the March 2026 evidence:
+
+
+TikTok Direct Post audit, inbox easier: confirmed, with a sharper finding. TikTok’s Content Sharing Guidelines say API clients “must not be limited to test applications and should be intended for a wide audience, not limited to internal groups/private use,” and give as an unacceptable example “A utility tool to help upload contents to the account(s) you or your team manages.” tiktok A solo own-accounts studio is exactly that, so expect the audit to fail on intended use.
+24-hour access token and 365-day refresh token: confirmed. TikTok’s token docs say the access token “is valid for 24 hours” and the refresh token “is valid for 365 days after the initial issuance.” tiktok On rotation, TikTok’s legacy token guide says “Developers must use the newly-returned token should the value is different than the previous one.” tiktok In other words, always store the returned refresh token. postzen
+Photo posts up to 35 images: confirmed. The Photo endpoint takes “An array containing up to 35 photo content URLs.” tiktok
+Unaudited posts forced private: confirmed, and stricter than recorded. Unaudited clients can only post SELF_ONLY, for at most 5 users per 24 hours, and “All user accounts using the API client to post must be set to private at the time of posting.” tiktok Posting to a public account fails with unaudited_client_can_only_post_to_private_accounts. tiktok +3
+Sandbox limits: confirmed. A sandbox allows up to 10 target users and “does not offer access to Content Posting API for public videos.” tiktok
+“Mandatory AI label since August 2025”: imprecise. TikTok has required labels on realistic AI-generated content since before 2024; Euronews reported in May 2024 that TikTok had “required creators to label realistic AIGC for over a year.” euronews Secondary sources date the current Community Guidelines AIGC section to a 2025 H2 update effective 13 September 2025. ugcvids The API exposes an is_aigc boolean on Direct Post (video and photo). tiktoktiktok The date it was added was not found.
+“Bluesky covers federated social”: half true. Mastodon and Bluesky run on different protocols (ActivityPub vs AT Protocol) and don’t natively interoperate. Bluesky is also shrinking. Similarweb data reported by TechCrunch put its mobile MAU at 10.4M in June 2026, down 27.2% year on year. daringfireball +2
+
+
+Details
+
+TikTok
+
+What a single-user app can do through the official API
+
+
+Publish video and photo carousels: yes, through the Content Posting API.
+
+Direct Post uses /v2/post/publish/video/init/ and /v2/post/publish/content/init/ with the video.publish scope. tiktoktiktok
+Upload/inbox draft uses /v2/post/publish/inbox/video/init/, or the photo endpoint with post_mode: MEDIA_UPLOAD, with the video.upload scope. The creator then gets an inbox notification and finishes the post in TikTok’s own editor. tiktok +3
+
+
+
+Photo posts: up to 35 images. Third-party docs (Ayrshare) list JPG/JPEG/WEBP at 20 MB per image and say video and images can’t be mixed in one post. ayrshare
+PDF carousels must be rasterised to images first.
+Text-only posts: not found as a Content Posting API capability.
+Scheduling: no native schedule parameter was found. The app would have to hold the post locally and call the API at the chosen time.
+Read own metrics: the Display API (user info, video list/query) gives profile and per-video data.
+Read or reply to comments: not found for a regular developer app. The Research API exposes comment queries, but it is a separate research program, not a creator tool.
+Read public posts and trends: not available to a regular developer app; the Research API is research-only.
+
+
+Auth and tokens
+
+
+OAuth 2.0 through Login Kit.
+Access token lasts 24 hours; refresh token lasts 365 days and can be refreshed without user consent. tiktok +2
+Persist the returned refresh token on every refresh, since it may change. postzen
+
+
+Audit, approval and rate limits
+
+
+There are three review queues: base app review, scope approval, and the Content Posting audit. postpeer
+TikTok’s App Review FAQ says: “App review may take several days to two weeks after submission.” Field reports run longer: 13 days for Breakreach (5–18 Sept 2026); about three weeks for Postwire, submitted 16 Jun 2026 and approved 7 Jul 2026 after two website rejections and one Content Posting audit rejection; and six weeks for PostZen, which wrote “Getting PostZen through that audit took us six weeks and more than a dozen submissions.”
+App review requires a public, fully developed website. postwire
+Posting cap: “typically around 15 posts per day/ creator account,” shared across all API clients. tiktokpostproxy
+TikTok’s official Direct Post and Upload reference docs say “Each user access_token is limited to 6 requests per minute”; the creator_info query endpoint is limited to 20 per minute.
+No paid tier was found; the API is free. getphyllopostzen
+
+
+Terms that affect this product
+
+
+Mandatory UX. The publish screen must:
+
+show the creator nickname from creator_info;
+offer a privacy dropdown with no default;
+leave comment, duet and stitch toggles off by default;
+show the commercial-content disclosure with its exact label prompts and the Music Usage Confirmation declaration;
+show a preview;
+upload only after express consent. tiktok
+
+
+
+No branding: no “brand name, logo, watermark, other promotional branding, link or promotional text” may be added to content. tiktok
+Media hosting: PULL_FROM_URL requires a verified domain. A local-first desktop app should use FILE_UPLOAD. tiktok
+AI disclosure: wire is_aigc to the studio’s own AI-provenance flag.
+
+
+Other points
+
+
+Sandbox: yes, with up to 10 target users and no public posts. tiktok
+Recent changes: photo posting added to the Content Posting API (exact date not found); Content Posting webhooks; the AIGC feed controls and invisible watermarking announced on 18 Nov 2025 (TechCrunch). TechCrunch
+Rust crates: tiktok_rust 0.0.13, last released over a year ago, about 12.5k downloads; tiktokapi-v2 0.1.5, over two years ago. cratescrates Both look effectively unmaintained, so plan on a thin reqwest client.
+
+
+Verdict. Don’t build TikTok now; there is no video yet, and image carousels for a developer audience are a weak fit. When short video ships:
+
+
+Default: a manual handoff. Export an MP4, or a ≤35-image set, plus the caption, and the founder posts from the phone. Cost: about 0.5 day.
+Optional: inbox/draft upload, only if TikTok approves the video.upload scope. Cost: about 4–6 dev-days, plus a public website and privacy policy, plus 1–3 weeks of review. Ongoing work is daily token refresh and re-review whenever scopes change.
+Not recommended: Direct Post. It is unlikely to pass the intended-use test, and while unaudited it can’t publish to a public account at all. Whether inbox uploads work from an unaudited, sandbox-only app was not confirmed.
+
+
+Reddit
+
+Access status (the decisive fact)
+
+
+Reddit’s Responsible Builder Policy says: “You must request access and get explicit approval before accessing any Reddit data through our API.” Self-service access closed on 11 November 2025. fetchlayerreddithelp
+Reddit’s 30 September 2026 r/redditdev post, “Moving Data API Apps to the Developer Platform: migration dates and next steps”, sets this schedule: bigideasdb
+
+31 Oct 2026: new public API access requests no longer accepted. beri
+13 Nov 2026: RSS feeds end. all-ai
+12 Jan 2027: access begins closing for unregistered apps. beri
+March 2027: “Public access will close for all remaining apps and users.” bigideasdb +2
+
+
+
+Developers in that thread report that “There have been rarely any requests accepted since November 11, 2025.” This is developer-reported, not an official figure. bigideasdb
+The replacement, Devvit, runs apps inside subreddits that install them. daily It is not a general posting API for your own account. bigideasdb
+
+
+What the API allowed (moot for a new app)
+
+
+Submit text, link and image posts; comment and reply; read your own posts and inbox; read public listings and search.
+The free tier allowed 100 queries per minute per OAuth client ID, averaged over 10 minutes, for approved non-commercial use. bigideasdb
+Commercial use needs written approval. Reddit’s definition of commercial use includes “free product features available for upsell.” The $0.24 per 1,000 calls rate is a 2023 figure that doesn’t appear on Reddit’s current pages. bigideasdbbigideasdb
+The Data API Terms were last revised 20 July 2026, and reserve the right to charge fees. bigideasdb
+Unauthenticated .json traffic is now blocked (a third-party test returned 403s in October 2026). bigideasdb
+Token lifetimes were not re-verified for this report. Reddit’s long-standing OAuth2 documentation describes 1-hour access tokens and “permanent” refresh tokens.
+Sandbox: not found.
+Rust crate: roux 2.2.15, updated around early 2026. Its README says it is “not in active development but is still being maintained,” and some endpoints now return 403. githubdocs
+
+
+Automation and app rules
+
+
+Reddit’s “Don’t break the site” rule prohibits apps that “Mask as a human or fail to register as an app.” reddithelp
+Apps must comply with the Developer Terms, Data API Terms and Responsible Builder Policy. reddithelp
+Automated accounts can get an “App” label. reddithelp
+
+
+Is broadcasting to subreddits sensible? No.
+
+
+Reddit’s binding Spam policy sets no ratio. It defines spam as “repeated or unsolicited actions (whether automated or manual) that negatively affect redditors, communities, and/or Reddit itself.” It tells accounts whose posts are mostly links to their own business to be thoughtful about frequency or to use ads. parsestreammediafa
+The 9:1 norm comes from Reddiquette, which Reddit calls informal and user-written: only 1 in 10 of your submissions should be your own content. byog
+Some subreddits apply a 10% self-promotion rule to your history in that community, and individual subreddit rules can ban promotion outright. For example, r/Art permanently banned an artist in late 2025 over a self-promotion violation. byogWikipedia
+A studio that pushes the same approved post into several subreddits is the textbook spam pattern. Reddit rewards native, community-specific participation.
+
+
+Verdict.
+
+
+Publishing: manual paste. Give the studio a “Reddit draft” export with title, body and markdown, and remind the founder to check the target subreddit’s rules. Cost: about 0.5 day.
+Research: read Reddit in the browser. Don’t build an API reader; a new app can’t get access, and existing access ends March 2027. beri
+Maintenance: none.
+
+
+Mastodon
+
+Capabilities
+
+
+Publish: text, up to 4 images or one video/audio attachment, polls, content warnings, visibility, replies, and threads via chained replies.
+Media upload is asynchronous: POST /api/v2/media returns 202 while processing. bundle
+Read: own statuses with reply, boost and favourite counts. No impressions metric was found.
+Comments: notifications and mentions are readable, and replies can be posted.
+Public and hashtag timelines and trends are readable, subject to each instance’s settings.
+PDF carousels must become at most 4 images per post, or be split into a thread.
+
+
+Auth and review
+
+
+Register an OAuth app on the founder’s instance; there is no app review at all. octolens
+Mastodon’s official OAuth Tokens documentation says: “Tokens will not expire automatically. They will become invalid only when deleted by a user or revoked by the app.” There is no refresh-token rotation.
+
+
+Limits (official docs)
+
+
+300 requests per 5 minutes per account, for all endpoints. joinmastodon
+POST /api/v1/media is limited to 30 per 30 minutes; deletes are also limited to 30 per 30 minutes. joinmastodonneuromatch
+Per-IP limits apply too. Mastodon’s official Rate limits page (last updated 20 Nov 2022) lists, per IP, “All endpoints and methods can be called 300 times within 5 minutes,” and account creation at 5 per 30 minutes; the 7,500 per 5 minutes figure appears only in Mastodon.py’s docs. Rely on the X-RateLimit-* headers in practice.
+
+
+Per-instance post limits
+
+
+Read these at runtime from GET /api/v2/instance, under configuration.statuses.max_characters, max_media_attachments and the media_attachments size limits. bundle
+Defaults are 500 characters and 4 attachments. A Mastodon maintainer confirmed on 19 May 2025 that “Mastodon itself has currently no support for a limit different than 500 characters”; instances with higher limits run patched code. github
+Media size limits vary by version and instance. The 2021 defaults were 10 MB for images and 40 MB for video. mastodon.social reported 16 MB images, about 99 MB video and 120 fps in 2023. githubgithub
+Per-instance figures for fosstodon, hachyderm and infosec.exchange were not found; read them at runtime.
+
+
+Audience fit
+
+
+Mastodon’s own network statistics API (api.joinmastodon.org/statistics), as reported by Postory on 15 Oct 2026, showed 734,000 monthly active accounts as of 14 Oct 2026, about 10.5M registered accounts and 7,400 reporting servers, down from a 2.6M monthly-active peak in November 2022. PLOS counted fewer than 690K in October 2025.
+daily.dev’s developer-marketing guide says the active crowd “leans technical, especially open-source contributors and security professionals,” and calls Mastodon “better for niche technical groups like OSS, security, and privacy circles.” daily
+Activity levels for fosstodon, hachyderm and infosec.exchange in 2025–2026: not found.
+Evidence that this audience “moved to Bluesky”: not found as a measured flow. Both networks are shrinking, and Bluesky’s decline is documented. biggo
+
+
+Other points
+
+
+Sandbox: none needed. Test on a throwaway account or a private-visibility post.
+Recent breaking changes: none found affecting basic posting.
+Rust: megalodon 1.1.1 is maintained, has 24 contributors, and covers Mastodon, Pleroma, GoToSocial and others. mastodon-async 1.3.2 was last released on 9 Feb 2024 and is stale. github +2
+
+
+Verdict: API publish. Cost is about 2–4 dev-days with near-zero upkeep. The main ongoing risk is per-instance variation, which the runtime config read handles.
+
+Pinterest
+
+Capabilities
+
+
+Publish image Pins (POST /v5/pins). upload-post
+Publish video Pins: register with POST /v5/media, upload to S3, poll, then create with a cover image. pinterest +2
+Publish carousel Pins with multiple_image_urls, limited to 2–5 images. Long PDF carousels won’t fit. bundlepostproxy
+Pins require a board and are usually link-oriented. Text-only posts: not supported. bundle
+Read Pin analytics: yes, on both tiers. pinterest
+Comments read/reply: not found in API v5.
+Trends: a trends_read rate-limit category exists, so trends endpoints are available. pinterest
+An ai_disclosures field (for example AI_MODIFIED) appears on Pin objects. pinterestpinterest That it is on the Create Pin request specifically was not confirmed. ayrshare
+
+
+Auth and tokens
+
+
+Access tokens last 30 days. outstandpostproxy
+Pinterest now “only supports the continuous refresh token (60-day expiration, refreshable indefinitely).” The legacy 365-day refresh token was deprecated, with the cutoff moved to 25 Sept 2025. pinterestpinterest Store the new refresh token returned on each refresh. githubpinterest
+
+
+Access tiers
+
+
+Trial: “all Pins and Boards created with Trial access are only visible to their creator as Sandbox entities.” Limited to 1,000 requests per day, and 300 writes per day per app. pinterest +2
+Standard: 100 writes per minute per user per app. Upgrading requires a video recording of the OAuth flow and an API action. pinterest +2
+Pinterest explicitly states: “If you are the only intended user of the Pinterest API, we will still require a video recording of the OAuth flow.” pinterest
+Review duration is not published. Blotato, a third party, says Trial approval takes “a business day or two.” Community forum threads show Standard denials and slow Trial reviews, including a “KNOWN ISSUE: Support for Trial Access Pending or Denied” post dated 25 Aug 2026. blotato +2
+No paid tier; the API is free. blotatoupload-post
+
+
+Terms
+
+
+Pinterest’s Developer Guidelines allow “Pin schedulers,” but “the end user must choose each Pin to be published.” pinterest The studio’s approve-every-post flow satisfies this.
+Using Pinterest materials to train AI models is prohibited unless expressly permitted. pinterest
+The Developer Terms and Guidelines were updated effective 18 Aug 2026. vorplabspinterest
+
+
+Recent breaking changes
+
+
+Since 14 Sept 2026, newly registered apps get PINNER_DATA_ACCESS_DENIED when reading other users’ boards and Pins. pinterest Apps that only read the authorising account’s own boards and Pins are unaffected. pinterestgithub
+Legacy refresh tokens deprecated (2025). pinterestpinterest
+Pin notes creation deprecated (Sept 2025). pinterestpinterest
+
+
+Other points
+
+
+Sandbox: yes, at api-sandbox.pinterest.com. pinterestupload-post
+Rust: pinterest-api 0.2.0, last released over a year ago. crates There is no maintained SDK.
+Audience fit: no evidence was found that software or AI professionals use Pinterest. Pinterest’s 2025–2026 developer changelog is dominated by ads, catalogue and shopping features, which is consistent with a commerce-led platform. pinterest
+
+
+Verdict: skip. Building it would take about 4–6 dev-days plus a Standard review, and the case for the effort doesn’t exist yet.
+
+Recommendations
+
+
+Ship Mastodon as the only new API channel. Use megalodon or a thin reqwest client. Read instance limits at runtime, and split anything over 4 images into a thread. Put it behind the existing approval queue. Budget about 3 days.
+Add a generic “manual export” target, about 1 day total, covering Reddit now and TikTok later. It should produce:
+
+Reddit: a markdown body and title, with a per-subreddit rules checklist.
+TikTok: an MP4, or a ≤35-image JPG set, plus the caption and an “AI-generated” reminder.
+This one feature replaces two fragile integrations.
+
+
+
+Use Reddit only by hand. Read it in the browser for research, and post natively per community: answer questions, follow each subreddit’s rules, and keep self-promotion well under Reddiquette’s informal 1-in-10. Don’t apply for API access. The window closes on 31 Oct 2026 and the public API is gone by March 2027 anyway. looot
+Re-evaluate TikTok when short video exists. If the founder publishes video often enough that manual posting hurts, apply for the video.upload scope (inbox drafts) only, accepting a 1–3-week review and a public website requirement. Don’t pursue a Direct Post audit.
+Leave Pinterest out. Revisit only if analytics or referral data show the target audience on Pinterest.
+
+
+Caveats
+
+
+Several figures come from third-party integrators or trackers rather than platform docs:
+
+TikTok’s audit-duration field reports;
+the Postory report of Mastodon’s statistics, and Bluesky MAU estimates;
+Pinterest’s Trial approval time.
+
+
+
+Reddit’s dates are stated plans in an admin post and “can change.” Some figures, like the $0.24 per 1,000 calls rate, are 2023 reports. bigideasdb
+Not found:
+
+TikTok: comment read/reply API for creators; date is_aigc was added; whether inbox upload works from an unaudited app.
+Pinterest: comment API; audience data for software and AI professionals.
+Mastodon: per-instance limits and activity levels for fosstodon, hachyderm and infosec.exchange; any measured migration of that audience to Bluesky.
+Reddit: sandbox; re-verified token lifetimes.
+
+
+
+Crate release dates are approximate, taken from crates.io relative timestamps.
+
