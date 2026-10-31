@@ -15,5 +15,5 @@
 ## 3. Final gates
 
 - [x] 3.1 Break each new security/idempotency guard, observe a failing test, restore it and save the mutation outcomes.
-- [ ] 3.2 Update README, development, migration and decision/research records; run fmt, clippy, tests, specs, records, links and gitleaks git, recording every result including failed attempts.
-- [ ] 3.3 Rebase onto then-current local main, rerun every gate and Code Verify against the pre-change base, saving verify.txt; commit the clean local branch without pushing.
+- [x] 3.2 Update README, development, migration and decision/research records; run fmt, clippy, tests, specs, records, links and gitleaks git, recording every result including failed attempts.
+- [x] 3.3 Rebase onto then-current local main, rerun every gate and Code Verify against the pre-change base, saving verify.txt; commit the clean local branch without pushing.
