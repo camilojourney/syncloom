@@ -70,12 +70,25 @@ enum Command {
     /// The LinkedIn connection: sign in through the browser, show it, or sign out.
     Linkedin {
         #[command(subcommand)]
-        command: LinkedinCommand,
+        command: ConnectionCommand,
+    },
+    /// Connect to the explicitly configured Mastodon instance.
+    Mastodon {
+        #[command(subcommand)]
+        command: ConnectionCommand,
+    },
+    /// Export approved copy and visual files locally. This never posts.
+    Export {
+        piece_id: String,
+        #[arg(long)]
+        expected_revision: String,
+        #[arg(long, value_parser = ["reddit", "tiktok"])]
+        target: String,
     },
 }
 
 #[derive(Subcommand)]
-enum LinkedinCommand {
+enum ConnectionCommand {
     /// Print the authorization URL, wait for the browser, store the token in the Keychain.
     SignIn,
     /// Show the connection state from the Keychain; no LinkedIn call.
@@ -161,7 +174,25 @@ async fn run(cli: Cli) -> i32 {
             .await
             .map(to_json),
         Command::View { piece_id, kind } => return view(&studio, &piece_id, &kind),
-        Command::Linkedin { command } => linkedin(&studio, command).await,
+        Command::Linkedin { command } => {
+            connection(&studio, command, ConnectionPlatform::Linkedin).await
+        }
+        Command::Mastodon { command } => {
+            connection(&studio, command, ConnectionPlatform::Mastodon).await
+        }
+        Command::Export {
+            piece_id,
+            expected_revision,
+            target,
+        } => studio
+            .export(
+                &piece_id,
+                syncloom_core::manual_export::ExportRequest {
+                    expected_revision,
+                    target,
+                },
+            )
+            .map(to_json),
     };
     match result {
         Ok(value) => {
@@ -172,17 +203,38 @@ async fn run(cli: Cli) -> i32 {
     }
 }
 
-/// The LinkedIn commands. Sign-in prints the authorization URL first, then waits for the
-/// browser and prints the connection.
-async fn linkedin(studio: &Studio, command: LinkedinCommand) -> Result<Value, StudioError> {
+enum ConnectionPlatform {
+    Linkedin,
+    Mastodon,
+}
+
+/// Both platforms share command output and waiting semantics, not their protocol.
+async fn connection(
+    studio: &Studio,
+    command: ConnectionCommand,
+    platform: ConnectionPlatform,
+) -> Result<Value, StudioError> {
+    use ConnectionPlatform::*;
     match command {
-        LinkedinCommand::SignIn => {
-            let start = studio.linkedin_sign_in_begin()?;
+        ConnectionCommand::SignIn => {
+            let start = match platform {
+                Linkedin => studio.linkedin_sign_in_begin()?,
+                Mastodon => studio.mastodon_sign_in_begin().await?,
+            };
             println!("{}", to_json(start));
-            studio.linkedin_sign_in_wait().await.map(to_json)
+            match platform {
+                Linkedin => studio.linkedin_sign_in_wait().await.map(to_json),
+                Mastodon => studio.mastodon_sign_in_wait().await.map(to_json),
+            }
         }
-        LinkedinCommand::Status => studio.linkedin_connection().map(to_json),
-        LinkedinCommand::SignOut => studio.linkedin_sign_out().map(to_json),
+        ConnectionCommand::Status => match platform {
+            Linkedin => studio.linkedin_connection().map(to_json),
+            Mastodon => studio.mastodon_connection().map(to_json),
+        },
+        ConnectionCommand::SignOut => match platform {
+            Linkedin => studio.linkedin_sign_out().map(to_json),
+            Mastodon => studio.mastodon_sign_out().map(to_json),
+        },
     }
 }
 

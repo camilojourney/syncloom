@@ -58,6 +58,35 @@ async fn the_request_carries_the_pinned_model_the_instruction_and_the_thought_as
     );
 }
 
+#[tokio::test]
+async fn every_requested_channel_reaches_the_model_without_thought_text_in_the_instruction() {
+    let fake = start(Mode::Ok("A draft.".into())).await;
+    let claude = provider(&fake.base_url(), Some("sk-fake"), DEFAULT_MODEL);
+    for (channel, name, limit) in [
+        (Channel::LinkedinText, "linkedin_text", 3000),
+        (Channel::Mastodon, "mastodon", 500),
+        (Channel::ManualExport, "manual_export", 40000),
+    ] {
+        claude
+            .draft(DraftRequest {
+                channel,
+                thought: support::NORMALIZED.into(),
+            })
+            .await
+            .unwrap();
+        let calls = fake.requests();
+        let sent = &calls.last().unwrap().body;
+        let system = sent["system"].as_str().unwrap();
+        assert!(
+            system.contains(name),
+            "channel missing from instruction: {system}"
+        );
+        assert!(system.contains(&limit.to_string()));
+        assert!(!system.contains(support::CANARY));
+        assert_eq!(sent["messages"][0]["content"], support::NORMALIZED);
+    }
+}
+
 // thought-drafting: Claude provider, Pinned model with override
 #[tokio::test]
 async fn the_model_override_is_sent_when_configured() {

@@ -56,6 +56,13 @@ pub struct VisualContent {
     pub slides: Vec<String>,
 }
 
+impl VisualContent {
+    /// The standalone PNG shows only the first slide; its description follows that content.
+    pub fn image_alt_text(&self) -> &str {
+        self.slides.first().map(String::as_str).unwrap_or("")
+    }
+}
+
 impl RenderRequest {
     pub fn content(&self) -> Result<VisualContent, StudioError> {
         if !matches!(self.template.as_str(), "midnight" | "paper")

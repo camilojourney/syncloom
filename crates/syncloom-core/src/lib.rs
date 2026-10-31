@@ -2,9 +2,10 @@
 //!
 //! Behavior is owned by the OpenSpec capabilities `thought-drafting`, `platform-rules`,
 //! `draft-review`, `dispatch-outbox`, `platform-credentials`, `linkedin-integration` and
-//! `provenance-log` under `openspec/specs/`. Rules are plain functions over plain values;
+//! `provenance-log` under `openspec/specs/`; Mastodon and manual export are specified in
+//! `openspec/changes/add-mastodon-manual-export/` until archive. Rules are plain functions over plain values;
 //! file access lives in [`store`], the Keychain in [`credentials`], and network access in
-//! [`provider::claude`] and [`linkedin`].
+//! [`provider::claude`], [`linkedin`] and [`mastodon`].
 pub mod channel;
 pub mod clock;
 pub mod config;
@@ -12,6 +13,9 @@ pub mod credentials;
 pub mod error;
 pub mod html;
 pub mod linkedin;
+pub mod manual_export;
+pub mod mastodon;
+pub mod oauth;
 pub mod outbox;
 pub mod piece;
 pub mod platform;

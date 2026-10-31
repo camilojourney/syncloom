@@ -113,6 +113,7 @@ pub struct Studio {
     delivery: HashMap<String, Arc<dyn Platform>>,
     /// The LinkedIn integration for sign-in and connection, granted or not.
     linkedin: Option<Arc<Linkedin>>,
+    mastodon: Option<Arc<crate::mastodon::Mastodon>>,
     renderer: crate::visual::RendererConfig,
 }
 
@@ -191,6 +192,7 @@ impl Studio {
             settings,
             delivery: HashMap::new(),
             linkedin: None,
+            mastodon: None,
             renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
         }
     }
@@ -331,6 +333,89 @@ impl Studio {
     }
     pub fn linkedin_sign_out(&self) -> Result<crate::linkedin::Connection, StudioError> {
         self.linkedin()?.sign_out()
+    }
+
+    pub fn with_mastodon(mut self, adapter: Arc<crate::mastodon::Mastodon>) -> Self {
+        self.mastodon = Some(adapter);
+        self
+    }
+    fn mastodon(&self) -> Result<&crate::mastodon::Mastodon, StudioError> {
+        self.mastodon
+            .as_deref()
+            .ok_or(StudioError::MastodonNotConfigured)
+    }
+    pub async fn mastodon_sign_in_begin(&self) -> Result<crate::oauth::SignInStart, StudioError> {
+        self.mastodon()?.sign_in_begin().await
+    }
+    pub async fn mastodon_sign_in_wait(&self) -> Result<crate::oauth::Connection, StudioError> {
+        self.mastodon()?.sign_in_wait().await
+    }
+    pub fn mastodon_connection(&self) -> Result<crate::oauth::Connection, StudioError> {
+        self.mastodon()?.connection()
+    }
+    pub fn mastodon_sign_out(&self) -> Result<crate::oauth::Connection, StudioError> {
+        self.mastodon()?.sign_out()
+    }
+
+    pub fn export(
+        &self,
+        piece_id: &str,
+        request: crate::manual_export::ExportRequest,
+    ) -> Result<crate::manual_export::ExportResponse, StudioError> {
+        use crate::manual_export::{ExportResponse, Target};
+        let target = Target::parse(&request.target)?;
+        let lock = self.store.lock()?;
+        let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+        self.require_approval(&lock, &piece)?;
+        let operation = format!("export:{}", target.name());
+        let key = intent_key(&operation, &piece.piece_id, &piece.revision);
+        let existing = lock.load_intent(&key)?;
+        let (image, carousel) = if let Some(assets) = &piece.assets {
+            (
+                Some(lock.load_asset(&assets.image_sha256)?),
+                Some(lock.load_asset(&assets.carousel_sha256)?),
+            )
+        } else {
+            (None, None)
+        };
+        let files = crate::manual_export::files(&piece, target, image, carousel);
+        let bundle = lock.save_export(&key, &files, existing.is_some())?;
+        let request_id = crate::outbox::request_id(&operation, &piece.piece_id, &piece.revision);
+        if existing.is_none() {
+            let now = self.clock.now_rfc3339();
+            let intent = DispatchIntent {
+                request_id: request_id.clone(),
+                operation,
+                piece_id: piece.piece_id.clone(),
+                revision: piece.revision.clone(),
+                payload: payload_for(&piece),
+                status: IntentStatus::Exported,
+                created_at: now.clone(),
+                attempts: 0,
+                attempted_at: None,
+                finished_at: Some(now),
+                post_id: None,
+                post_url: None,
+            };
+            lock.save_intent(&key, &intent)?;
+            piece.publish_status = Some("exported".into());
+            self.save_change(
+                &lock,
+                EventKind::PieceExported,
+                &mut piece,
+                Extra {
+                    request_id: Some(request_id.clone()),
+                    outcome: Some("exported".into()),
+                    ..Extra::default()
+                },
+            )?;
+        }
+        Ok(ExportResponse {
+            status: "exported".into(),
+            request_id,
+            bundle: bundle.to_string_lossy().into_owned(),
+            created: existing.is_none(),
+        })
     }
 
     /// One provider call under the deadline; the studio, not the adapter, decides that
@@ -549,18 +634,15 @@ impl Studio {
         let Some(platform) = self
             .delivery
             .get(&piece.platform)
-            .filter(|_| piece.visual.is_none())
+            .filter(|_| {
+                piece.channel != Channel::ManualExport
+                    && (piece.visual.is_none() || piece.channel == Channel::Mastodon)
+            })
             .cloned()
         else {
             return Ok(response_from(piece, &intent, created));
         };
-        match intent.status {
-            IntentStatus::Posted | IntentStatus::Unknown => {
-                Ok(response_from(piece, &intent, false))
-            }
-            IntentStatus::Posting => self.settle_unknown(&key, piece, intent),
-            _ => self.attempt(&key, piece, intent, created, platform).await,
-        }
+        self.attempt(&key, piece, intent, created, platform).await
     }
 
     /// Under the lock: the revision check, the dry-run answer, the approval check, and the
@@ -639,13 +721,42 @@ impl Studio {
     async fn attempt(
         &self,
         key: &str,
-        mut piece: Piece,
-        mut intent: DispatchIntent,
+        piece: Piece,
+        intent: DispatchIntent,
         created: bool,
         platform: Arc<dyn Platform>,
     ) -> Result<PublishResponse, StudioError> {
-        {
+        let (mut intent, request) = {
             let lock = self.store.lock()?;
+            let mut piece = self.load_at(&lock, &piece.piece_id, &intent.revision)?;
+            self.require_approval(&lock, &piece)?;
+            let mut intent = lock.load_intent(key)?.ok_or(StudioError::Internal)?;
+            if !intent.status.allows_new_attempt() {
+                if intent.status == IntentStatus::Posting {
+                    intent.status = IntentStatus::Unknown;
+                    return self.finish_locked(&lock, key, &piece.piece_id, intent, false);
+                }
+                return Ok(response_from(piece, &intent, false));
+            }
+            let image = if piece.visual.is_some() {
+                let assets = self.checked_assets(&lock, &piece)?;
+                Some(crate::platform::PostImage {
+                    bytes: lock.load_asset(&assets.image_sha256)?,
+                    alt_text: piece
+                        .visual
+                        .as_ref()
+                        .map(|v| v.image_alt_text())
+                        .unwrap_or("")
+                        .to_owned(),
+                })
+            } else {
+                None
+            };
+            let request = PostRequest {
+                request_id: intent.request_id.clone(),
+                text: intent.payload.content.clone(),
+                image,
+            };
             let now = self.clock.now_rfc3339();
             intent.status = IntentStatus::Posting;
             intent.attempts += 1;
@@ -656,10 +767,7 @@ impl Studio {
             piece.updated_at = now;
             lock.save_piece(&piece)?;
             self.record_intent(&lock, EventKind::DispatchAttempted, &piece, &intent)?;
-        }
-        let request = PostRequest {
-            request_id: intent.request_id.clone(),
-            text: intent.payload.content.clone(),
+            (intent, request)
         };
         let result =
             tokio::time::timeout(self.settings.platform_deadline, platform.publish(request)).await;
@@ -674,38 +782,38 @@ impl Studio {
         self.finish(key, &piece.piece_id, intent, created)
     }
 
-    /// A `posting` record found later: its attempt's outcome is unknown and stays so.
-    fn settle_unknown(
-        &self,
-        key: &str,
-        piece: Piece,
-        mut intent: DispatchIntent,
-    ) -> Result<PublishResponse, StudioError> {
-        intent.status = IntentStatus::Unknown;
-        self.finish(key, &piece.piece_id, intent, false)
-    }
-
     /// Write the outcome to the intent and, when the piece is still at this revision, to the
     /// piece; append `dispatch_finished`.
     fn finish(
         &self,
         key: &str,
         piece_id: &str,
-        mut intent: DispatchIntent,
+        intent: DispatchIntent,
         created: bool,
     ) -> Result<PublishResponse, StudioError> {
         let lock = self.store.lock()?;
+        self.finish_locked(&lock, key, piece_id, intent, created)
+    }
+
+    fn finish_locked(
+        &self,
+        lock: &Lock<'_>,
+        key: &str,
+        piece_id: &str,
+        mut intent: DispatchIntent,
+        created: bool,
+    ) -> Result<PublishResponse, StudioError> {
         let now = self.clock.now_rfc3339();
         intent.finished_at = Some(now.clone());
         lock.save_intent(key, &intent)?;
-        let mut piece = self.load(&lock, piece_id)?;
+        let mut piece = self.load(lock, piece_id)?;
         if piece.revision == intent.revision {
             piece.publish_status = Some(intent.status.as_str().to_owned());
             piece.updated_at = now;
             lock.save_piece(&piece)?;
         }
         self.record(
-            &lock,
+            lock,
             EventKind::DispatchFinished,
             &piece,
             Extra {

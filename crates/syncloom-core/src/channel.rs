@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
     LinkedinText,
+    Mastodon,
+    ManualExport,
 }
 
 /// Inclusive character bounds a draft is checked against.
@@ -21,18 +23,24 @@ impl Channel {
     pub fn parse(name: &str) -> Option<Channel> {
         match name {
             "linkedin_text" => Some(Channel::LinkedinText),
+            "mastodon" => Some(Channel::Mastodon),
+            "manual_export" => Some(Channel::ManualExport),
             _ => None,
         }
     }
     pub fn name(self) -> &'static str {
         match self {
             Channel::LinkedinText => "linkedin_text",
+            Channel::Mastodon => "mastodon",
+            Channel::ManualExport => "manual_export",
         }
     }
     /// The platform the channel posts to.
     pub fn platform(self) -> &'static str {
         match self {
             Channel::LinkedinText => "linkedin",
+            Channel::Mastodon => "mastodon",
+            Channel::ManualExport => "manual",
         }
     }
     /// Retained from the old pipeline for LinkedIn text: 20 to 3000 characters.
@@ -41,6 +49,14 @@ impl Channel {
             Channel::LinkedinText => Bounds {
                 min_chars: 20,
                 max_chars: 3000,
+            },
+            Channel::Mastodon => Bounds {
+                min_chars: 1,
+                max_chars: 500,
+            },
+            Channel::ManualExport => Bounds {
+                min_chars: 1,
+                max_chars: 40000,
             },
         }
     }
