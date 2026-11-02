@@ -34,7 +34,7 @@ Only the existing trusted local operator may review/post. Approval checks conten
 
 ## Risks / Trade-offs
 
-Provider canonical-ID scope is tested only with loopback fakes, not real provider access. App-scoped subjects are conservatively separated by the app captured at authenticated resolution; two-app same-subject tests failed before that refinement and pass afterward. Mastodon verify_credentials needs an identity-read scope coordinated with the posting-grants owner. Legacy unbound uncertain outcomes intentionally block replay; no data migration fabricates their targets.
+Provider canonical-ID scope is tested only with loopback fakes, not real provider access. App-scoped subjects are conservatively separated by the app captured at authenticated resolution; two-app same-subject tests failed before that refinement and pass afterward. Mastodon verify_credentials now requests read:accounts after an independently failing consent-scope test; firstmate was notified of this seam. Effective posting grants still belong to the parallel owner. Legacy unbound uncertain outcomes intentionally block replay; no data migration fabricates their targets.
 
 ## Migration Plan
 

@@ -173,7 +173,7 @@ async fn token(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response 
     } else {
         format!("{TOKEN}-{id}")
     };
-    axum::Json(json!({"access_token":access,"token_type":"Bearer","scope":"write:statuses write:media","created_at":1793383200})).into_response()
+    axum::Json(json!({"access_token":access,"token_type":"Bearer","scope":"read:accounts write:statuses write:media","created_at":1793383200})).into_response()
 }
 async fn identity(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
     record(&i, "identity", h.clone(), vec![]);
