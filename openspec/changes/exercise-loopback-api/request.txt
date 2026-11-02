@@ -1,0 +1,1 @@
+Own the independently implementable server API E2E coverage slice and ordinary fixes it proves necessary; the text frontend's Argon design and later implementation are separate assigned tasks.
