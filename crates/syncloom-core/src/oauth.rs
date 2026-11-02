@@ -18,6 +18,12 @@ use std::{
 };
 use tokio::sync::oneshot;
 
+/// Common authenticated subject shape; each adapter owns its authority and ID validation.
+#[derive(Deserialize)]
+pub(crate) struct Subject {
+    pub id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RedirectUrl {
     url: String,

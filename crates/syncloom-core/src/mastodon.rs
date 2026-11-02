@@ -134,24 +134,7 @@ impl Mastodon {
             .take()
             .ok_or(StudioError::SignInNotStarted)?;
         let (code, _, generation) = self.session.wait().await?;
-        let exchange = async {
-            let response = self
-                .client
-                .post(format!("{}/oauth/token", self.instance()?))
-                .form(&[
-                    ("grant_type", "authorization_code"),
-                    ("client_id", app.client_id.as_str()),
-                    ("client_secret", app.client_secret.expose()),
-                    ("redirect_uri", self.config.redirect.as_str()),
-                    ("code", &code),
-                ])
-                .send()
-                .await
-                .map_err(|_| StudioError::SignInRejected)?;
-            read_json::<Issued>(response)
-                .await
-                .ok_or(StudioError::SignInRejected)
-        };
+        let exchange = self.exchange(&app, &code);
         let issued = tokio::time::timeout(self.session.deadline(), exchange)
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
@@ -162,11 +145,41 @@ impl Mastodon {
         {
             return Err(StudioError::SignInRejected);
         }
-        #[derive(Deserialize)]
-        struct Identity {
-            id: String,
-        }
-        let identity: Identity = crate::oauth::exchange_json(
+        let identity = self.resolve_member(&issued).await?;
+        let token = Token {
+            access_token: issued.access_token,
+            expires_at: None,
+            identity_authority: None,
+            page_id: None,
+            member_id: identity,
+            scope: issued.scope,
+            obtained_at: self.session.now_rfc3339(),
+        };
+        self.session.save_token(generation, &token)?;
+        self.connection()
+    }
+
+    async fn exchange(&self, app: &App, code: &str) -> Result<Issued, StudioError> {
+        let response = self
+            .client
+            .post(format!("{}/oauth/token", self.instance()?))
+            .form(&[
+                ("grant_type", "authorization_code"),
+                ("client_id", app.client_id.as_str()),
+                ("client_secret", app.client_secret.expose()),
+                ("redirect_uri", self.config.redirect.as_str()),
+                ("code", code),
+            ])
+            .send()
+            .await
+            .map_err(|_| StudioError::SignInRejected)?;
+        read_json::<Issued>(response)
+            .await
+            .ok_or(StudioError::SignInRejected)
+    }
+
+    async fn resolve_member(&self, issued: &Issued) -> Result<String, StudioError> {
+        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
             self.client
                 .get(format!(
                     "{}/api/v1/accounts/verify_credentials",
@@ -178,17 +191,7 @@ impl Mastodon {
         if !valid_id(&identity.id) {
             return Err(StudioError::SignInRejected);
         }
-        let token = Token {
-            access_token: issued.access_token,
-            expires_at: None,
-            identity_authority: None,
-            page_id: None,
-            member_id: identity.id,
-            scope: issued.scope,
-            obtained_at: self.session.now_rfc3339(),
-        };
-        self.session.save_token(generation, &token)?;
-        self.connection()
+        Ok(identity.id)
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
         self.instance()?;

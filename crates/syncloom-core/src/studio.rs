@@ -689,7 +689,17 @@ impl Studio {
                 || current_target != piece.approval_target.as_deref())
     }
 
-    fn require_account_approval(&self, piece: &Piece) -> Result<(), StudioError> {
+    fn require_account_approval(
+        &self,
+        piece: &Piece,
+        intent: Option<&DispatchIntent>,
+    ) -> Result<(), StudioError> {
+        if intent.is_some_and(|intent| !intent.status.allows_new_attempt()) {
+            return Ok(());
+        }
+        if intent.is_some_and(|intent| intent.approval_target != piece.approval_target) {
+            return Err(StudioError::AccountApprovalRequired);
+        }
         // Missing credentials still use the existing consent_required outcome. Every adapter
         // checks the bound target against its one loaded token before any external effect.
         if let Some(target) = self.review_target(piece)?
@@ -749,14 +759,7 @@ impl Studio {
         if !piece.status.can_move_to(next) {
             return Err(StudioError::InvalidStatusTransition);
         }
-        let target = if next == Status::Approved {
-            self.review_target(piece)?
-        } else {
-            None
-        };
-        if next == Status::Approved && target.as_deref() != expected_target {
-            return Err(StudioError::AccountApprovalRequired);
-        }
+        let target = self.reviewed_target(piece, next, expected_target)?;
         if next == piece.status && piece.approval_target == target {
             return Ok(false);
         }
@@ -765,6 +768,22 @@ impl Studio {
         piece.review_decision_id = (next == Status::Approved)
             .then(|| review_decision_id(&piece.piece_id, &piece.revision));
         Ok(true)
+    }
+
+    fn reviewed_target(
+        &self,
+        piece: &Piece,
+        next: Status,
+        expected: Option<&str>,
+    ) -> Result<Option<String>, StudioError> {
+        if next != Status::Approved {
+            return Ok(None);
+        }
+        let target = self.review_target(piece)?;
+        if target.as_deref() != expected {
+            return Err(StudioError::AccountApprovalRequired);
+        }
+        Ok(target)
     }
 
     pub async fn publish(
@@ -830,27 +849,8 @@ impl Studio {
             }));
         }
         self.require_approval(&lock, &piece)?;
-        let mut key = intent_key(
-            OPERATION_PUBLISH,
-            &piece.piece_id,
-            &piece.revision,
-            piece.approval_target.as_deref(),
-        );
-        let legacy_key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision, None);
-        let legacy = lock.load_intent(&legacy_key)?;
-        // An unbound historical post or uncertain effect cannot be made safe by a new key.
-        let existing = if let Some(legacy) = legacy.filter(|i| !i.status.allows_new_attempt()) {
-            key = legacy_key;
-            Some(legacy)
-        } else {
-            lock.load_intent(&key)?
-        };
-        if existing
-            .as_ref()
-            .is_none_or(|intent| intent.status.allows_new_attempt())
-        {
-            self.require_account_approval(&piece)?;
-        }
+        let (key, existing) = self.publish_intent(&lock, &piece)?;
+        self.require_account_approval(&piece, existing.as_ref())?;
         self.require_cost_confirmation(&piece, existing.as_ref(), request.accepted_cost_microusd)?;
         let (intent, created) = match existing {
             Some(existing) => (existing, false),
@@ -862,6 +862,30 @@ impl Studio {
             intent,
             created,
         })
+    }
+
+    /// Select the durable owner before deciding whether a new attempt is allowed.
+    fn publish_intent(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+    ) -> Result<(String, Option<DispatchIntent>), StudioError> {
+        let legacy_key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision, None);
+        if let Some(legacy) = lock
+            .load_intent(&legacy_key)?
+            .filter(|i| !i.status.allows_new_attempt())
+        {
+            // An unbound historical effect cannot be made safe by a new target key.
+            return Ok((legacy_key, Some(legacy)));
+        }
+        let key = intent_key(
+            OPERATION_PUBLISH,
+            &piece.piece_id,
+            &piece.revision,
+            piece.approval_target.as_deref(),
+        );
+        let intent = lock.load_intent(&key)?;
+        Ok((key, intent))
     }
 
     fn require_cost_confirmation(
@@ -1050,26 +1074,34 @@ impl Studio {
         self.require_approval(&lock, &piece)?;
         let mut intent = lock.load_intent(key)?.ok_or(StudioError::Internal)?;
         if !intent.status.allows_new_attempt() {
-            if intent.status == IntentStatus::Posting {
-                intent.status = IntentStatus::Unknown;
-                return self
-                    .finish_locked(&lock, key, &piece.piece_id, intent, false)
-                    .map(|response| Claim::Finished(Box::new(response)));
-            }
-            return Ok(Claim::Finished(Box::new(response_from(
-                piece, &intent, false,
-            ))));
+            return self.recover_or_report(&lock, key, piece, intent);
         }
-        self.require_account_approval(&piece)?;
-        if intent.approval_target != piece.approval_target {
-            return Err(StudioError::AccountApprovalRequired);
-        }
+        self.require_account_approval(&piece, Some(&intent))?;
         let request = self.post_request(&lock, &piece, &intent)?;
         self.start_attempt(&lock, key, &mut piece, &mut intent)?;
         Ok(Claim::Send {
             intent: Box::new(intent),
             request,
         })
+    }
+
+    /// Recover interrupted effects without replay, or report the immutable historical receipt.
+    fn recover_or_report(
+        &self,
+        lock: &Lock<'_>,
+        key: &str,
+        piece: Piece,
+        mut intent: DispatchIntent,
+    ) -> Result<Claim, StudioError> {
+        if intent.status == IntentStatus::Posting {
+            intent.status = IntentStatus::Unknown;
+            return self
+                .finish_locked(lock, key, &piece.piece_id, intent, false)
+                .map(|response| Claim::Finished(Box::new(response)));
+        }
+        Ok(Claim::Finished(Box::new(response_from(
+            piece, &intent, false,
+        ))))
     }
 
     /// One platform attempt: `posting` written first, the lock released for the call, the

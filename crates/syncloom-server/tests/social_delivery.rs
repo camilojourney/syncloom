@@ -181,8 +181,19 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
         let refreshed = post_empty(&server, &refresh).await;
         assert_eq!(refreshed.status, 200, "{platform}: {}", refreshed.raw);
         assert_eq!(refreshed.body["status"], "signed_in");
-        assert_eq!(fake.calls().len(), calls + 1);
-        assert_eq!(fake.calls().last().unwrap().path, path);
+        let identity_reads = usize::from(platform != "bluesky");
+        assert_eq!(fake.calls().len(), calls + 1 + identity_reads);
+        assert_eq!(fake.calls()[calls].path, path);
+        if platform != "bluesky" {
+            assert_eq!(
+                fake.calls().last().unwrap().path,
+                if platform == "x" {
+                    "/2/users/me"
+                } else {
+                    "/v1.0/me"
+                }
+            );
+        }
         assert_eq!(get(&server, &connection).await.body, refreshed.body);
 
         // A failed renewal must retain the last successful credentials, not the original
@@ -194,13 +205,18 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
         let failed = post_empty(&server, &refresh).await;
         assert_eq!((failed.status, failed.code()), (502, "sign_in_rejected"));
         assert!(!failed.raw.contains("renewal-secret-canary"));
-        assert_eq!(fake.calls().len(), calls + 2);
+        assert_eq!(fake.calls().len(), calls + 2 + identity_reads);
         assert_eq!(get(&server, &connection).await.body, refreshed.body);
         fake.reply(path, 200, renewed);
         let retry = post_empty(&server, &refresh).await;
         assert_eq!(retry.status, 200, "{platform}: {}", retry.raw);
-        assert_eq!(fake.calls().len(), calls + 3);
-        let last = fake.calls().last().unwrap().clone();
+        assert_eq!(fake.calls().len(), calls + 3 + 2 * identity_reads);
+        let last = fake
+            .calls()
+            .into_iter()
+            .rev()
+            .find(|call| call.path == path)
+            .unwrap();
         match platform {
             "bluesky" => assert_eq!(last.authorization, "Bearer refresh-bsky-2"),
             "x" => assert_eq!(last.form()["refresh_token"], "x-refresh-2"),
@@ -411,7 +427,7 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
 async fn posted_and_unknown_intents_stay_with_their_target_after_fresh_approval() {
     for initial_status in [200, 500] {
         let fake = fake::Fake::bluesky().await;
-        let (server, _) = setup(&fake, "bluesky", true).await;
+        let (server, _, _) = setup(&fake, "bluesky", true).await;
         login(&server, "bluesky").await;
         let p = draft(&server, "bluesky", false).await;
         approve_piece(&server, &p).await;
@@ -485,7 +501,7 @@ async fn posted_and_unknown_intents_stay_with_their_target_after_fresh_approval(
 #[tokio::test]
 async fn identity_mismatched_refresh_signs_out_without_rebinding_approval() {
     let fake = fake::Fake::bluesky().await;
-    let (server, _) = setup(&fake, "bluesky", true).await;
+    let (server, _, _) = setup(&fake, "bluesky", true).await;
     login(&server, "bluesky").await;
     fake.reply("/xrpc/com.atproto.server.refreshSession", 200,
         json!({"accessJwt":fake::jwt(1793541600),"refreshJwt":"synthetic-other","did":"did:plc:other","handle":"other.invalid"}));
@@ -502,7 +518,7 @@ async fn identity_mismatched_refresh_signs_out_without_rebinding_approval() {
 #[tokio::test]
 async fn approval_must_name_the_account_the_reviewer_saw() {
     let fake = fake::Fake::bluesky().await;
-    let (server, _) = setup(&fake, "bluesky", true).await;
+    let (server, _, _) = setup(&fake, "bluesky", true).await;
     login(&server, "bluesky").await;
     let p = draft(&server, "bluesky", false).await;
     let path = format!("/v1/pieces/{}", p["piece_id"].as_str().unwrap());
@@ -550,7 +566,7 @@ fn second_bluesky(fake: &fake::Fake) {
 async fn a_claimed_media_attempt_keeps_its_target_during_reconnect_and_fresh_review()
 -> Result<(), Box<dyn std::error::Error>> {
     let fake = fake::Fake::bluesky().await;
-    let (server, _) = setup(&fake, "bluesky", true).await;
+    let (server, _, _) = setup(&fake, "bluesky", true).await;
     login(&server, "bluesky").await;
     let p = draft(&server, "bluesky", true).await;
     approve_piece(&server, &p).await;
@@ -619,7 +635,7 @@ async fn legacy_unbound_approval_requires_review_and_uncertain_history_cannot_be
 -> Result<(), Box<dyn std::error::Error>> {
     for historical in [None, Some("unknown"), Some("posting"), Some("posted")] {
         let fake = fake::Fake::bluesky().await;
-        let (server, _) = setup(&fake, "bluesky", true).await;
+        let (server, _, _) = setup(&fake, "bluesky", true).await;
         login(&server, "bluesky").await;
         let p = draft(&server, "bluesky", false).await;
         approve_piece(&server, &p).await;
@@ -738,7 +754,7 @@ async fn social_account_switch(platform: &str) {
         } else {
             fake::Fake::threads().await
         };
-        let (server, _) = setup(&fake, platform, true).await;
+        let (server, _, _) = setup(&fake, platform, true).await;
         fake.principal("x-access-1", "111");
         fake.principal("threads-long-1", "303");
         login(&server, platform).await;
@@ -817,7 +833,7 @@ async fn social_account_switch(platform: &str) {
 async fn bluesky_account_switch_requires_fresh_approval_before_any_post() {
     for switched in [false, true] {
         let fake = fake::Fake::bluesky().await;
-        let (server, _) = setup(&fake, "bluesky", true).await;
+        let (server, _, _) = setup(&fake, "bluesky", true).await;
         login(&server, "bluesky").await;
         let p = draft(&server, "bluesky", false).await;
         approve_piece(&server, &p).await;

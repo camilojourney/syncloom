@@ -93,10 +93,8 @@ impl Bluesky {
             .refresh_session()
             .await
             .map_err(|_| StudioError::SignInRejected)?;
-        if renewed.did != bundle.session.did {
-            self.credentials.clear()?;
-            return Err(StudioError::SignInRejected);
-        }
+        self.credentials
+            .confirm_identity(Some(bundle.session.did.as_str()), renewed.did.as_str())?;
         bundle.session.access_jwt = renewed.access_jwt.clone();
         bundle.session.refresh_jwt = renewed.refresh_jwt.clone();
         self.save(bundle, renewal.generation)?;

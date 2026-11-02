@@ -129,11 +129,7 @@ impl Threads {
         if long.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
         }
-        #[derive(Deserialize)]
-        struct Identity {
-            id: String,
-        }
-        let identity: Identity = crate::oauth::exchange_json(
+        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
             self.context
                 .client
                 .get(format!(
@@ -144,10 +140,9 @@ impl Threads {
                 .bearer_auth(long.access_token.expose()),
         )
         .await?;
-        if identity.id != member {
-            self.context.credentials.clear()?;
-            return Err(StudioError::SignInRejected);
-        }
+        self.context
+            .credentials
+            .confirm_identity(Some(&member), &identity.id)?;
         if !crate::social::numeric_id(&identity.id) {
             return Err(StudioError::SignInRejected);
         }
