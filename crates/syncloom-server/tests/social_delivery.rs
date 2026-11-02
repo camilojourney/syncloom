@@ -1,44 +1,26 @@
 #[path = "../../syncloom-core/tests/support/fake_social.rs"]
 mod fake;
+#[path = "../../syncloom-core/tests/support/social.rs"]
+mod fixture;
 mod support;
 use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use support::{
     scripted::{Scripted, text},
     *,
 };
-use syncloom_core::{
-    Platform, PublishRequest, Settings, Store, Studio,
-    social::{SocialConfig, SocialPlatforms},
-};
+use syncloom_core::{Platform, PublishRequest, Settings, Store, Studio, social::SocialPlatforms};
 
-#[expect(
-    clippy::unwrap_used,
-    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
-)]
 async fn setup(
     fake: &fake::Fake,
     platform: &str,
     granted: bool,
-) -> (TestServer, Arc<SocialPlatforms>) {
-    let config = SocialConfig::parse(|n| match n {
-        "SYNCLOOM_BLUESKY_BASE_URL"
-        | "SYNCLOOM_X_API_BASE_URL"
-        | "SYNCLOOM_X_AUTH_BASE_URL"
-        | "SYNCLOOM_THREADS_API_BASE_URL"
-        | "SYNCLOOM_THREADS_AUTH_BASE_URL" => Some(fake.base().into()),
-        "SYNCLOOM_X_CLIENT_ID" | "SYNCLOOM_THREADS_CLIENT_ID" => Some("test-client".into()),
-        "SYNCLOOM_THREADS_CLIENT_SECRET" => Some("test-secret-canary".into()),
-        "SYNCLOOM_X_REDIRECT_URL" => Some(format!("http://127.0.0.1:{}/x/callback", free_port())),
-        "SYNCLOOM_THREADS_REDIRECT_URL" => Some("https://redirect.invalid/callback".into()),
-        _ => None,
-    })
-    .unwrap();
-    let q = Arc::new(SocialPlatforms::new(
-        config,
+) -> (TestServer, Arc<SocialPlatforms>, Arc<fixture::TestClock>) {
+    let clock = fixture::clock();
+    let q = Arc::new(fixture::social(
+        fake,
         memory_store::MemoryStore::new(),
-        fixed_clock(),
-        Duration::from_secs(2),
+        clock.clone(),
     ));
     let adapter = adapter(&q, platform);
     let attached = q.clone();
@@ -55,7 +37,7 @@ async fn setup(
         },
     )
     .await;
-    (server, q)
+    (server, q, clock)
 }
 #[expect(
     clippy::panic,
@@ -141,6 +123,227 @@ fn publish_path(p: &Value) -> String {
     format!("/v1/pieces/{}/publish", p["piece_id"].as_str().unwrap())
 }
 
+// HTTP refresh was previously tested only below the router. Exercise the same real
+// server as delivery, with a mutable clock only at the external time boundary.
+#[tokio::test]
+async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_platform() {
+    for platform in ["bluesky", "x", "threads"] {
+        let fake = match platform {
+            "bluesky" => fake::Fake::bluesky().await,
+            "x" => fake::Fake::x().await,
+            _ => fake::Fake::threads().await,
+        };
+        let (server, _, clock) = setup(&fake, platform, false).await;
+        let connection = format!("/v1/{platform}/connection");
+        let refresh = format!("/v1/{platform}/refresh");
+        let signed_out = get(&server, &connection).await;
+        assert_eq!(signed_out.status, 200);
+        assert_eq!(signed_out.body["status"], "signed_out");
+        let absent = post_empty(&server, &refresh).await;
+        assert_eq!((absent.status, absent.code()), (502, "sign_in_rejected"));
+        assert!(fake.calls().is_empty());
+
+        login(&server, platform).await;
+        let calls = fake.calls().len();
+        let signed_in = get(&server, &connection).await;
+        assert_eq!(signed_in.status, 200);
+        assert_eq!(signed_in.body["status"], "signed_in");
+        assert_eq!(
+            fake.calls().len(),
+            calls,
+            "connection never calls a platform"
+        );
+        if platform == "threads" {
+            let young = post_empty(&server, &refresh).await;
+            assert_eq!((young.status, young.code()), (502, "sign_in_rejected"));
+            assert_eq!(fake.calls().len(), calls);
+            *clock.0.lock().unwrap() += time::Duration::days(1);
+        }
+        let (path, renewed) = match platform {
+            "bluesky" => (
+                "/xrpc/com.atproto.server.refreshSession",
+                json!({
+                    "accessJwt":fake::jwt(1793541600), "refreshJwt":"refresh-bsky-2",
+                    "did":"did:plc:testrepo", "handle":"test.invalid"
+                }),
+            ),
+            "x" => (
+                "/2/oauth2/token",
+                json!({
+                    "access_token":"x-access-2", "refresh_token":"x-refresh-2", "expires_in":7200,
+                    "scope":"tweet.read tweet.write users.read media.write offline.access", "token_type":"bearer"
+                }),
+            ),
+            _ => (
+                "/refresh_access_token",
+                json!({
+                    "access_token":"threads-long-2", "expires_in":5184000, "token_type":"bearer"
+                }),
+            ),
+        };
+        fake.reply(path, 200, renewed.clone());
+        let refreshed = post_empty(&server, &refresh).await;
+        assert_eq!(refreshed.status, 200, "{platform}: {}", refreshed.raw);
+        assert_eq!(refreshed.body["status"], "signed_in");
+        assert_eq!(fake.calls().len(), calls + 1);
+        assert_eq!(fake.calls().last().unwrap().path, path);
+        assert_eq!(get(&server, &connection).await.body, refreshed.body);
+
+        // A failed renewal must retain the last successful credentials, not the original
+        // credentials and not a partially decoded replacement. No delivery is authorized.
+        if platform == "threads" {
+            *clock.0.lock().unwrap() += time::Duration::days(1);
+        }
+        fake.reply(path, 400, json!({"error":"renewal-secret-canary"}));
+        let failed = post_empty(&server, &refresh).await;
+        assert_eq!((failed.status, failed.code()), (502, "sign_in_rejected"));
+        assert!(!failed.raw.contains("renewal-secret-canary"));
+        assert_eq!(fake.calls().len(), calls + 2);
+        assert_eq!(get(&server, &connection).await.body, refreshed.body);
+        fake.reply(path, 200, renewed);
+        let retry = post_empty(&server, &refresh).await;
+        assert_eq!(retry.status, 200, "{platform}: {}", retry.raw);
+        assert_eq!(fake.calls().len(), calls + 3);
+        let last = fake.calls().last().unwrap().clone();
+        match platform {
+            "bluesky" => assert_eq!(last.authorization, "Bearer refresh-bsky-2"),
+            "x" => assert_eq!(last.form()["refresh_token"], "x-refresh-2"),
+            _ => assert!(last.query.contains("access_token=threads-long-2")),
+        }
+        for canary in [
+            "refresh-bsky",
+            "x-access",
+            "x-refresh",
+            "threads-long",
+            "password-canary",
+        ] {
+            assert!(!retry.raw.contains(canary));
+        }
+        let calls = fake.calls().len();
+        for _ in 0..2 {
+            let deleted =
+                send_json(&server, reqwest::Method::DELETE, &connection, Value::Null).await;
+            assert_eq!(deleted.status, 200);
+            assert_eq!(deleted.body["status"], "signed_out");
+        }
+        assert_eq!(get(&server, &connection).await.body["status"], "signed_out");
+        let absent = post_empty(&server, &refresh).await;
+        assert_eq!((absent.status, absent.code()), (502, "sign_in_rejected"));
+        assert_eq!(
+            fake.calls().len(),
+            calls,
+            "sign-out and absent renewal send nothing"
+        );
+        assert!(files(&server.dir, "pieces").is_empty());
+        assert!(files(&server.dir, "outbox").is_empty());
+    }
+}
+
+#[tokio::test]
+async fn malformed_credentials_and_callback_refusals_never_reach_a_platform() {
+    let fake = fake::Fake::bluesky().await;
+    let (server, _, _) = setup(&fake, "bluesky", false).await;
+    for body in [
+        json!({}),
+        json!({"identifier":"test.invalid"}),
+        json!({"identifier":42,"app_password":"synthetic-password"}),
+        json!({"identifier":"","app_password":"synthetic-password"}),
+        json!({"identifier":"test.invalid","app_password":" "}),
+        json!({"identifier":"synthetic@example.invalid","app_password":"synthetic-password"}),
+        json!({"identifier":"test.invalid","app_password":"synthetic-password","extra":true}),
+    ] {
+        let refused = post(&server, "/v1/bluesky/sign-in", body).await;
+        assert_eq!((refused.status, refused.code()), (400, "invalid_request"));
+    }
+    for body in [
+        json!({}),
+        json!({"callback_url":42}),
+        json!({"callback_url":"synthetic", "extra":true}),
+    ] {
+        let refused = post(&server, "/v1/threads/complete", body).await;
+        assert_eq!((refused.status, refused.code()), (400, "invalid_request"));
+    }
+    let not_started = post(
+        &server,
+        "/v1/threads/complete",
+        json!({"callback_url":"synthetic"}),
+    )
+    .await;
+    assert_eq!(
+        (not_started.status, not_started.code()),
+        (409, "sign_in_not_started")
+    );
+    let not_started = get(&server, "/v1/x/sign-in").await;
+    assert_eq!(
+        (not_started.status, not_started.code()),
+        (409, "sign_in_not_started")
+    );
+    for suffix in ["wrong-state", "missing-code", "duplicate-state"] {
+        let started = post_empty(&server, "/v1/threads/sign-in").await;
+        assert_eq!(started.status, 202);
+        let again = post_empty(&server, "/v1/threads/sign-in").await;
+        assert_eq!((again.status, again.code()), (409, "sign_in_in_progress"));
+        let url = reqwest::Url::parse(started.body["authorization_url"].as_str().unwrap()).unwrap();
+        let state = url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .unwrap()
+            .1
+            .into_owned();
+        let (query, code) = match suffix {
+            "wrong-state" => (
+                "code=synthetic&state=wrong".to_owned(),
+                "sign_in_state_mismatch",
+            ),
+            "missing-code" => (format!("state={state}"), "sign_in_denied"),
+            _ => (
+                format!("code=synthetic&state={state}&state={state}"),
+                "sign_in_state_mismatch",
+            ),
+        };
+        let refused = post(
+            &server,
+            "/v1/threads/complete",
+            json!({"callback_url":format!("https://redirect.invalid/callback?{query}")}),
+        )
+        .await;
+        assert_eq!((refused.status, refused.code()), (403, code));
+        assert!(!refused.raw.contains(&state));
+    }
+    assert!(fake.calls().is_empty());
+    assert_eq!(
+        get(&server, "/v1/bluesky/connection").await.body["status"],
+        "signed_out"
+    );
+    assert_eq!(
+        get(&server, "/v1/threads/connection").await.body["status"],
+        "signed_out"
+    );
+}
+
+#[tokio::test]
+async fn dynamic_connection_and_refresh_routes_refuse_unsupported_targets() {
+    let fake = fake::Fake::x().await;
+    let (server, _, _) = setup(&fake, "x", false).await;
+    for target in ["unknown", "facebook", "bluesky_text", "%FF"] {
+        for (method, operation) in [
+            (reqwest::Method::GET, "connection"),
+            (reqwest::Method::DELETE, "connection"),
+            (reqwest::Method::POST, "refresh"),
+        ] {
+            let path = format!("/v1/{target}/{operation}");
+            let refused = send_json(&server, method, &path, Value::Null).await;
+            assert_eq!(
+                (refused.status, refused.code()),
+                (404, "not_found"),
+                "{path}: {}",
+                refused.raw
+            );
+        }
+    }
+    assert!(fake.calls().is_empty());
+}
+
 #[tokio::test]
 async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guard() {
     for platform in ["bluesky", "x", "threads"] {
@@ -149,7 +352,7 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
             "x" => fake::Fake::x().await,
             _ => fake::Fake::threads().await,
         };
-        let (server, q) = setup(&fake, platform, true).await;
+        let (server, q, _) = setup(&fake, platform, true).await;
         login(&server, platform).await;
         let p = draft(&server, platform, false).await;
         let request = json!({"expected_revision":p["revision"],"accepted_cost_microusd":15000});
@@ -211,7 +414,7 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
 #[tokio::test]
 async fn x_cost_is_visible_before_delivery_requires_exact_confirmation_and_survives_outcome() {
     let fake = fake::Fake::x().await;
-    let (server, _) = setup(&fake, "x", true).await;
+    let (server, _, _) = setup(&fake, "x", true).await;
     login(&server, "x").await;
     let p = draft(&server, "x", false).await;
     approve_piece(&server, &p).await;
@@ -283,7 +486,7 @@ async fn x_cost_is_visible_before_delivery_requires_exact_confirmation_and_survi
 #[tokio::test]
 async fn numeric_domain_links_show_the_higher_quote_in_review_and_dry_run() {
     let fake = fake::Fake::x().await;
-    let (server, _) = setup(&fake, "x", true).await;
+    let (server, _, _) = setup(&fake, "x", true).await;
     let p = draft(&server, "x", false).await;
     let id = p["piece_id"].as_str().unwrap();
     let edited = send_json(
@@ -324,7 +527,7 @@ async fn bluesky_and_x_rendered_image_journeys_use_approved_bytes_and_alt_text()
         } else {
             fake::Fake::x().await
         };
-        let (server, _) = setup(&fake, platform, true).await;
+        let (server, _, _) = setup(&fake, platform, true).await;
         login(&server, platform).await;
         let p = draft(&server, platform, true).await;
         let refused = send_json(
@@ -375,7 +578,7 @@ async fn bluesky_and_x_rendered_image_journeys_use_approved_bytes_and_alt_text()
 #[tokio::test]
 async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
     let fake = fake::Fake::threads().await;
-    let (server, _) = setup(&fake, "threads", true).await;
+    let (server, _, _) = setup(&fake, "threads", true).await;
     let p = draft(&server, "threads", true).await;
     approve_piece(&server, &p).await;
     let page = get(
@@ -396,7 +599,7 @@ async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
 async fn absent_grants_and_bad_session_or_origin_never_reach_any_social_platform() {
     for platform in ["bluesky", "x", "threads"] {
         let fake = fake::Fake::x().await;
-        let (server, _) = setup(&fake, platform, false).await;
+        let (server, _, _) = setup(&fake, platform, false).await;
         let p = draft(&server, platform, false).await;
         approve_piece(&server, &p).await;
         let outcome = post(

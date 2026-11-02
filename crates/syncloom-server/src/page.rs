@@ -178,11 +178,12 @@ pub(crate) async fn editor(
     path: Result<Path<(String, String)>, PathRejection>,
 ) -> Result<Html<String>, Failure> {
     let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
-    if !matches!(action.as_str(), "edit" | "render") {
+    let action = PieceAction::parse(&action)?;
+    if !matches!(action, PieceAction::Edit | PieceAction::Render) {
         return Err(Failure::MethodNotAllowed);
     }
     let piece = state.studio.show(&id)?;
-    if action == "render" {
+    if matches!(action, PieceAction::Render) {
         return Ok(visual_editor(&state, &piece));
     }
     Ok(document(
@@ -458,8 +459,8 @@ pub(crate) struct PieceForm {
 }
 
 impl PieceForm {
-    fn review(self, action: &str) -> Result<ReviewRequest, StudioError> {
-        let (status, text, expected_assets) = if action == "edit" {
+    fn review(self, action: PieceAction) -> Result<ReviewRequest, StudioError> {
+        let (status, text, expected_assets) = if matches!(action, PieceAction::Edit) {
             (
                 None,
                 Some(self.text.ok_or(StudioError::InvalidRequest)?),
@@ -505,24 +506,50 @@ impl PieceForm {
     }
 }
 
+/// One vocabulary for GET editors and submitted actions: an unknown action is not
+/// a known operation with the wrong method, and must never reach a core operation.
+#[derive(Clone, Copy)]
+enum PieceAction {
+    Edit,
+    Render,
+    Approve,
+    Publish,
+    AcceptCost,
+}
+impl PieceAction {
+    fn parse(action: &str) -> Result<Self, Failure> {
+        match action {
+            "edit" => Ok(Self::Edit),
+            "render" => Ok(Self::Render),
+            "approve" => Ok(Self::Approve),
+            "publish" => Ok(Self::Publish),
+            "accept-cost" => Ok(Self::AcceptCost),
+            _ => Err(Failure::NotFound),
+        }
+    }
+}
+
 /// Transport parsing produces the same core request types used by JSON and CLI callers.
 enum SubmittedAction {
     Review(ReviewRequest),
     Render(RenderRequest),
     Publish(PublishRequest),
+    AcceptCost(PieceForm),
 }
 
-fn submitted_action(action: &str, form: PieceForm) -> Result<SubmittedAction, Failure> {
+fn submitted_action(action: PieceAction, form: PieceForm) -> Result<SubmittedAction, Failure> {
     let _ = &form.csrf; // Authenticated by the boundary before any adapter runs.
     match action {
-        "edit" | "approve" => Ok(SubmittedAction::Review(form.review(action)?)),
-        "render" => Ok(SubmittedAction::Render(form.rendering()?)),
-        "publish" => Ok(SubmittedAction::Publish(PublishRequest {
+        PieceAction::Edit | PieceAction::Approve => {
+            Ok(SubmittedAction::Review(form.review(action)?))
+        }
+        PieceAction::Render => Ok(SubmittedAction::Render(form.rendering()?)),
+        PieceAction::Publish => Ok(SubmittedAction::Publish(PublishRequest {
             expected_revision: form.expected_revision,
             accepted_cost_microusd: form.accepted_cost_microusd,
             dry_run: false,
         })),
-        _ => Err(Failure::NotFound),
+        PieceAction::AcceptCost => Ok(SubmittedAction::AcceptCost(form)),
     }
 }
 
@@ -533,15 +560,15 @@ pub(crate) async fn action(
 ) -> Result<Response, Failure> {
     let Path((id, action)) = path.map_err(|_| StudioError::PieceNotFound)?;
     let Form(form) = form.map_err(|_| StudioError::InvalidRequest)?;
-    if action == "accept-cost" {
-        let piece = state.studio.show(&id)?;
-        state.cost_consents.accept(&piece, &form)?;
-        return saved_piece_response(Ok(piece));
-    }
-    match submitted_action(&action, form)? {
+    match submitted_action(PieceAction::parse(&action)?, form)? {
         SubmittedAction::Review(request) => review_action(&state, &id, request),
         SubmittedAction::Render(request) => render_action(&state, &id, request).await,
         SubmittedAction::Publish(request) => publish_action(&state, &id, request).await,
+        SubmittedAction::AcceptCost(form) => {
+            let piece = state.studio.show(&id)?;
+            state.cost_consents.accept(&piece, &form)?;
+            saved_piece_response(Ok(piece))
+        }
     }
 }
 

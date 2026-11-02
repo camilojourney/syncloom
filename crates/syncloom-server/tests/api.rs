@@ -234,6 +234,188 @@ async fn error_messages_are_fixed_and_never_echo_request_content() {
     }
 }
 
+// Every registration in server.rs, meta.rs and social_routes.rs, with dynamic platforms
+// expanded. This is test scenario data, not a second runtime router or access policy.
+const ROUTES: &[(&str, &str)] = &[
+    ("GET", "/"),
+    ("GET", "/studio.css"),
+    ("GET", "/review/missing"),
+    ("GET", "/review/missing/edit"),
+    ("GET", "/review/missing/render"),
+    ("POST", "/actions/thought"),
+    ("POST", "/review/missing/edit"),
+    ("POST", "/review/missing/render"),
+    ("POST", "/review/missing/approve"),
+    ("POST", "/review/missing/publish"),
+    ("POST", "/review/missing/accept-cost"),
+    ("GET", "/v1/health"),
+    ("GET", "/v1/session"),
+    ("GET", "/v1/pieces"),
+    ("POST", "/v1/thoughts"),
+    ("GET", "/v1/pieces/missing"),
+    ("PATCH", "/v1/pieces/missing"),
+    ("POST", "/v1/pieces/missing/publish"),
+    ("POST", "/v1/pieces/missing/export"),
+    ("POST", "/v1/pieces/missing/render"),
+    ("GET", "/v1/pieces/missing/assets/image"),
+    ("GET", "/v1/pieces/missing/assets/carousel"),
+    ("GET", "/v1/pieces/missing/assets/slides/0"),
+    ("POST", "/v1/linkedin/sign-in"),
+    ("GET", "/v1/linkedin/sign-in"),
+    ("GET", "/v1/linkedin/connection"),
+    ("DELETE", "/v1/linkedin/connection"),
+    ("POST", "/v1/mastodon/sign-in"),
+    ("GET", "/v1/mastodon/sign-in"),
+    ("GET", "/v1/mastodon/connection"),
+    ("DELETE", "/v1/mastodon/connection"),
+    ("POST", "/v1/meta/sign-in"),
+    ("GET", "/v1/meta/sign-in"),
+    ("GET", "/v1/meta/connection"),
+    ("DELETE", "/v1/meta/connection"),
+    ("POST", "/v1/bluesky/sign-in"),
+    ("POST", "/v1/x/sign-in"),
+    ("GET", "/v1/x/sign-in"),
+    ("POST", "/v1/threads/sign-in"),
+    ("POST", "/v1/threads/complete"),
+    ("GET", "/v1/bluesky/connection"),
+    ("GET", "/v1/x/connection"),
+    ("GET", "/v1/threads/connection"),
+    ("DELETE", "/v1/bluesky/connection"),
+    ("DELETE", "/v1/x/connection"),
+    ("DELETE", "/v1/threads/connection"),
+    ("POST", "/v1/bluesky/refresh"),
+    ("POST", "/v1/x/refresh"),
+    ("POST", "/v1/threads/refresh"),
+];
+
+// studio-api: Host check, Origin and fetch metadata, Server-session token
+#[tokio::test]
+async fn every_registered_operation_refuses_foreign_headers_and_missing_session() {
+    let provider = Scripted::new(text("Never invoked."));
+    let server = start(provider.clone()).await;
+    for &(method, path) in ROUTES {
+        for (header, value, code) in [
+            ("host", "foreign.invalid", "host_not_allowed"),
+            ("origin", "https://foreign.invalid", "origin_not_allowed"),
+            ("sec-fetch-site", "same-site", "origin_not_allowed"),
+        ] {
+            let denied = answer(
+                client()
+                    .request(method.parse().unwrap(), server.url(path))
+                    .header("x-syncloom-token", &server.token)
+                    .header(header, value)
+                    .send()
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(denied.status, 403, "{method} {path}: {}", denied.raw);
+            if path.starts_with("/v1/") {
+                assert_eq!(denied.code(), code, "{method} {path}");
+                assert_eq!(denied.body["error"]["request_id"], denied.request_id());
+            } else {
+                assert!(denied.raw.contains(code), "{method} {path}");
+            }
+            assert_eq!(denied.headers["cache-control"], "no-store");
+            assert!(!denied.raw.contains(value));
+        }
+        if method != "GET" {
+            let denied = answer(
+                client()
+                    .request(method.parse().unwrap(), server.url(path))
+                    .send()
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(denied.status, 403, "{method} {path}: {}", denied.raw);
+            assert!(denied.raw.contains("session_required"));
+        }
+    }
+    assert!(provider.requests().is_empty());
+    assert!(files(&server.dir, "pieces").is_empty());
+    assert!(files(&server.dir, "outbox").is_empty());
+    assert!(events(&server.dir).is_empty());
+}
+
+// studio-api: Wrong method; Axum's automatic HEAD companions must remain bodyless,
+// including error responses. A refusal is not evidence of a successful sign-in or asset.
+#[tokio::test]
+async fn registered_paths_refuse_unsupported_methods_and_get_paths_have_bodyless_head() {
+    let provider = Scripted::new(text("Never invoked."));
+    let server = start(provider.clone()).await;
+    for &(method, path) in ROUTES {
+        // Supply both mutation channels; the boundary, not this inventory, owns
+        // whether this path authenticates a form or an API operation.
+        let unsupported = answer(
+            client()
+                .request(reqwest::Method::TRACE, server.url(path))
+                .header("x-syncloom-token", &server.token)
+                .form(&[("csrf", &server.token)])
+                .send()
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(unsupported.status, 405, "{path}: {}", unsupported.raw);
+        assert!(unsupported.raw.contains("method_not_allowed"));
+        if method == "GET" {
+            let read = get(&server, path).await;
+            let expected = match path {
+                "/" | "/studio.css" | "/v1/health" | "/v1/session" | "/v1/pieces" => 200,
+                _ if path.ends_with("/sign-in") || path.ends_with("/connection") => 503,
+                _ => 404,
+            };
+            assert_eq!(read.status, expected, "GET {path}: {}", read.raw);
+            let head = answer(client().head(server.url(path)).send().await.unwrap()).await;
+            assert_eq!(head.status, read.status, "HEAD {path}: {}", head.raw);
+            assert!(head.raw.is_empty(), "HEAD {path}: {}", head.raw);
+            assert_eq!(head.headers["cache-control"], "no-store");
+        }
+    }
+    assert!(provider.requests().is_empty());
+    assert!(files(&server.dir, "pieces").is_empty());
+}
+
+#[tokio::test]
+async fn unknown_review_actions_return_not_found_without_changing_the_piece() {
+    let server = start(Scripted::new(text("A saved draft."))).await;
+    let piece = piece_of(&create(&server, THOUGHT).await);
+    let revision = revision_of(&piece);
+    for action in ["unknown", "reject", "export"] {
+        let path = format!("/review/{}/{action}", id_of(&piece));
+        let read = get(&server, &path).await;
+        assert_eq!(read.status, 404);
+        assert!(read.raw.contains("not_found"));
+        let submitted = answer(
+            client()
+                .post(server.url(&path))
+                .form(&[
+                    ("csrf", server.token.as_str()),
+                    ("expected_revision", revision.as_str()),
+                ])
+                .send()
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(submitted.status, 404, "{}", submitted.raw);
+        assert!(submitted.raw.contains("not_found"));
+        assert_eq!(
+            get(&server, &format!("/v1/pieces/{}", id_of(&piece)))
+                .await
+                .body,
+            piece
+        );
+    }
+    for action in ["approve", "publish", "accept-cost"] {
+        let read = get(&server, &format!("/review/{}/{action}", id_of(&piece))).await;
+        assert_eq!(read.status, 405);
+        assert!(read.raw.contains("method_not_allowed"));
+    }
+    assert!(files(&server.dir, "outbox").is_empty());
+}
+
 // studio-api: Unknown path, Wrong method
 #[tokio::test]
 async fn unknown_paths_and_wrong_methods_have_their_codes() {
