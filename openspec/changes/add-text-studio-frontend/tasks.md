@@ -8,5 +8,5 @@
 ## 2. Prove
 - [x] 2.1 Capture all actual product surfaces light/dark wide/narrow, keyboard/zoom and state journeys; fix critique/audit findings.
 - [x] 2.2 Send screenshot package to firstmate before landing readiness.
-- [ ] 2.3 Run Code Verify on committed tree against original base, disposition all findings.
-- [ ] 2.4 Rebase onto current main if needed, rerun final checks, leave clean committed ship branch.
+- [x] 2.3 Run Code Verify on committed tree against original base, disposition all findings.
+- [x] 2.4 Confirm current main ancestry (no rebase needed), rerun final checks, leave clean committed ship branch.
