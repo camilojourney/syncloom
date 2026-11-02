@@ -16,7 +16,7 @@ pub(super) fn summary(piece: &Piece) -> String {
         String::new()
     };
     format!(
-        r#"<p class="fit-count">{} of {} characters - {verdict}</p><details class="count-details"><summary>Details</summary><p class="hint">{} App bounds: {} to {} {}.{bytes} This saved-text check does not guarantee the platform will accept the post.</p></details>"#,
+        r#"<p class="fit-count">{} of {} characters - {verdict}</p><details class="count-details"><summary>How characters are counted</summary><p class="hint">{} App bounds: {} to {} {}.{bytes} This saved-text check does not guarantee the platform will accept the post.</p></details>"#,
         grouped(piece.fit.char_count),
         grouped(piece.fit.max_chars),
         piece.channel.count_explanation(),

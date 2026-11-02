@@ -38,3 +38,4 @@ Browser publish affordances SHALL respect revision approval and the current publ
 - **WHEN** the review page is reloaded
 - **THEN** receipt details come from core read inspection when recorded, with unavailable values labeled honestly
 - **AND** inspecting a record never invokes publish or changes state
+- **AND** disclosures have distinct descriptive labels, and the latest-action summary is omitted only when the visible banner shows that same saved result; separate history remains visible

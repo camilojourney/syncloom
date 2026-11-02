@@ -368,7 +368,7 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
     assert!(
         receipt
             .raw
-            .contains("<details class=\"receipt-details\"><summary>Details</summary>")
+            .contains("<details class=\"receipt-details\"><summary>Publishing details</summary>")
     );
     assert!(
         receipt
@@ -940,6 +940,61 @@ async fn text_channels_are_repeated_fields_with_strict_scalar_and_unknown_field_
     );
 }
 
+#[tokio::test]
+async fn review_disclosures_have_distinct_names_and_only_duplicate_visible_outcomes_are_omitted() {
+    let server = start(Scripted::new(scripted::text(
+        "A saved synthetic review draft.",
+    )))
+    .await;
+    let piece = piece_of(&create(&server, THOUGHT).await);
+    assert_eq!(approve(&server, &piece).await.status, 200);
+    let path = format!("/review/{}", id_of(&piece));
+    assert_eq!(
+        form(
+            &server,
+            &format!("{path}/publish"),
+            &[
+                ("csrf", &server.token),
+                ("expected_revision", &revision_of(&piece))
+            ]
+        )
+        .await
+        .status,
+        200
+    );
+    let page = get(&server, &path).await;
+    assert!(
+        !page.raw.contains("Most recently:"),
+        "the banner already shows this exact result"
+    );
+    for label in [
+        "How characters are counted",
+        "Exact saved version",
+        "Publishing details",
+    ] {
+        assert!(page.raw.contains(&format!("<summary>{label}</summary>")));
+    }
+    assert!(!page.raw.contains("<summary>Details</summary>"));
+    let intent = std::fs::read_dir(server.dir.path().join("outbox"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    std::fs::remove_file(intent).unwrap();
+    let without_banner = get(&server, &path).await;
+    assert!(
+        without_banner.raw.contains("Most recently:"),
+        "without an equivalent banner, keep the saved latest action"
+    );
+    assert!(without_banner.raw.contains("Latest action details"));
+    assert!(
+        !without_banner
+            .raw
+            .contains("aria-label=\"Publishing result\"")
+    );
+}
+
 // [itest->req~studio-api.comfortable-text-review~1]
 #[tokio::test]
 async fn plain_counts_keep_channel_rules_in_closed_details_on_every_writing_surface() {
@@ -976,10 +1031,9 @@ async fn plain_counts_keep_channel_rules_in_closed_details_on_every_writing_surf
                 page.raw
             );
             assert!(page.raw.contains("characters - "));
-            assert!(
-                page.raw
-                    .contains("<details class=\"count-details\"><summary>Details</summary>")
-            );
+            assert!(page.raw.contains(
+                "<details class=\"count-details\"><summary>How characters are counted</summary>"
+            ));
             assert!(page.raw.contains(unit));
             assert!(!page.raw.contains("<details open"));
             assert!(!page.raw.contains("Conservative app"));

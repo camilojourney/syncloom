@@ -33,4 +33,6 @@ Use adversarial output and strict-form red/green tests, repeat/export histories 
 
 Main1353 correction: keep technical status/request/attempt/receipt data and counting rules in closed Details. Show natural outcome/count copy and suppress repeat approval for an already-approved exact revision. Approval dates come from the last matching piece_reviewed/approved provenance event, not updated_at or guessed time. The store streams that local history under the same inspection lock; missing history displays date not recorded, corrupt history fails closed. This adds no persisted field, JSON route or delivery policy. A large history may justify a core-owned index later if measured read latency exceeds the review budget.
 
+Main1361 final polish: distinct counting/version/publishing/latest-action disclosure names. Hide the duplicate latest-action copy only for the exact same technical result already shown in the banner; keep separate export history and any summary without an equivalent banner. No lifecycle or account behavior changed.
+
 Spec-Impact: extend existing studio-api and dispatch-outbox only. Preserve JSON schemas, approval/cost binding and intent retry behavior.

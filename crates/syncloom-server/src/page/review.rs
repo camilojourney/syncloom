@@ -27,15 +27,21 @@ pub(super) fn piece_page(
         .map(|r| status::delivery(r.status.as_str(), "Publishing"))
         .unwrap_or_default();
     let receipt_html = record.map(receipt_view).unwrap_or_default();
-    let last_operation = piece.publish_status.as_deref().map(|s| format!(
-        r#"<p class="hint last-operation">Most recently: <strong>{}</strong>. {}</p><details class="operation-details"><summary>Details</summary><p class="hint">Last operation: {}</p></details>"#,
-        status::label(s), status::explanation(s), escape(s)
-    )).unwrap_or_else(|| "<p class=\"hint\">This version hasn't been sent. Approval alone does not connect an account or allow publishing.</p>".into());
+    let last_operation = match piece.publish_status.as_deref() {
+        // Only hide an exact duplicate of the visible banner, never separate export history.
+        Some(s) if record.is_some_and(|r| r.status.as_str() == s) => String::new(),
+        Some(s) => format!(
+            r#"<p class="hint last-operation">Most recently: <strong>{}</strong>. {}</p><details class="operation-details"><summary>Latest action details</summary><p class="hint">Last operation: {}</p></details>"#,
+            status::label(s), status::explanation(s), escape(s)
+        ),
+        None if record.is_some() => String::new(),
+        None => "<p class=\"hint\">This version hasn't been sent. Approval alone does not connect an account or allow publishing.</p>".into(),
+    };
     let blocked = record.is_some_and(|r| !r.status.allows_new_attempt());
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">All thoughts &amp; pieces</a><div class="review-heading"><div><h1>Review your piece.</h1><p class="channel-name">{channel}</p></div><div class="status-row">{}{publish_badge}</div></div>{receipt_html}<div class="review-layout"><div class="review-content"><section class="card local-preview-card" aria-labelledby="preview-title"><div class="section-heading"><h2 id="preview-title">{channel} preview</h2><a href="/review/{id}/edit">Edit draft</a></div><p class="hint preview-disclaimer">Approximate local preview. It may look different on the platform.</p><p class="preview-prose draft-text">{}</p>{}<details class="revision"><summary>Details</summary><p class="hint">Exact saved revision. Approval covers this version, not unsaved edits.</p><code class="hash">{}</code></details></section><section class="source-section"><h2>The source thought</h2><p class="source prose">{}</p>{}</section>{}</div><aside class="review-controls" aria-label="Review and publish"><section class="card approval"><h2>Your decision</h2>{}<hr>{}{last_operation}</section><details class="visual-config"><summary>Visual previews</summary><p class="hint">Optional: make slides from your text. Making new previews means you'll need to check and approve them again.</p><a class="button secondary" href="/review/{id}/render">Render previews</a></details></aside></div>"#,
+            r#"<a class="back" href="/">All thoughts &amp; pieces</a><div class="review-heading"><div><h1>Review your piece.</h1><p class="channel-name">{channel}</p></div><div class="status-row">{}{publish_badge}</div></div>{receipt_html}<div class="review-layout"><div class="review-content"><section class="card local-preview-card" aria-labelledby="preview-title"><div class="section-heading"><h2 id="preview-title">{channel} preview</h2><a href="/review/{id}/edit">Edit draft</a></div><p class="hint preview-disclaimer">Approximate local preview. It may look different on the platform.</p><p class="preview-prose draft-text">{}</p>{}<details class="revision"><summary>Exact saved version</summary><p class="hint">Exact saved revision. Approval covers this version, not unsaved edits.</p><code class="hash">{}</code></details></section><section class="source-section"><h2>The source thought</h2><p class="source prose">{}</p>{}</section>{}</div><aside class="review-controls" aria-label="Review and publish"><section class="card approval"><h2>Your decision</h2>{}<hr>{}{last_operation}</section><details class="visual-config"><summary>Visual previews</summary><p class="hint">Optional: make slides from your text. Making new previews means you'll need to check and approve them again.</p><a class="button secondary" href="/review/{id}/render">Render previews</a></details></aside></div>"#,
             status::review(piece.status),
             escape(&piece.text),
             counts::summary(piece),
@@ -187,7 +193,7 @@ fn receipt_view(record: &DispatchIntent) -> String {
         escape(&cost.usd()), escape(&cost.pricing_as_of)
     )).unwrap_or_default();
     format!(
-        r#"<section class="receipt" aria-label="Publishing result"><div class="receipt-heading"><h2>{}</h2><span class="hint">Publishing result</span></div><p>{}</p><details class="receipt-details"><summary>Details</summary><p class="hint">Status: {status}. Request: <code class="hash">{}</code> · Attempts: {attempts}</p><p class="hint receipt-detail">Post id: {} · Post URL: {}</p>{estimate}</details></section>"#,
+        r#"<section class="receipt" aria-label="Publishing result"><div class="receipt-heading"><h2>{}</h2><span class="hint">Publishing result</span></div><p>{}</p><details class="receipt-details"><summary>Publishing details</summary><p class="hint">Status: {status}. Request: <code class="hash">{}</code> · Attempts: {attempts}</p><p class="hint receipt-detail">Post id: {} · Post URL: {}</p>{estimate}</details></section>"#,
         status::label(status),
         status::explanation(status),
         escape(&record.request_id),
