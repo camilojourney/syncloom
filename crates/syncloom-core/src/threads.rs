@@ -146,14 +146,10 @@ impl Threads {
         )
         .await
         .map_err(|_| StudioError::PostingPermissionUnverified)?;
-        if !debug.data.is_valid
-            || debug.data.scopes.iter().any(|scope| {
-                scope.is_empty() || scope.chars().any(|c| c == ',' || c.is_whitespace())
-            })
-        {
+        if !debug.data.is_valid {
             return Err(StudioError::PostingPermissionUnverified);
         }
-        Ok(debug.data.scopes.join(" "))
+        crate::credentials::join_granted_scopes(debug.data.scopes).map_err(|e| e.error())
     }
     async fn save(
         &self,

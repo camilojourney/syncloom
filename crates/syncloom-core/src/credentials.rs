@@ -66,27 +66,52 @@ impl GrantError {
     }
 }
 
+/// The persisted scope string accepts historical comma and OAuth whitespace separators.
+pub(crate) fn has_scope(scope: &str, need: &str) -> bool {
+    scope
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .any(|s| s == need)
+}
+
+/// Provider arrays already contain individual names, not strings to split into grants.
+pub(crate) fn join_granted_scopes(
+    scopes: impl IntoIterator<Item = String>,
+) -> Result<String, GrantError> {
+    let mut joined = String::new();
+    for scope in scopes {
+        if scope.is_empty() || scope.chars().any(|c| c == ',' || c.is_whitespace()) {
+            return Err(GrantError::Unverified);
+        }
+        if !joined.is_empty() {
+            joined.push(' ');
+        }
+        joined.push_str(&scope);
+    }
+    Ok(joined)
+}
+
 /// Posting capability belongs to credentials, not to a UI capability registry.
-/// Scopes are exact tokens; Mastodon's broad write grant includes its write children.
 pub(crate) fn posting_scope(channel: crate::Channel, scope: &str, image: bool) -> bool {
     use crate::Channel;
-    let has = |need: &str| {
-        scope
-            .split(|c: char| c == ',' || c.is_whitespace())
-            .any(|s| s == need)
-    };
     match channel {
-        Channel::LinkedinText => has("w_member_social"),
-        Channel::X => has("tweet.write") && has("users.read") && (!image || has("media.write")),
-        Channel::Mastodon => {
-            has("write") || (has("write:statuses") && (!image || has("write:media")))
-        }
-        Channel::FacebookPage => has("pages_manage_posts"),
-        Channel::Instagram => has("instagram_content_publish"),
-        Channel::Threads => has("threads_content_publish"),
+        Channel::LinkedinText => has_scope(scope, "w_member_social"),
+        Channel::X => x_posting_scope(scope, image),
+        Channel::Mastodon => mastodon_posting_scope(scope, image),
+        Channel::FacebookPage => has_scope(scope, "pages_manage_posts"),
+        Channel::Instagram => has_scope(scope, "instagram_content_publish"),
+        Channel::Threads => has_scope(scope, "threads_content_publish"),
         Channel::Bluesky => true,
         Channel::ManualExport => false,
     }
+}
+fn x_posting_scope(scope: &str, image: bool) -> bool {
+    has_scope(scope, "tweet.write")
+        && has_scope(scope, "users.read")
+        && (!image || has_scope(scope, "media.write"))
+}
+fn mastodon_posting_scope(scope: &str, image: bool) -> bool {
+    has_scope(scope, "write")
+        || (has_scope(scope, "write:statuses") && (!image || has_scope(scope, "write:media")))
 }
 impl Token {
     pub(crate) fn posting_permission(

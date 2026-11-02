@@ -23,11 +23,7 @@ async fn setup(
 ) {
     let clock = fixture::clock();
     let store = memory_store::MemoryStore::new();
-    let q = Arc::new(fixture::social(
-        fake,
-        store.clone(),
-        clock.clone(),
-    ));
+    let q = Arc::new(fixture::social(fake, store.clone(), clock.clone()));
     let adapter = adapter(&q, platform);
     let attached = q.clone();
     let server = start_studio(
@@ -197,8 +193,17 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
         let refreshed = post_empty(&server, &refresh).await;
         assert_eq!(refreshed.status, 200, "{platform}: {}", refreshed.raw);
         assert_eq!(refreshed.body["status"], "signed_in");
-        assert_eq!(fake.calls().len(), calls + 1);
-        assert_eq!(fake.calls().last().unwrap().path, path);
+        let renewal_calls = if platform == "threads" { 2 } else { 1 };
+        assert_eq!(fake.calls().len(), calls + renewal_calls);
+        assert_eq!(fake.calls()[calls].path, path);
+        if platform == "threads" {
+            assert_eq!(fake.calls()[calls + 1].path, "/v1.0/debug_token");
+            assert!(
+                fake.calls()[calls + 1]
+                    .query
+                    .contains("input_token=threads-long-2")
+            );
+        }
         assert_eq!(get(&server, &connection).await.body, refreshed.body);
 
         // A failed renewal must retain the last successful credentials, not the original
@@ -210,13 +215,18 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
         let failed = post_empty(&server, &refresh).await;
         assert_eq!((failed.status, failed.code()), (502, "sign_in_rejected"));
         assert!(!failed.raw.contains("renewal-secret-canary"));
-        assert_eq!(fake.calls().len(), calls + 2);
+        assert_eq!(fake.calls().len(), calls + renewal_calls + 1);
         assert_eq!(get(&server, &connection).await.body, refreshed.body);
         fake.reply(path, 200, renewed);
         let retry = post_empty(&server, &refresh).await;
         assert_eq!(retry.status, 200, "{platform}: {}", retry.raw);
-        assert_eq!(fake.calls().len(), calls + 3);
-        let last = fake.calls().last().unwrap().clone();
+        assert_eq!(fake.calls().len(), calls + renewal_calls * 2 + 1);
+        let last = fake
+            .calls()
+            .into_iter()
+            .rev()
+            .find(|call| call.path == path)
+            .unwrap();
         match platform {
             "bluesky" => assert_eq!(last.authorization, "Bearer refresh-bsky-2"),
             "x" => assert_eq!(last.form()["refresh_token"], "x-refresh-2"),
