@@ -127,6 +127,7 @@ pub struct PiecePage {
 #[derive(Debug)]
 pub struct ReviewSnapshot {
     pub piece: Piece,
+    pub current_target: Option<String>,
     pub publish_intent: Option<DispatchIntent>,
     /// Actual provenance time for the current approval, unavailable in history-less records.
     pub approved_at: Option<String>,
@@ -609,8 +610,8 @@ impl Studio {
     pub fn inspect_publish(&self, piece_id: &str) -> Result<ReviewSnapshot, StudioError> {
         let lock = self.store.lock()?;
         let piece = self.load(&lock, piece_id)?;
-        let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision, None);
-        let publish_intent = lock.load_intent(&key)?;
+        let (_, publish_intent) = self.publish_intent(&lock, &piece)?;
+        let current_target = self.review_target(&piece)?;
         let approved_at = if piece.status == Status::Approved && piece.review_decision_id.is_some()
         {
             lock.approval_at(&piece.piece_id, &piece.revision)?
@@ -619,6 +620,7 @@ impl Studio {
         };
         Ok(ReviewSnapshot {
             piece,
+            current_target,
             publish_intent,
             approved_at,
         })

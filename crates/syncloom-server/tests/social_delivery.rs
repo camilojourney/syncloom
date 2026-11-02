@@ -828,6 +828,208 @@ async fn social_account_switch(platform: &str) {
     }
 }
 
+// Native forms must echo the displayed account and inspect the same durable intent as publish.
+#[tokio::test]
+async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect()
+-> Result<(), Box<dyn std::error::Error>> {
+    for posted_a in [false, true] {
+        let fake = fake::Fake::bluesky().await;
+        let (server, _, _) = setup(&fake, "bluesky", true).await;
+        login(&server, "bluesky").await;
+        let p = draft(&server, "bluesky", false).await;
+        let id = p["piece_id"].as_str().ok_or("piece id")?;
+        let revision = p["revision"].as_str().ok_or("revision")?;
+        let path = format!("/review/{id}");
+        let a = get(&server, &format!("/v1/pieces/{id}")).await;
+        let target_a = a.body["current_target"].as_str().ok_or("A target")?;
+        let page = get(&server, &path).await;
+        assert!(
+            page.raw
+                .contains(&format!("name=\"expected_target\" value=\"{target_a}\"")),
+            "displayed account must be submitted"
+        );
+        let approve_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+            ("expected_target", target_a),
+        ];
+        let approved = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&approve_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(approved.status, 200);
+        assert!(approved.raw.contains("Approved on <time"));
+        assert!(!approved.raw.contains(&format!("action=\"{path}/approve\"")));
+        let publish_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+        ];
+        let mut first_request = None;
+        if posted_a {
+            let sent = answer(
+                client()
+                    .post(server.url(&format!("{path}/publish")))
+                    .header("origin", server.url(""))
+                    .form(&publish_fields)
+                    .send()
+                    .await?,
+            )
+            .await;
+            assert!(sent.raw.contains("<h2>Posted</h2>"));
+            first_request = Some(
+                post(
+                    &server,
+                    &publish_path(&p),
+                    json!({"expected_revision":revision}),
+                )
+                .await
+                .body["request_id"]
+                    .clone(),
+            );
+        }
+        send_json(
+            &server,
+            reqwest::Method::DELETE,
+            "/v1/bluesky/connection",
+            Value::Null,
+        )
+        .await;
+        fake.reply("/xrpc/com.atproto.server.createSession", 200, json!({"accessJwt":fake::jwt(1793455200),"refreshJwt":"synthetic-second-session","did":"did:plc:second","handle":"second.invalid"}));
+        fake.reply(
+            "/xrpc/com.atproto.repo.createRecord",
+            200,
+            json!({"uri":"at://did:plc:second/app.bsky.feed.post/secondrecord","cid":fake::CID}),
+        );
+        login(&server, "bluesky").await;
+        let stale = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&approve_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(stale.status, 409);
+        assert!(stale.raw.contains("account_approval_required"));
+        let b = get(&server, &format!("/v1/pieces/{id}")).await;
+        let target_b = b.body["current_target"].as_str().ok_or("B target")?;
+        assert_ne!(target_a, target_b);
+        assert_eq!(b.body["approval_target"], target_a);
+        let page = get(&server, &path).await;
+        assert!(page.raw.contains(target_b));
+        assert!(
+            page.raw
+                .contains("A new approval will apply to this connected account fingerprint.")
+        );
+        assert!(
+            !page
+                .raw
+                .contains("Approval is for this exact account fingerprint.")
+        );
+        assert!(page.raw.contains("Approve this version"));
+        assert!(
+            page.raw
+                .contains("class=\"publish\" type=\"submit\" disabled>Publish")
+        );
+        let before = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .count();
+        if !posted_a {
+            let denied = answer(
+                client()
+                    .post(server.url(&format!("{path}/publish")))
+                    .header("origin", server.url(""))
+                    .form(&publish_fields)
+                    .send()
+                    .await?,
+            )
+            .await;
+            assert_eq!(denied.status, 409);
+        }
+        assert_eq!(
+            fake.calls()
+                .into_iter()
+                .filter(|c| c.path.ends_with("createRecord"))
+                .count(),
+            before
+        );
+        let fresh_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+            ("expected_target", target_b),
+        ];
+        let fresh = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&fresh_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(fresh.status, 200);
+        assert!(fresh.raw.contains("2026-10-30</time>"));
+        assert!(!fresh.raw.contains(&format!("action=\"{path}/approve\"")));
+        if let Some(old) = first_request {
+            assert!(
+                !fresh.raw.contains(old.as_str().ok_or("A request")?),
+                "new target must not inherit A receipt"
+            );
+        }
+        let sent = answer(
+            client()
+                .post(server.url(&format!("{path}/publish")))
+                .header("origin", server.url(""))
+                .form(&publish_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(sent.status, 200);
+        assert!(sent.raw.contains("<h2>Posted</h2>"));
+        let repeated = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":revision}),
+        )
+        .await;
+        let request = repeated.body["request_id"].as_str().ok_or("B request")?;
+        assert!(sent.raw.contains(request));
+        assert!(sent.raw.contains("disabled>Publish"));
+        let targets: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .map(|c| c.json()["repo"].clone())
+            .collect();
+        let mut expected = Vec::new();
+        if posted_a {
+            expected.push(json!("did:plc:testrepo"));
+        }
+        expected.push(json!("did:plc:second"));
+        assert_eq!(targets, expected);
+        post(
+            &server,
+            &format!("/v1/pieces/{id}/export"),
+            json!({"expected_revision":revision,"target":"reddit"}),
+        )
+        .await;
+        let exported = get(&server, &path).await;
+        assert!(exported.raw.contains(request));
+        assert!(exported.raw.contains("<h2>Posted</h2>"));
+        assert!(exported.raw.contains("disabled>Publish"));
+    }
+    Ok(())
+}
+
 // The only counterfactual is the authenticated DID; content and revision stay fixed.
 #[tokio::test]
 async fn bluesky_account_switch_requires_fresh_approval_before_any_post() {

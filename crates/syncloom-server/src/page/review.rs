@@ -7,20 +7,19 @@ pub(crate) async fn review(
 ) -> Result<Html<String>, Failure> {
     let Path(id) = path.map_err(|_| StudioError::PieceNotFound)?;
     let snapshot = state.studio.inspect_publish(&id)?;
-    Ok(piece_page(
-        &state,
-        &snapshot.piece,
-        snapshot.publish_intent.as_ref(),
-        snapshot.approved_at.as_deref(),
-    ))
+    Ok(piece_page(&state, &snapshot))
 }
 
 pub(super) fn piece_page(
     state: &AppState,
-    piece: &Piece,
-    record: Option<&DispatchIntent>,
-    approved_at: Option<&str>,
+    snapshot: &syncloom_core::studio::ReviewSnapshot,
 ) -> Html<String> {
+    let piece = &snapshot.piece;
+    let record = snapshot.publish_intent.as_ref();
+    let current_target = snapshot.current_target.as_deref();
+    let account_required = state
+        .studio
+        .account_approval_required(piece, current_target);
     let id = escape(&piece.piece_id);
     let channel = piece.channel.display_name();
     let publish_badge = record
@@ -49,8 +48,8 @@ pub(super) fn piece_page(
             escape(&piece.source.raw_input),
             routing(piece),
             previews::assets(piece),
-            approval_controls(state, piece, approved_at),
-            publish_controls(state, piece, blocked)
+            approval_controls(state, snapshot, account_required),
+            publish_controls(state, piece, blocked, account_required)
         ),
     )
 }
@@ -77,9 +76,19 @@ fn routing(piece: &Piece) -> String {
     )
 }
 
-fn approval_controls(state: &AppState, piece: &Piece, approved_at: Option<&str>) -> String {
-    if piece.status == Status::Approved {
-        let date = approved_at
+fn approval_controls(
+    state: &AppState,
+    snapshot: &syncloom_core::studio::ReviewSnapshot,
+    account_required: bool,
+) -> String {
+    let piece = &snapshot.piece;
+    let account = snapshot.current_target.as_deref().map(|target| format!(
+        "<details class=\"account-details\"><summary>Connected account</summary><p class=\"hint\">A new approval will apply to this connected account fingerprint.</p><code class=\"hash\">{}</code></details>", escape(target)
+    )).unwrap_or_default();
+    let approved = if piece.status == Status::Approved {
+        let date = snapshot
+            .approved_at
+            .as_deref()
             .map(|at| {
                 format!(
                     "Approved on <time datetime=\"{}\">{}</time>.",
@@ -88,15 +97,22 @@ fn approval_controls(state: &AppState, piece: &Piece, approved_at: Option<&str>)
                 )
             })
             .unwrap_or_else(|| "Approved. Approval date is not recorded.".into());
-        return format!("<p>{date} Publishing is a separate action.</p>");
+        format!("<p>{date} Publishing is a separate action.</p>")
+    } else {
+        String::new()
+    };
+    if piece.status == Status::Approved && !account_required {
+        return format!("{approved}{account}");
     }
     if piece.status == Status::Rejected {
         return "<p>This piece is rejected. Edit it to start a new review.</p>".into();
     }
     let needs_previews = piece.visual.is_some() && piece.assets.is_none();
     format!(
-        r#"<p>{}</p><form method="post" action="/review/{}/approve">{}{}<button type="submit"{}>Approve this version</button></form>"#,
-        if needs_previews {
+        r#"{approved}{account}<p>{}</p><form method="post" action="/review/{}/approve">{}{}{}<button type="submit"{}>Approve this version</button></form>"#,
+        if account_required && piece.status == Status::Approved {
+            "The connected account changed or this approval has no account. Review and approve this version for the connected account before publishing."
+        } else if needs_previews {
             "Make the current previews before approving."
         } else {
             "Read the saved text and any previews before approving this version."
@@ -104,6 +120,11 @@ fn approval_controls(state: &AppState, piece: &Piece, approved_at: Option<&str>)
         escape(&piece.piece_id),
         revision_fields(state, piece),
         asset_fields(piece),
+        snapshot
+            .current_target
+            .as_deref()
+            .map(|target| hidden("expected_target", target))
+            .unwrap_or_default(),
         if needs_previews { " disabled" } else { "" }
     )
 }
@@ -131,12 +152,18 @@ fn asset_fields(piece: &Piece) -> String {
 }
 
 /// Core intent policy, review approval and consent jointly control the visible action.
-fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
+fn publish_controls(
+    state: &AppState,
+    piece: &Piece,
+    blocked: bool,
+    account_required: bool,
+) -> String {
     let id = escape(&piece.piece_id);
     let unavailable_image = piece.channel == Channel::Threads && piece.visual.is_some();
     let accepted_cost = state.cost_consents.accepted(piece);
     let disabled = if piece.status != Status::Approved
         || blocked
+        || account_required
         || unavailable_image
         || (piece.channel == Channel::X && accepted_cost.is_none())
     {
@@ -146,6 +173,8 @@ fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
     };
     let recovery = if blocked {
         "This version can't be sent again here. Check what happened above before doing anything else."
+    } else if account_required {
+        "Connect the intended account, then approve this version for that account before publishing."
     } else if piece.status != Status::Approved {
         "Approve this saved version before publishing."
     } else if unavailable_image {

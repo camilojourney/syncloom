@@ -5,6 +5,7 @@ use super::*;
 pub(crate) struct PieceForm {
     csrf: String,
     pub(super) expected_revision: String,
+    expected_target: Option<String>,
     text: Option<String>,
     template: Option<String>,
     slides: Option<String>,
@@ -46,7 +47,7 @@ impl PieceForm {
             text,
             expected_assets,
             expected_revision: self.expected_revision,
-            expected_target: None,
+            expected_target: self.expected_target,
         })
     }
 
