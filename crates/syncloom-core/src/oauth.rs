@@ -52,6 +52,13 @@ impl RedirectUrl {
         })
     }
 }
+/// Stable refusal when the effective grant cannot post. Not a second capability registry.
+pub const POSTING_PERMISSION_MISSING: &str = "posting_permission_missing";
+pub const POSTING_PERMISSION_MESSAGE: &str = "posting permission missing.";
+pub const CANNOT_POST_MESSAGE: &str = "connected, cannot post: posting permission missing.";
+/// Existing sign-in operation. Not a new credential-management page.
+pub const RECONNECT_ACTION: &str = "sign_in";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionStatus {
@@ -59,6 +66,8 @@ pub enum ConnectionStatus {
     AwaitingConsent,
     SignedIn,
     Expired,
+    /// A credential is stored, but it does not grant posting.
+    CannotPost,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Connection {
@@ -67,31 +76,53 @@ pub struct Connection {
     pub expires_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// Existing reconnect operation, present only when posting permission is missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
 }
 impl Connection {
-    pub(crate) fn from_token(token: Option<Token>, now: &str, pending: bool) -> Self {
-        if pending {
-            return Self {
-                status: ConnectionStatus::AwaitingConsent,
-                expires_at: None,
-                scope: None,
-            };
+    fn absent(status: ConnectionStatus) -> Self {
+        Self {
+            status,
+            expires_at: None,
+            scope: None,
+            reason: None,
+            message: None,
+            action: None,
         }
-        match token {
-            None => Self {
-                status: ConnectionStatus::SignedOut,
-                expires_at: None,
-                scope: None,
+    }
+    /// Readiness uses the credential owner's action policy, never requested scopes.
+    pub(crate) fn from_token(
+        token: Option<Token>,
+        now: &str,
+        pending: bool,
+        permission: impl Fn(&Token) -> Result<(), crate::credentials::GrantError>,
+    ) -> Self {
+        if pending {
+            return Self::absent(ConnectionStatus::AwaitingConsent);
+        }
+        let Some(token) = token else {
+            return Self::absent(ConnectionStatus::SignedOut);
+        };
+        let expired = token.is_expired_at(now);
+        let denied = (!expired).then(|| permission(&token).err()).flatten();
+        Self {
+            status: if expired {
+                ConnectionStatus::Expired
+            } else if denied.is_some() {
+                ConnectionStatus::CannotPost
+            } else {
+                ConnectionStatus::SignedIn
             },
-            Some(token) => Self {
-                status: if token.is_expired_at(now) {
-                    ConnectionStatus::Expired
-                } else {
-                    ConnectionStatus::SignedIn
-                },
-                expires_at: token.expires_at,
-                scope: Some(token.scope),
-            },
+            expires_at: token.expires_at,
+            scope: Some(token.scope),
+            reason: denied.map(|e| e.error().code().to_owned()),
+            message: denied.map(|e| format!("connected, cannot post: {}", e.error().message())),
+            action: denied.map(|_| RECONNECT_ACTION.to_owned()),
         }
     }
 }
@@ -179,11 +210,26 @@ impl Session {
     pub fn save_token(&self, generation: u64, token: &Token) -> Result<(), StudioError> {
         self.credentials.commit_token(generation, token)
     }
-    pub fn usable_token(&self) -> Result<Token, crate::PostFailure> {
-        self.credentials.usable()
+    pub fn usable_for_post(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<Token, crate::PostFailure> {
+        self.credentials.usable_for_post(channel, image)
     }
-    pub fn connection(&self) -> Result<Connection, StudioError> {
-        self.credentials.connection(self.active())
+    pub fn connection_for(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<Connection, StudioError> {
+        self.credentials
+            .connection_for(self.active(), channel, image)
+    }
+    pub fn connection_if(
+        &self,
+        permission: impl Fn(&Token) -> Result<(), crate::credentials::GrantError>,
+    ) -> Result<Connection, StudioError> {
+        self.credentials.connection_if(self.active(), permission)
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.cancel();

@@ -33,6 +33,10 @@ pub struct Posted {
 pub enum PostFailure {
     /// No token, an expired token, or the platform refused the token (401).
     ConsentRequired,
+    /// A credential exists, but its effective grant cannot post. Nothing is sent.
+    PostingPermissionMissing,
+    /// Effective permission evidence is absent or could not be verified. Nothing is sent.
+    PostingPermissionUnverified,
     /// The platform refused the request for another reason (4xx other than 401 and 429).
     Refused,
     /// The platform asked to slow down (429).

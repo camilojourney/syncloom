@@ -68,11 +68,39 @@ impl CredentialSession {
         self.store
             .usable_token(&self.account, &self.clock.now_rfc3339())
     }
+    /// Evaluate capability on the exact credential returned for dispatch.
+    pub fn usable_for_post(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<Token, PostFailure> {
+        let token = self.usable()?;
+        token
+            .posting_permission(channel, image)
+            .map_err(|e| e.failure())?;
+        Ok(token)
+    }
     pub fn connection(&self, pending: bool) -> Result<Connection, StudioError> {
+        self.connection_for(pending, crate::Channel::Bluesky, false)
+    }
+    pub fn connection_for(
+        &self,
+        pending: bool,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<Connection, StudioError> {
+        self.connection_if(pending, |token| token.posting_permission(channel, image))
+    }
+    pub fn connection_if(
+        &self,
+        pending: bool,
+        permission: impl Fn(&Token) -> Result<(), crate::credentials::GrantError>,
+    ) -> Result<Connection, StudioError> {
         Ok(Connection::from_token(
             self.store.load(&self.account)?,
             &self.clock.now_rfc3339(),
             pending,
+            permission,
         ))
     }
     pub fn clear(&self) -> Result<Connection, StudioError> {
@@ -96,6 +124,7 @@ impl CredentialSession {
             expires_at: Some(expires_at),
             member_id,
             scope,
+            scope_verified: true,
             obtained_at: self.clock.now_rfc3339(),
         };
         self.commit_token(generation, &token)

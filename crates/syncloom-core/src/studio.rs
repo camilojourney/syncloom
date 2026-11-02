@@ -416,7 +416,13 @@ impl Studio {
         self.mastodon()?.sign_in_wait().await
     }
     pub fn mastodon_connection(&self) -> Result<crate::oauth::Connection, StudioError> {
-        self.mastodon()?.connection()
+        self.mastodon_connection_for(false)
+    }
+    pub fn mastodon_connection_for(
+        &self,
+        image: bool,
+    ) -> Result<crate::oauth::Connection, StudioError> {
+        self.mastodon()?.connection_for(image)
     }
     pub fn mastodon_sign_out(&self) -> Result<crate::oauth::Connection, StudioError> {
         self.mastodon()?.sign_out()
@@ -1129,6 +1135,8 @@ struct Extra {
 fn status_of(failure: PostFailure) -> IntentStatus {
     match failure {
         PostFailure::ConsentRequired => IntentStatus::ConsentRequired,
+        PostFailure::PostingPermissionMissing => IntentStatus::PostingPermissionMissing,
+        PostFailure::PostingPermissionUnverified => IntentStatus::PostingPermissionUnverified,
         PostFailure::Refused => IntentStatus::Refused,
         PostFailure::RateLimited => IntentStatus::RateLimited,
         PostFailure::Unreachable => IntentStatus::Unreachable,

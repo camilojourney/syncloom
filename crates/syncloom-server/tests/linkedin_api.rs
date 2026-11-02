@@ -376,3 +376,125 @@ async fn the_linkedin_paths_are_host_guarded_and_refuse_other_methods() {
     assert_eq!((answer.status, answer.code()), (405, "method_not_allowed"));
     assert!(fake.auth_requests().is_empty());
 }
+
+/// Smallest counterfactual against `TokenMode::ok()`: the same consent fixture, with only the
+/// returned scope reduced to `openid,profile` (no `w_member_social`).
+#[tokio::test]
+async fn reduced_linkedin_grant_is_not_connected_and_cannot_publish() {
+    let fake = fake_linkedin::start(
+        AuthMode::Consent,
+        TokenMode::Ok {
+            access_token: fake_linkedin::DEFAULT_TOKEN.into(),
+            expires_in: 3600,
+            scope: "openid,profile".into(),
+        },
+        PostMode::Posted("urn:li:share:7000000000000000001".into()),
+    )
+    .await;
+    let store = MemoryStore::new();
+    let server = start_linkedin(
+        Scripted::new(text("A draft about zebrafish.")),
+        fast(),
+        &fake,
+        store.clone(),
+        true,
+        true,
+    )
+    .await;
+    let start = post_empty(&server, "/v1/linkedin/sign-in").await;
+    assert_eq!(start.status, 202, "{}", start.raw);
+    browser(start.body["authorization_url"].as_str().unwrap()).await;
+    let completed = get(&server, "/v1/linkedin/sign-in").await;
+    let saved_partial = store
+        .get("linkedin")
+        .is_some_and(|token| token.scope == "openid,profile");
+    assert_eq!(
+        (completed.status, completed.code()),
+        (403, "posting_permission_missing"),
+        "saved_partial={saved_partial} token_requests={} posts={} userinfo={} body={}",
+        fake.token_requests().len(),
+        fake.posts().len(),
+        fake.userinfo_bearers().len(),
+        completed.raw
+    );
+    assert!(
+        completed.body["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("posting permission missing"),
+        "{}",
+        completed.raw
+    );
+    assert!(!saved_partial, "a reduced grant must not be stored");
+    assert!(fake.posts().is_empty());
+    assert!(
+        fake.userinfo_bearers().is_empty(),
+        "a refused grant must not be used"
+    );
+    assert_eq!(
+        get(&server, "/v1/linkedin/connection").await.body["status"],
+        "signed_out"
+    );
+
+    let mut reduced = stored_token("2026-12-29T18:00:00Z");
+    reduced.scope = "openid,profile".into();
+    store.save("linkedin", &reduced).unwrap();
+    let connection = get(&server, "/v1/linkedin/connection").await;
+    assert_eq!(connection.status, 200, "{}", connection.raw);
+    assert_ne!(connection.body["status"], "signed_in", "{}", connection.raw);
+    assert_eq!(connection.body["status"], "cannot_post");
+    assert_eq!(connection.body["reason"], "posting_permission_missing");
+    assert_eq!(
+        connection.body["message"],
+        "connected, cannot post: posting permission missing."
+    );
+    assert_eq!(connection.body["action"], "sign_in");
+    assert_eq!(connection.body["scope"], "openid,profile");
+
+    let piece = piece_of(&create(&server, THOUGHT).await);
+    approve(&server, &piece).await;
+    let published = post(
+        &server,
+        &format!("/v1/pieces/{}/publish", id_of(&piece)),
+        json!({"expected_revision": revision_of(&piece)}),
+    )
+    .await;
+    assert_eq!(published.status, 200, "{}", published.raw);
+    assert_eq!(published.body["status"], "posting_permission_missing");
+    assert_eq!(published.body["post_id"], Value::Null);
+    assert!(
+        fake.posts().is_empty(),
+        "a reduced grant must not be posted"
+    );
+
+    let reconnect = post_empty(&server, "/v1/linkedin/sign-in").await;
+    assert_eq!(reconnect.status, 202, "{}", reconnect.raw);
+    assert_eq!(reconnect.body["status"], "awaiting_consent");
+}
+
+#[tokio::test]
+async fn linkedin_posting_permission_requires_the_exact_granted_scope_token() {
+    for scope in ["openid profile", "w_member_social_feed", ""] {
+        let store = MemoryStore::new();
+        let mut token = stored_token("2026-12-29T18:00:00Z");
+        token.scope = scope.into();
+        store.save("linkedin", &token).unwrap();
+        let fake = fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), PostMode::NoId).await;
+        let server = start_linkedin(
+            Scripted::new(text("unused")),
+            fast(),
+            &fake,
+            store,
+            false,
+            false,
+        )
+        .await;
+        let connection = get(&server, "/v1/linkedin/connection").await;
+        assert_eq!(
+            connection.body["status"], "cannot_post",
+            "scope {scope:?} must not look connected: {}",
+            connection.raw
+        );
+        assert_eq!(connection.body["reason"], "posting_permission_missing");
+    }
+}

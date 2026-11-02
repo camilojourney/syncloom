@@ -71,12 +71,60 @@ async fn independent_threads_callback_and_x_scope_guards_reject_before_storage()
     ))
     .await
     .unwrap();
-    assert_eq!(q.x.sign_in_wait().await, Err(StudioError::SignInRejected));
+    assert_eq!(
+        q.x.sign_in_wait().await,
+        Err(StudioError::PostingPermissionMissing)
+    );
     assert!(
         store
             .load(&q.account(syncloom_core::Channel::X).unwrap())
             .unwrap()
             .is_none()
+    );
+}
+
+#[tokio::test]
+async fn saved_reduced_x_grant_refresh_does_not_become_publish_ready() {
+    let fake = Fake::x().await;
+    let store = MemoryStore::new();
+    let q = social(&fake, store.clone(), clock());
+    let account = q.account(syncloom_core::Channel::X).unwrap();
+    store
+        .save(
+            &account,
+            &syncloom_core::Token {
+                access_token: Secret::new(
+                    r#"{"access_token":"reduced-access","refresh_token":"reduced-refresh"}"#,
+                ),
+                expires_at: Some("2026-12-29T18:00:00Z".into()),
+                member_id: String::new(),
+                scope: "tweet.read".into(),
+                scope_verified: true,
+                obtained_at: "2026-10-31T02:00:00Z".into(),
+            },
+        )
+        .unwrap();
+    fake.reply(
+        "/2/oauth2/token",
+        200,
+        json!({
+            "access_token":"audit-access-2",
+            "refresh_token":"audit-refresh-2",
+            "expires_in":7200,
+            "token_type":"bearer",
+            "scope":"tweet.read"
+        }),
+    );
+    let before = fake.calls().len();
+    let refreshed = q.refresh(syncloom_core::Channel::X).await;
+    let connection =
+        serde_json::to_value(q.connection(syncloom_core::Channel::X).unwrap()).unwrap();
+    assert_eq!(connection["status"], "cannot_post", "{connection}");
+    assert_eq!(refreshed, Err(StudioError::PostingPermissionMissing));
+    assert_eq!(
+        fake.calls().len(),
+        before,
+        "a stored grant that cannot post must not be refreshed"
     );
 }
 
@@ -132,7 +180,7 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
             json!({"error":{"code":if status==401 {190}else if status==429 {32}else{999}}}),
         );
         assert_eq!(q.threads.publish(text()).await, Err(expected));
-        assert_eq!(fake.calls().len(), 3);
+        assert_eq!(fake.calls().len(), 4);
     }
     let fake = Fake::bluesky().await;
     let q = social(&fake, MemoryStore::new(), clock());

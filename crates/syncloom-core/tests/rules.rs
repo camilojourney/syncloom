@@ -165,6 +165,8 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "meta_not_configured",
         "platform_not_configured",
         "cost_confirmation_required",
+        "posting_permission_missing",
+        "posting_permission_unverified",
         "sign_in_in_progress",
         "sign_in_not_started",
         "sign_in_denied",

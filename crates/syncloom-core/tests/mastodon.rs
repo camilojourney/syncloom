@@ -448,3 +448,53 @@ fn instance_configuration_rejects_paths_credentials_and_non_loopback_http() {
     }
     assert!(MastodonConfig::parse(Some("https://example.test"), None).is_ok());
 }
+
+#[tokio::test]
+async fn saved_mastodon_scope_without_write_statuses_is_not_publish_ready() {
+    let fake = fake_mastodon::start(Config::default()).await;
+    let store = MemoryStore::new();
+    let m = consent(&fake, store.clone()).await;
+    let mut token = store.get(&m.account()).unwrap();
+    token.scope = "read".into();
+    store.save(&m.account(), &token).unwrap();
+    let connection = serde_json::to_value(m.connection().unwrap()).unwrap();
+    let before_status = fake.calls("/api/v1/statuses").len();
+    let before_instance = fake.calls("/api/v2/instance").len();
+    let published = m.publish(request()).await;
+    assert_eq!(connection["status"], "cannot_post", "{connection}");
+    assert_eq!(connection["reason"], "posting_permission_missing");
+    assert_eq!(connection["action"], "sign_in");
+    assert_eq!(published, Err(PostFailure::PostingPermissionMissing));
+    assert_eq!(fake.calls("/api/v1/statuses").len(), before_status);
+    assert_eq!(fake.calls("/api/v2/instance").len(), before_instance);
+}
+
+#[tokio::test]
+async fn mastodon_text_posting_requires_write_statuses_not_write_media() {
+    let fake = fake_mastodon::start(Config::default()).await;
+    let store = MemoryStore::new();
+    let m = consent(&fake, store.clone()).await;
+    let mut token = store.get(&m.account()).unwrap();
+    token.scope = "write:statuses".into();
+    store.save(&m.account(), &token).unwrap();
+    assert_eq!(
+        serde_json::to_value(m.connection().unwrap()).unwrap()["status"],
+        "signed_in"
+    );
+    let posted = m.publish(request()).await.unwrap();
+    assert!(!posted.post_id.is_empty());
+    let mut image = request();
+    image.image = Some(platform::PostImage {
+        bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
+        alt_text: "Chart".into(),
+    });
+    let before = fake.calls("/api/v1/media").len() + fake.calls("/api/v2/media").len();
+    assert_eq!(
+        m.publish(image).await,
+        Err(PostFailure::PostingPermissionMissing)
+    );
+    assert_eq!(
+        fake.calls("/api/v1/media").len() + fake.calls("/api/v2/media").len(),
+        before
+    );
+}
