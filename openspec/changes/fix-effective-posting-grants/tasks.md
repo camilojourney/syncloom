@@ -14,6 +14,8 @@
 
 - [x] 2.5 Resolve Main1360's X absent/null/present provenance with the15-case before/after matrix (five baseline controls, ten failures), atomic rotated evidence and zero-write refusal; retain the additional existing unknown-prior refusal control.
 
+- [x] 2.6 Preserve approved frontend modules and decision custody during009/010 reconciliation; port existing readiness consumption, execute full-grant/missing/unverified HTTP UI controls and guard mutation, and disclose current visual acceptance as unverified.
+
 ## 3. Integration and review
 
 - [ ] 3.1 Run tests, fmt, lint, spec/shape/research checks and Code Verify against original base and current parent; retain failed attempts and residue dispositions.

@@ -20,6 +20,12 @@ Retain the one-owner predicate and zero-write unverified contract. X response de
 
 The 15-case TCP matrix ran against preserved ae89808 first: five already-correct controls passed and ten genuine counterfactuals failed. All cases and the 32-test social TCP target then passed. Null-to-absent guard mutation reproduced false readiness and a synthetic post; the guard was restored. An additional positive control confirms existing unknown-prior refusal before another exchange; the final social TCP target has33 passing tests. Official RFC6749 sections5.1/6 were directly read as normative text, not proof of X conformance. The decision record appends the late Main1357/1360 challenge and disclosed framing/context limits.
 
+## Approved frontend reconciliation (009/010)
+
+Rebased the isolated branch onto approved frontend mainb97c6b7 without skipping commits. The old page.rs was replaced by the approved page modules; the existing CannotPost connection adapter and disabled-Publish guard now live in page/review.rs. Paired outcome copy in page/status.rs consumes stable core outcomes, never scopes. Both frontend decision records, prose and custody hashes remain unchanged; the posting decision keeps hash90d2b1de.
+
+Two additional real-HTTP review tests first prove the verified full grant leaves Publish enabled, then prove missing/unverified grants disable it, expose sign-in recovery and precise saved refusal, and issue zero platform requests. Removing the UI guard makes the missing-permission test fail; restoration is retained. Server tests and all-target Clippy pass. Current screenshots/visual acceptance remain unverified: a temporary fixture initially used an invalid channel identifier and the isolated CDP target failed to start; no old-frontend screenshot is relabeled as current. The temporary fixture/browser were removed/stopped. Exact final execution receipts belong to the private handoff, not to backdated decision claims.
+
 ## Exact retained findings
 
 Kept: crates/syncloom-core/src/outbox.rs IntentStatus::as_str lines37-51, because Main1360 explicitly retains the flat compiler-exhaustive11-arm stable-string mapping (cyclomatic9->11, limit10); a derive/dependency would obscure wire strings without improving the rule.

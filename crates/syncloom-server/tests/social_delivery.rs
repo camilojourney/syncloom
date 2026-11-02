@@ -890,6 +890,91 @@ async fn saved_x_grant_without_tweet_write_cannot_publish() {
     assert_eq!(connection.body["action"], "sign_in");
 }
 
+async fn assert_permission_review(
+    scope: &str,
+    verified: bool,
+    expected: &str,
+    label: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use syncloom_core::{Channel, TokenStore};
+    let fake = fake::Fake::threads().await;
+    let (server, q, _, store) = setup(&fake, "threads", true).await;
+    login(&server, "threads").await;
+    let piece = draft(&server, "threads", false).await;
+    approve_piece(&server, &piece).await;
+    let page_path = format!(
+        "/review/{}",
+        piece["piece_id"].as_str().ok_or("missing piece")?
+    );
+    let disabled = |html: &str| {
+        html.split_once("<button class=\"publish\"")
+            .and_then(|(_, tail)| tail.split_once('>'))
+            .map(|(attrs, _)| attrs.contains(" disabled"))
+    };
+    let full = get(&server, &page_path).await;
+    assert_eq!(full.status, 200);
+    assert_eq!(
+        disabled(&full.raw),
+        Some(false),
+        "full verified grant stays publish-ready"
+    );
+    let account = q.account(Channel::Threads)?;
+    let mut token = store.load(&account)?.ok_or("missing initial grant")?;
+    token.scope = scope.into();
+    token.scope_verified = verified;
+    store.save(&account, &token)?;
+    let before = fake.calls().len();
+    let denied = get(&server, &page_path).await;
+    assert_eq!(denied.status, 200);
+    assert_eq!(disabled(&denied.raw), Some(true));
+    assert!(denied.raw.contains("connected, cannot post:"));
+    assert!(denied.raw.contains("Sign in again to reconnect."));
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"]}),
+    )
+    .await;
+    assert_eq!(published.body["status"], expected);
+    let receipt = get(&server, &page_path).await;
+    assert_eq!(disabled(&receipt.raw), Some(true));
+    assert!(receipt.raw.contains(label));
+    assert!(
+        !receipt.raw.contains("Sending not confirmed"),
+        "permission refusal is not an unknown effect"
+    );
+    assert_eq!(
+        fake.calls().len(),
+        before,
+        "UI inspection and denied publish send no platform request"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn permission_missing_review_disables_publish_and_explains_saved_refusal()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_permission_review(
+        "threads_basic",
+        true,
+        "posting_permission_missing",
+        "Posting permission missing",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn permission_unverified_review_disables_publish_without_claiming_an_unknown_effect()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_permission_review(
+        "threads_basic threads_content_publish",
+        false,
+        "posting_permission_unverified",
+        "Posting permission unverified",
+    )
+    .await
+}
+
 async fn assert_x_scope_case(
     scope: Option<Value>,
     refresh: bool,

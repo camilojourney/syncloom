@@ -19,7 +19,9 @@ pub(super) fn label(value: &str) -> &'static str {
 }
 
 fn presentation(value: &str) -> (&'static str, &'static str) {
-    if let Some((label, _)) = posting_permission_copy(value) { return ("failed", label); }
+    if let Some((label, _)) = posting_permission_copy(value) {
+        return ("failed", label);
+    }
     match value {
         "contained" => ("contained", "Not sent - saved on this laptop"),
         "exported" => ("exported", "Saved as local files"),
@@ -43,15 +45,23 @@ fn badge(role: &str, label: &str) -> String {
 // One view-copy pair per additive outcome. Credential code owns permission decisions.
 fn posting_permission_copy(value: &str) -> Option<(&'static str, &'static str)> {
     match value {
-        "posting_permission_missing" => Some(("Posting permission missing", "connected, cannot post: posting permission missing. Sign in again to reconnect.")),
-        "posting_permission_unverified" => Some(("Posting permission unverified", "connected, cannot post: posting permission could not be verified. Sign in again to reconnect.")),
+        "posting_permission_missing" => Some((
+            "Posting permission missing",
+            "connected, cannot post: posting permission missing. Sign in again to reconnect.",
+        )),
+        "posting_permission_unverified" => Some((
+            "Posting permission unverified",
+            "connected, cannot post: posting permission could not be verified. Sign in again to reconnect.",
+        )),
         _ => None,
     }
 }
 
 /// Intent-local descriptions, never claims about complete piece or account history.
 pub(super) fn explanation(status: &str) -> &'static str {
-    if let Some((_, explanation)) = posting_permission_copy(status) { return explanation; }
+    if let Some((_, explanation)) = posting_permission_copy(status) {
+        return explanation;
+    }
     match status {
         "contained" => "Nothing was sent to the platform. Your post stays saved on this laptop.",
         "posted" => "The platform confirmed this post. It won't be sent again here.",
