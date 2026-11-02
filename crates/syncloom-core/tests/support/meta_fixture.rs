@@ -80,6 +80,7 @@ pub fn stored() -> Token {
         member_id: "202".into(),
         scope: fake_meta::SCOPES.join(" "),
         scope_verified: true,
+        identity_confirmed: true,
         obtained_at: "2026-10-31T00:00:00Z".into(),
     }
 }

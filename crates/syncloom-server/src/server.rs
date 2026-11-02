@@ -53,6 +53,11 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
         .route("/", get(page::index))
         .route("/studio.css", get(page::css))
         .route("/review/{piece_id}", get(page::review))
+        .route("/review/{piece_id}/reconnect", post(page::reconnect))
+        .route(
+            "/review/{piece_id}/reconnect/complete",
+            post(page::reconnect_complete),
+        )
         .route(
             "/review/{piece_id}/{action}",
             get(page::editor).post(page::action),

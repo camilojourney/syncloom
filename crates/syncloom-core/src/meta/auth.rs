@@ -202,6 +202,7 @@ impl Page {
             member_id: instagram,
             scope: granted_scope,
             scope_verified: true,
+            identity_confirmed: true,
             obtained_at,
         })
     }

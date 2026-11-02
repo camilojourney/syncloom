@@ -75,6 +75,7 @@ fn a_token_round_trips_through_the_keychain_and_is_deleted_without_a_trace() {
         member_id: "M2".to_owned(),
         scope: "w_member_social".to_owned(),
         scope_verified: true,
+        identity_confirmed: true,
         obtained_at: FIXED_AT.to_owned(),
     };
     store.save("linkedin", &renewed).unwrap();

@@ -36,6 +36,7 @@ pub enum StudioError {
     PostingPermissionMissing,
     PostingPermissionUnverified,
     AccountApprovalRequired,
+    IdentityUnconfirmed,
     Internal,
 }
 
@@ -47,7 +48,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 33] = [
+const ROWS: [Row; 34] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -170,11 +171,15 @@ const ROWS: [Row; 33] = [
         "account_approval_required",
         "The connected account is not approved for this revision. Review and approve this account before publishing.",
     ),
+    row(
+        "identity_unconfirmed",
+        "account identity could not be confirmed. Sign in again.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 33] = [
+    pub const ALL: [StudioError; 34] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -207,6 +212,7 @@ impl StudioError {
         StudioError::PostingPermissionMissing,
         StudioError::PostingPermissionUnverified,
         StudioError::AccountApprovalRequired,
+        StudioError::IdentityUnconfirmed,
         StudioError::Internal,
     ];
 

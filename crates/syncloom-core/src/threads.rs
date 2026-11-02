@@ -166,38 +166,8 @@ impl Threads {
         let evidence = self.verified_scope(&long.access_token).await;
         let scope_verified = evidence.is_ok();
         let scope = evidence.as_ref().cloned().unwrap_or_default();
-        let permission = evidence.and_then(|scope| {
-            if crate::credentials::posting_scope(crate::Channel::Threads, &scope, false) {
-                Ok(())
-            } else {
-                Err(StudioError::PostingPermissionMissing)
-            }
-        });
-        if permission.is_err() && !rotating {
-            return permission;
-        }
-        // Rotation has already succeeded. Never reuse the old token's grant as proof
-        // for the new credential, including when the subsequent verification fails.
-        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
-            self.context
-                .client
-                .get(format!(
-                    "{}/v1.0/me",
-                    self.context.config.threads_api.as_str()
-                ))
-                .query(&[("fields", "id")])
-                .bearer_auth(long.access_token.expose()),
-        )
-        .await?;
-        self.context
-            .credentials
-            .confirm_identity(Some(&member), &identity.id)?;
-        if !crate::social::numeric_id(&identity.id) {
-            return Err(StudioError::SignInRejected);
-        }
-        self.context.credentials.commit_token(
-            generation,
-            &crate::Token {
+        self.save_issued(
+            crate::Token {
                 access_token: long.access_token,
                 expires_at: Some(expires_at),
                 member_id: member,
@@ -205,10 +175,13 @@ impl Threads {
                 page_id: None,
                 scope,
                 scope_verified,
+                identity_confirmed: false,
                 obtained_at: self.context.credentials.clock.now_rfc3339(),
             },
-        )?;
-        permission
+            generation,
+            rotating,
+        )
+        .await
     }
     #[expect(
         clippy::unwrap_used,
@@ -226,6 +199,20 @@ impl crate::oauth_context::OAuthLifecycle for Threads {
         crate::credential_session::RefreshRule::UnexpiredAfter(time::Duration::days(1));
     fn oauth(&self) -> &OAuthContext {
         &self.context
+    }
+    async fn observed_identity(&self, token: &crate::Token) -> Result<String, StudioError> {
+        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
+            self.context
+                .client
+                .get(format!(
+                    "{}/v1.0/me",
+                    self.context.config.threads_api.as_str()
+                ))
+                .query(&[("fields", "id")])
+                .bearer_auth(token.access_token.expose()),
+        )
+        .await?;
+        Ok(identity.id)
     }
     #[expect(
         clippy::unwrap_used,
@@ -272,10 +259,7 @@ impl Platform for Threads {
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::Threads, &request, 0)?;
-            let token = self
-                .context
-                .credentials
-                .usable_for_post(crate::Channel::Threads, false)?;
+            let token = self.dispatch_token(false).await?;
             request.require_target(token.app_target("threads"))?;
             if !crate::social::numeric_id(&token.member_id) {
                 return Err(PostFailure::ConsentRequired);

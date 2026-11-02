@@ -195,7 +195,7 @@ dt { font-size: 0.8125rem; color: var(--muted); margin: 1rem 0 0.25rem; }
 dd { margin: 0; overflow-wrap: anywhere; }
 .approval p { font-size: 0.875rem; }
 .approval button { width: 100%; }
-.approval form + .hint { margin-top: 0.75rem; }
+.approval form + .hint, .approval form + form { margin-top: 0.75rem; }
 .approval h3 { margin-top: 1.5rem; }
 hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .cost-note { margin: 1rem 0; }

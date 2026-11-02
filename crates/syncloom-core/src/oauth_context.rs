@@ -19,6 +19,77 @@ pub(crate) trait OAuthLifecycle: Sync {
     const CHANNEL: crate::Channel;
     fn oauth(&self) -> &OAuthContext;
     fn pending(&self) -> bool;
+    async fn observed_identity(&self, token: &Token) -> Result<String, StudioError>;
+
+    /// The auth lock serializes rotation and confirmation; the generation also excludes sign-out.
+    async fn confirm_token(&self, token: &mut Token, generation: u64) -> Result<(), StudioError> {
+        let observed = self
+            .observed_identity(token)
+            .await
+            .map_err(|_| StudioError::IdentityUnconfirmed)?;
+        if !crate::social::numeric_id(&observed) {
+            return Err(StudioError::IdentityUnconfirmed);
+        }
+        self.oauth()
+            .credentials
+            .confirm_identity(Some(&token.member_id), &observed)?;
+        token.identity_confirmed = true;
+        self.oauth().credentials.commit_token(generation, token)
+    }
+
+    async fn save_issued(
+        &self,
+        mut token: Token,
+        generation: u64,
+        rotating: bool,
+    ) -> Result<(), StudioError> {
+        let permission = token
+            .posting_grant(Self::CHANNEL, false)
+            .map_err(|e| e.error());
+        if !rotating {
+            permission?;
+            let observed = self.observed_identity(&token).await?;
+            if !crate::social::numeric_id(&observed) {
+                return Err(StudioError::SignInRejected);
+            }
+            // Threads' short-token subject is already an expected identity; X resolves its first subject here.
+            self.oauth().credentials.confirm_identity(
+                (!token.member_id.is_empty()).then_some(token.member_id.as_str()),
+                &observed,
+            )?;
+            token.member_id = observed;
+            token.identity_confirmed = true;
+            return self.oauth().credentials.commit_token(generation, &token);
+        }
+        // Issuance has spent the old refresh bundle. Persist the actual new grant and
+        // expected identity without confirmation before any fallible identity request.
+        self.oauth().credentials.commit_token(generation, &token)?;
+        let identity = self.confirm_token(&mut token, generation).await;
+        if identity == Err(StudioError::IdentityUnconfirmed) {
+            permission?;
+        }
+        identity?;
+        permission
+    }
+
+    async fn dispatch_token(&self, image: bool) -> Result<Token, crate::PostFailure> {
+        let credentials = &self.oauth().credentials;
+        let _guard = credentials.auth.lock().await;
+        let generation = credentials.generation();
+        let mut token = credentials.usable()?;
+        token
+            .posting_grant(Self::CHANNEL, image)
+            .map_err(|e| e.failure())?;
+        if !token.identity_confirmed {
+            self.confirm_token(&mut token, generation)
+                .await
+                .map_err(|_| crate::PostFailure::ConsentRequired)?;
+        }
+        token
+            .posting_permission(Self::CHANNEL, image)
+            .map_err(|e| e.failure())?;
+        Ok(token)
+    }
     fn refresh_request(&self, token: &Token) -> Result<reqwest::RequestBuilder, StudioError>;
     async fn save_refreshed(
         &self,

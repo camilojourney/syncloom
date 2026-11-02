@@ -12,7 +12,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 38] = [
+const ERROR_TABLE: [(u16, &str); 39] = [
     (403, "origin_not_allowed"),
     (403, "session_required"),
     (400, "invalid_request"),
@@ -41,6 +41,7 @@ const ERROR_TABLE: [(u16, &str); 38] = [
     (409, "cost_confirmation_required"),
     (403, "posting_permission_missing"),
     (403, "posting_permission_unverified"),
+    (403, "identity_unconfirmed"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
     (503, "renderer_missing"),
@@ -120,6 +121,27 @@ async fn produce(code: &str) -> Answer {
         "platform_not_configured" => {
             let server = start(Scripted::new(text("x"))).await;
             with_id(client().get(server.url("/v1/x/connection"))).await
+        }
+        "identity_unconfirmed" => {
+            use syncloom_core::{Channel, TokenStore};
+            let fake = fake::Fake::x().await;
+            let store = MemoryStore::new();
+            let q = std::sync::Arc::new(social_fixture::social(
+                &fake,
+                store.clone(),
+                social_fixture::clock(),
+            ));
+            social_fixture::x_login(&q).await;
+            let mut token = store
+                .load(&q.account(Channel::X).unwrap())
+                .unwrap()
+                .unwrap();
+            token.identity_confirmed = false;
+            store.save(&q.account(Channel::X).unwrap(), &token).unwrap();
+            let server =
+                start_studio(Scripted::new(text("unused")), fast(), |s| s.with_social(q)).await;
+            // The explicit refresh refuses an unconfirmed prior token before another issuance.
+            with_id(client().post(server.url("/v1/x/refresh"))).await
         }
         "account_approval_required" => {
             let fake =

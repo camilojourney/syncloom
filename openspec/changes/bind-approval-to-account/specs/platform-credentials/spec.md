@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Explicit renewable-session refresh
-Renewable integrations SHALL refresh only explicitly, durably replacing same-account credentials, preserving ordinary failures, and signing out after observed canonical-account mismatch.
+Renewable integrations SHALL refresh only explicitly, durably replace same-account credentials, preserve credentials on pre-issuance exchange failure, retain actual newly issued bundles, and sign out on observed canonical-account mismatch.
 
 #### Scenario: No implicit renewal
 - **WHEN** a dispatch finds an expired access token
@@ -29,7 +29,9 @@ Each implemented remote adapter SHALL resolve a canonical provider account and e
 #### Scenario: Unresolved identity
 - **WHEN** canonical identity is missing, invalid or unavailable
 - **THEN** no remote delivery is authorized and reauthentication is required to establish identity
-- **AND** existing credentials and historical approvals are not silently rebound
+- **AND** historical approvals are not silently rebound
+- **AND** after successful X or Threads issuance, the actual new credential and grant evidence are retained atomically with the old canonical identity only expected and identity confirmation false for that token
+- **AND** readiness reports cannot_post with identity_unconfirmed and sign-in-again recovery; a read-only confirmation retry on the same loaded token may precede a later publish, but no media or post is sent until it matches
 
 #### Scenario: Renewal
 - **WHEN** token renewal preserves the canonical account and exact target

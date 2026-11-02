@@ -108,6 +108,7 @@ async fn saved_reduced_x_grant_refresh_does_not_become_publish_ready() {
                 page_id: None,
                 scope: "tweet.read".into(),
                 scope_verified: true,
+                identity_confirmed: true,
                 obtained_at: "2026-10-31T02:00:00Z".into(),
             },
         )
@@ -197,7 +198,9 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
             q.threads.publish(text(q.threads.as_ref())).await,
             Err(expected)
         );
-        assert_eq!(fake.calls().len(), 4);
+        assert_eq!(fake.calls()[2].path, "/v1.0/debug_token");
+        assert_eq!(fake.calls()[3].path, "/v1.0/me");
+        assert_eq!(fake.calls().len(), 5);
     }
     let fake = Fake::bluesky().await;
     let q = social(&fake, MemoryStore::new(), clock());

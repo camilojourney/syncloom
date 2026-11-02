@@ -2,6 +2,8 @@
 mod fake;
 #[path = "../../syncloom-core/tests/support/social.rs"]
 mod fixture;
+#[path = "social_delivery/rotation.rs"]
+mod rotation;
 mod support;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -1583,6 +1585,7 @@ async fn saved_x_grant_without_tweet_write_cannot_publish() {
                 page_id: None,
                 scope: "tweet.read".into(),
                 scope_verified: true,
+                identity_confirmed: true,
                 obtained_at: "2026-10-30T18:00:00Z".into(),
             },
         )
@@ -2003,6 +2006,7 @@ async fn x_text_posting_does_not_require_media_or_offline_scope() {
                 page_id: None,
                 scope: "tweet.read tweet.write users.read".into(),
                 scope_verified: true,
+                identity_confirmed: true,
                 obtained_at: "2026-10-30T18:00:00Z".into(),
             },
         )

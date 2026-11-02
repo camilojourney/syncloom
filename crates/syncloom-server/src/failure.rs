@@ -25,7 +25,7 @@ impl From<StudioError> for Failure {
 }
 
 /// One status per core error, in the order of the `StudioError` variants (`StudioError::ALL`).
-const STUDIO_STATUSES: [StatusCode; 33] = [
+const STUDIO_STATUSES: [StatusCode; 34] = [
     StatusCode::BAD_REQUEST,           // invalid_request
     StatusCode::UNPROCESSABLE_ENTITY,  // thought_too_short
     StatusCode::UNPROCESSABLE_ENTITY,  // unsupported_channel
@@ -58,6 +58,7 @@ const STUDIO_STATUSES: [StatusCode; 33] = [
     StatusCode::FORBIDDEN,             // posting_permission_missing
     StatusCode::FORBIDDEN,             // posting_permission_unverified
     StatusCode::CONFLICT,              // account_approval_required
+    StatusCode::FORBIDDEN,             // identity_unconfirmed
     StatusCode::INTERNAL_SERVER_ERROR, // internal_error
 ];
 

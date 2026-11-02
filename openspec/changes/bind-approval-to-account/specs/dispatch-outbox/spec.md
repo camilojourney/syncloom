@@ -7,7 +7,7 @@
 - **WHEN** the operation answers 200
 - **THEN** the existing piece, status, request_id, created, payload, post_id, post_url and attempts fields remain
 - **AND** approval_target is the intent's non-secret target fingerprint when bound, never the current connection's identity
-- **AND** status is dry_run, contained, posted, refused, consent_required, rate_limited, unreachable or unknown
+- **AND** status is dry_run, contained, posted, refused, consent_required, posting_permission_missing, posting_permission_unverified, rate_limited, unreachable or unknown
 - **AND** dry_run defaults to false and optional cost_estimate retains the existing cost contract
 
 ### Requirement: Contained intent
@@ -66,6 +66,8 @@ Publish SHALL refuse a resolved different or unbound account approval with accou
 - **WHEN** credentials change between approval, durable claim and media or post transmission
 - **THEN** the attempt uses only credentials for the approved target or refuses without effects on another target
 - **AND** concurrent review cannot relabel an in-flight intent or its outcome
+- **AND** effective action permission and account target are checked on the same loaded immutable dispatch Token before media or posting writes
+- **AND** a reconnect during media transmission cannot change that attempt's credential bundle, grant or receipt target
 
 #### Scenario: Legacy approval
 - **WHEN** an old unbound approval is delivered with resolved credentials

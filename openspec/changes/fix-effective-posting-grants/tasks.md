@@ -21,6 +21,16 @@
 - [x] 3.1 Run tests, fmt, lint, spec/shape/research checks and Code Verify against original base and current parent; retain failed attempts and residue dispositions.
 - [x] 3.2 Reconcile with local main; coordinate the Token seam with account-approval through firstmate; rerun affected checks, send Main before/after evidence, and commit only the local clean ready branch.
 
+## Combined continuation
+
+- [x] 4.1 Preserve both exact source histories by ordinary merges on b97 and reproduce Main1375's issued-bundle/failed-identity seam with existing synthetic TCP fakes; retain actual REDs and already-correct controls separately.
+- [x] 4.2 Implement minimal per-token identity confirmation in existing credential/OAuth owners and keep same-token account/grant enforcement; pass reduced/null, transient recovery and joint media/reconnect controls without weakening assertions.
+- [x] 4.3 Add the authorized native reconnect form through existing consent ownership and prove protected fake consent/completion without approval or publication; record Main1376's three exact new findings separately.
+
+- [x] 4.4 Capture all four combined states in both themes at measured1440 and390 widths, complete synthetic native recovery, retain before/after spacing evidence and remove temporary product fixtures.
+
+Exact committed-tree dual-base validation receipts are durable task evidence outside the repository; earlier completed source tasks are not substitutes for those combined runs.
+
 ## Workflow follow-up
 
 - Firstmate owns the guarded local merge after Main's specific landing authorization. No push, remote, pipeline or real publishing is authorized.

@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "identity_unconfirmed",
+      "message": "account identity could not be confirmed. Sign in again.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

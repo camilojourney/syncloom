@@ -78,6 +78,7 @@ pub fn stored_token(expires_at: &str) -> Token {
         member_id: fake_linkedin::MEMBER_ID.to_owned(),
         scope: "openid,profile,w_member_social".to_owned(),
         scope_verified: true,
+        identity_confirmed: true,
         obtained_at: "2026-10-30T18:00:00Z".to_owned(),
     }
 }

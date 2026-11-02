@@ -139,6 +139,7 @@ impl CredentialSession {
             member_id,
             scope,
             scope_verified: true,
+            identity_confirmed: true,
             obtained_at: self.clock.now_rfc3339(),
         };
         self.commit_token(generation, &token)

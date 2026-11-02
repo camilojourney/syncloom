@@ -5,6 +5,7 @@ mod counts;
 mod editor;
 mod home;
 mod previews;
+mod reconnect;
 mod review;
 mod status;
 
@@ -12,6 +13,7 @@ pub(crate) use actions::{PieceForm, action};
 pub(crate) use consent::CostConsents;
 pub(crate) use editor::editor;
 pub(crate) use home::{Cursor, cursor, index, thought};
+pub(crate) use reconnect::{begin as reconnect, complete as reconnect_complete};
 pub(crate) use review::review;
 
 use crate::{failure::Failure, server::AppState};

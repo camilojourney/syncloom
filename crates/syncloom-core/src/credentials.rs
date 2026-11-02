@@ -49,6 +49,9 @@ pub struct Token {
     /// Legacy Meta/Threads scopes were requested constants, not grant evidence.
     #[serde(default)]
     pub scope_verified: bool,
+    /// Confirmation belongs to these exact credential bytes, never a connection slot.
+    #[serde(default)]
+    pub identity_confirmed: bool,
     pub obtained_at: String,
 }
 
@@ -56,18 +59,21 @@ pub struct Token {
 pub(crate) enum GrantError {
     Missing,
     Unverified,
+    IdentityUnconfirmed,
 }
 impl GrantError {
     pub fn error(self) -> crate::StudioError {
         match self {
             Self::Missing => crate::StudioError::PostingPermissionMissing,
             Self::Unverified => crate::StudioError::PostingPermissionUnverified,
+            Self::IdentityUnconfirmed => crate::StudioError::IdentityUnconfirmed,
         }
     }
     pub fn failure(self) -> crate::PostFailure {
         match self {
             Self::Missing => crate::PostFailure::PostingPermissionMissing,
             Self::Unverified => crate::PostFailure::PostingPermissionUnverified,
+            Self::IdentityUnconfirmed => crate::PostFailure::ConsentRequired,
         }
     }
 }
@@ -121,6 +127,19 @@ fn mastodon_posting_scope(scope: &str, image: bool) -> bool {
 }
 impl Token {
     pub(crate) fn posting_permission(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<(), GrantError> {
+        self.posting_grant(channel, image)?;
+        if matches!(channel, crate::Channel::X | crate::Channel::Threads)
+            && !self.identity_confirmed
+        {
+            return Err(GrantError::IdentityUnconfirmed);
+        }
+        Ok(())
+    }
+    pub(crate) fn posting_grant(
         &self,
         channel: crate::Channel,
         image: bool,

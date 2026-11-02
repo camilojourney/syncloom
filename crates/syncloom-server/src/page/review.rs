@@ -233,8 +233,10 @@ fn cannot_post_note(state: &AppState, piece: &Piece) -> Option<String> {
         .message
         .unwrap_or_else(|| "connected, cannot post: posting permission missing.".into());
     Some(format!(
-        r#"<p class="hint">{} Sign in again to reconnect.</p>"#,
-        escape(&message)
+        r#"<p class="hint">{} Sign in again to reconnect.</p><form method="post" action="/review/{}/reconnect">{}<button class="secondary" type="submit">Reconnect account</button></form>"#,
+        escape(&message),
+        escape(&piece.piece_id),
+        csrf(state)
     ))
 }
 

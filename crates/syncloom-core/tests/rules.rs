@@ -158,6 +158,7 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "revision_conflict",
         "approval_required",
         "account_approval_required",
+        "identity_unconfirmed",
         "provider_not_configured",
         "provider_error",
         "provider_timeout",

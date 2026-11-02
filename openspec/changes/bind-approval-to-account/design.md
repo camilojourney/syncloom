@@ -20,6 +20,10 @@ Keep account approval independent of credential bytes and avoid a second state m
 - Preserve ordinary failed-refresh credentials, but clear a connection after observed refresh identity mismatch. Reject preserving mismatched credentials because identity authority is no longer established.
 - Legacy approvals stay unbound and are never backfilled. Legacy posted/unknown/posting intents remain on their original keys and cannot be bypassed through a new target key.
 
+## Combined integration continuation
+
+The posting-grants change's [combined design](../fix-effective-posting-grants/design.md#combined-security-integration-main1374-1376) records Main1375's issued-bundle identity-confirmation rule and Main1376's exact native reconnect dispositions. Both account and effective-action authorization consume the same immutable dispatch Token before media/post writes. Successful X/Threads issuance with unavailable identity retains the actual new bundle/evidence with expected identity unconfirmed; only pre-issuance failure preserves old credentials. Account history, legacy uncertainty, no-repeat/export protection and canonical target rules remain unchanged. The focused joint HTTP/media race proves A's original bundle and receipt survive reconnect while B needs fresh approval and its own effective image grant.
+
 ## Reuse inventory
 
 Timing: before first edit; task inventory.txt was captured before the first regression edit.

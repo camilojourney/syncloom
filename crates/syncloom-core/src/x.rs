@@ -153,23 +153,6 @@ impl X {
         old: Option<&Token>,
         generation: u64,
     ) -> Result<(), StudioError> {
-        #[derive(Deserialize)]
-        struct Identity {
-            data: crate::oauth::Subject,
-        }
-        let identity: Identity = crate::oauth::exchange_json(
-            self.context
-                .client
-                .get(format!("{}/2/users/me", self.context.config.x_api.as_str()))
-                .bearer_auth(issued.access_token.expose()),
-        )
-        .await?;
-        self.context
-            .credentials
-            .confirm_identity(old.map(|old| old.member_id.as_str()), &identity.data.id)?;
-        if !crate::social::numeric_id(&identity.data.id) {
-            return Err(StudioError::SignInRejected);
-        }
         let (scope, scope_verified) = issued
             .scope
             .resolve(old)
@@ -194,7 +177,8 @@ impl X {
                 refresh_token,
             })?,
             expires_at: None,
-            member_id: identity.data.id,
+            member_id: old.map(|t| t.member_id.clone()).unwrap_or_default(),
+            identity_confirmed: false,
             identity_authority: None,
             page_id: None,
             scope,
@@ -202,7 +186,7 @@ impl X {
             obtained_at: self.context.credentials.clock.now_rfc3339(),
         };
         let permission = token
-            .posting_permission(crate::Channel::X, false)
+            .posting_grant(crate::Channel::X, false)
             .map_err(|e| e.error());
         // Preserve fresh consent-error precedence before credential/expiry validation.
         if permission.is_err() && old.is_none() {
@@ -215,9 +199,7 @@ impl X {
             self.context.credentials.clock.as_ref(),
             issued.expires_in,
         )?);
-        // A valid rotation replaces token and evidence together, even if evidence is unknown.
-        self.context.credentials.commit_token(generation, &token)?;
-        permission
+        self.save_issued(token, generation, old.is_some()).await
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.session.sign_out()
@@ -233,6 +215,21 @@ impl crate::oauth_context::OAuthLifecycle for X {
     }
     fn pending(&self) -> bool {
         self.session.active()
+    }
+    async fn observed_identity(&self, token: &Token) -> Result<String, StudioError> {
+        #[derive(Deserialize)]
+        struct Identity {
+            data: crate::oauth::Subject,
+        }
+        let bundle: Bundle = decode(token)?;
+        let identity: Identity = crate::oauth::exchange_json(
+            self.context
+                .client
+                .get(format!("{}/2/users/me", self.context.config.x_api.as_str()))
+                .bearer_auth(bundle.access_token.expose()),
+        )
+        .await?;
+        Ok(identity.data.id)
     }
     fn refresh_request(&self, token: &Token) -> Result<reqwest::RequestBuilder, StudioError> {
         let bundle: Bundle = decode(token)?;
@@ -262,10 +259,7 @@ impl Platform for X {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::X, &request, 5_000_000)?;
             let image = request.image.is_some();
-            let token = self
-                .context
-                .credentials
-                .usable_for_post(crate::Channel::X, image)?;
+            let token = self.dispatch_token(image).await?;
             request.require_target(crate::platform::account_target("x", "", &token.member_id))?;
             let bundle: Bundle = decode(&token).map_err(|_| PostFailure::ConsentRequired)?;
             let mut body = serde_json::json!({"text":request.text});

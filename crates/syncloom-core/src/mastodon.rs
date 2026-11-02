@@ -153,6 +153,7 @@ impl Mastodon {
             member_id: identity,
             scope: issued.scope,
             scope_verified: true,
+            identity_confirmed: true,
             obtained_at: self.session.now_rfc3339(),
         };
         self.session.save_token(generation, &token)?;

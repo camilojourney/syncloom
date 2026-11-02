@@ -181,6 +181,7 @@ impl Linkedin {
             member_id,
             scope: issued.scope,
             scope_verified: true,
+            identity_confirmed: true,
             obtained_at: rfc3339(now),
         };
         self.session.save_token(generation, &token)?;
