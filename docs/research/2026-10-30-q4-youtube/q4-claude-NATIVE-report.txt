@@ -1,0 +1,157 @@
+Publishing to Your Own YouTube Channel from a Local Rust App: API, Quota and Verification (October 2026)
+
+Bottom line: build the official-API path now as a hybrid of A and C. Use an External OAuth client set to “In production” but left unverified under Google’s personal-use exemption, rather than “Testing”, so refresh tokens don’t expire after 7 days. Upload resumably with privacyStatus=private, read the returned status back, then publish by publishAt or by hand. Apply for the YouTube API Services audit in parallel, and keep Studio upload (C) as the fallback if the first test upload comes back locked private. Quota is no longer a constraint: since June 1, 2026 an upload costs 1 call from a dedicated 100-per-day bucket. google The one unresolved risk is Google’s own documentation, which contradicts itself on whether unaudited projects’ uploads are force-locked private. blotato
+
+TL;DR
+
+
+Recommendation: A/C hybrid, not B. Google OAuth verification is optional for an owner-only app (the “Personal Use apps… fewer than 100 users” exemption). googlegoogle What matters is the YouTube API Services compliance audit, which is a separate process. Run the app as “In production, unverified” so tokens last, upload as private, publish by schedule or manually, and file the audit form on day one.
+The two answer-changing risks: (1) The 7-day refresh-token expiry is confirmed for External + “Testing” apps and applies to YouTube scopes. It is avoided by switching to “In production” with no verification needed. google (2) The forced-private lock is unresolved. The July 28, 2020 revision entry and the YouTube Help “locked as private” page still describe it, and say a locked video cannot be appealed and must be re-uploaded. googlegoogle The current videos.insert reference (updated 2026-10-15) says “Videos uploaded from unverified API projects are not restricted to private viewing mode.” google No revision entry explains the change. Every first-hand report found still shows locking, from YouTube’s notice quoted in porjo/youtubeuploader issue #86 (2020: “the video was uploaded using a third party tool that failed our verification”) to the 2026 youtube-cli-uploader package, which warns that unaudited projects “may be restricted to private uploads.” Treat it as live until a test upload proves otherwise.
+Quota (as of Oct 2026): the Dec 4, 2025 revision-history entry says the cost of a video upload changed “from approximately 1600 units to approximately 100 units”; Google uses “approximately” itself. On June 1, 2026 videos.insert moved to its own bucket of 100 calls/day at 1 per call, and search.list moved the same way. Google’s Quota Calculator gives “10,000 units per day combined for all other endpoints” and says “Daily quotas reset at midnight Pacific Time (PT).” A typical day with 2 uploads, thumbnails, captions, playlist adds, stats and comment replies uses about 1,250 of the 10,000 units.
+
+
+Key Findings
+
+Option comparison
+
+(A) API, OAuth app in Testing(B) API after Google OAuth verification(C) Human uploads in Studio; app prepares metadataRefresh tokenExpires in 7 days (External + Testing)Long-livedn/a for upload (API still usable for reads)Needed for owner-only?Works, but you must re-consent weeklyNot required (personal-use exemption); weeks of review, a privacy policy and a demo videoNothingForced-private riskSame as B (it depends on the YouTube audit, not on OAuth verification)Same: OAuth verification does not lift the YouTube audit lockNoneQuotaUpload bucket 100/day + 10,000 unitsSameZero for uploadVerdictUse only for the first day of developmentUnnecessary costFallback and safety net
+
+Better than A: the same client with publishing status “In production” and no verification submitted. Google’s “When is verification not needed” page says personal-use apps with fewer than 100 users “can continue using the app without going through verification (users will be allowed to click through ‘unverified app’ warning screens during sign-in).” google The OAuth 2.0 docs tie the 7-day expiry specifically to “an external user type and a publishing status of ‘Testing’.” googlegoogle So moving to production removes the weekly expiry. You get a one-time warning screen and a 100-user cap, neither of which matters for one user. google
+
+Requirements by capability
+
+CapabilitySupported?Endpoint / methodMinimal OAuth scopeQuotaSource (date)Upload videoYesPOST /upload/youtube/v3/videos (videos.insert), resumable protocolyoutube.upload (also youtube, youtube.force-ssl, youtubepartner)1 call from the 100/day Video Uploads bucketvideos.insert reference; Quota Calculator (updated 2026-10-15); revision history Jun 1, 2026 googleUpload ShortYes, as a normal videos.insertSameSameSameYouTube Help “Upload YouTube Shorts”Short identificationAutomatic: square or vertical, up to 3 minutes (uploads on/after Oct 15, 2024)No API flag found——YouTube Help 12779649 / 15424877 googlesaturaai“#Shorts” in title/descriptionNot required for classification per current Help text. Classification is by aspect ratio and length———Not found as a requirement in current official docsTitle, description, tags, categoryYes (snippet.title ≤100 chars; description ≤5,000 bytes; tags ≤500 chars total)videos.insert / videos.updateyoutube.upload for insert; youtube or youtube.force-ssl for updateInsert: in upload call; update: 50Videos resource (2026-10-15)Custom thumbnailYes; channel must be phone-verified, otherwise 403 “doesn’t have permissions to upload and set custom video thumbnails”thumbnails.set (max 50MB since Sep 14, 2026; was 2MB)youtube.upload / youtube / youtube.force-ssl50thumbnails.set reference; revision history Sep 14, 2026; YouTube Help 72431 / 171664 google +3Privacy statusYes: private, public, unlisted; default is public if omittedstatus.privacyStatusas above—Videos resource googleScheduled publishYes. status.publishAt only when private and never published; on videos.update you must also send privacyStatus=private; a past time publishes immediatelyvideos.insert / videos.updateas above50 for updateVideos resourceCaptionsYes. Timing info is mandatory: the sync parameter was deprecated Mar 13, 2024, removed Apr 12, 2024captions.insertyoutube.force-ssl400 (update 450)Quota Calculator; revision history Mar 13, 2024 googlegooglePlaylist addYesplaylistItems.insertyoutube / youtube.force-ssl50Quota CalculatorAltered/synthetic disclosureYes: status.containsSyntheticMedia (boolean), settable on insert/updatevideos.insert / videos.updateas above—Revision history Oct 30, 2024 googlePaid product placementYes: paidProductPlacementDetails.hasPaidProductPlacementvideos.insert / updateas above—Videos resourceCommunity / image postsNot found. No resource exists; channel bulletins (activities.insert) were removed June 4, 2020; channel discussions removed April 30, 2024 apifyapify———Revision history googleOwn video statisticsYes: viewCount, likeCount, commentCount, plus dislikeCount for the owner onlyvideos.list?part=statistics; new videos.batchGetStats (Jun 3, 2026)youtube.readonly1 (batchGetStats: 1 from its own 10,000/day bucket)Quota Calculator; revision history Jun 3, 2026Analytics reportsYes. Data lags 48–72 hoursYouTube Analytics API reports.queryyt-analytics.readonly (revenue: yt-analytics-monetary.readonly, YPP channels only, else 403)Per-query cost evaluated by server; exact figure not foundAnalytics revision history Sep 9, 2026Read commentsYescommentThreads.list, comments.listyoutube.force-ssl (or youtube.readonly for read)1Quota CalculatorReply to commentsYescomments.insert (with parentId)youtube.force-ssl50Quota CalculatorModerate commentsYes (hold/publish/reject; optional author ban)comments.setModerationStatus; comments.deleteyoutube.force-ssl50 eachQuota CalculatorMark as spamNo: comments.markAsSpam deprecated (Sep 12, 2023)———Revision historySearch public videosYessearch.listAPI key or any scope1 call from a separate 100/day bucket (no longer 100 units from the shared pool)Quota Calculator; revision history Jun 1, 2026 google
+
+Scope advice
+
+Request the smallest set: youtube.upload + youtube.force-ssl (captions, comments, updates) + yt-analytics.readonly. youtube.force-ssl alone also covers uploads, so a single sensitive scope plus analytics is a defensible minimum. getphyllo For a personal-use, unverified production app the scope classification matters only in that sensitive scopes trigger the unverified-app screen. Sensitive vs. restricted would matter only if you submitted for verification. Google’s console shows each scope’s category automatically. google An authoritative Google page listing the YouTube scopes as “sensitive” was not found in this research; third-party guides state it. getphyllo
+
+Details
+
+1. Refresh tokens: Testing vs. Production
+
+
+Confirmed (Google Identity “Using OAuth 2.0 to Access Google APIs”): “A Google Cloud Platform project with an OAuth consent screen configured for an external user type and a publishing status of ‘Testing’ is issued a refresh token expiring in 7 days, unless the only OAuth scopes requested are a subset of name, email address, and user profile.” google YouTube scopes are not in that exception, so the 7-day expiry applies.
+Other expiry triggers still apply in production: 6 months unused and user revocation. There is also a cap on live refresh tokens. Google’s “Using OAuth 2.0 to Access Google APIs” page gives no number for it, saying only that a token can fail when “The user account has exceeded a maximum number of granted (live) refresh tokens,” and that per-client-user and per-user limits “are different.” Don’t re-run consent in a loop.
+Production, unverified: Google’s Cloud help says unverified apps show the unverified-app screen and are “limited to 100 new users until it is verified.” google Personal-use apps with fewer than 100 users are exempt from verification. google +2 For an owner-only app this is a one-time click-through.
+Testing mode details: only listed test users can authorize, the unverified screen and 100-user cap still apply, and tokens die on day 7 with invalid_grant. google +3
+
+
+2. OAuth verification vs. YouTube API Services audit
+
+
+Google OAuth app verification (B) is a Google Cloud process. It applies to sensitive or restricted scopes for apps that don’t meet an exemption, nylas and its purpose is to remove the unverified screen and the 100-user cap. google It does nothing for YouTube quota or the private-lock rule. For an owner-only app it is not needed.
+YouTube API Services compliance audit is run by YouTube’s API team via the “Audit and Quota Extension Form”. Per the July 1, 2021 revision entry and the Quota and Compliance Audits guide, it is required to get more than default quota. googlegoogle Per the July 28, 2020 entry it is the documented way to lift the private lock. Under the June 1, 2026 granular-quota change, increases are requested per method through the same form. googlegoogle You may be asked for test accounts and a review of your client against the Terms, Developer Policies and Required Minimum Functionality (for example, the user must be able to set a title). googlebitbucket
+Timeline: Google gives no SLA. Its “Quota and Compliance Audits” guide says only “A member of YouTube’s API Services team will contact you as soon as possible.” First-hand reports from personal-use developers in the porjo/youtubeuploader issue #86 thread range from about 3 months to 6 months. At the fast end, the author of the jenslys/autovod README on GitHub, who applied for two projects, writes: “It took around 20 days from submission to them accepting the audit.” Can a one-person app pass? Yes: at least two personal-use developers in the issue #86 thread report approval. No 2026-dated first-hand solo approval was found. Commenters note the form is written for public apps (users, retention, UI), so describe the app plainly: one channel, owner only, every upload approved by a human, no third-party data.
+Inactivity: the same thread reports that projects can lose access after 90 days unused, and one approved developer does periodic private dummy uploads to keep it alive. githubgoogle
+
+
+3. The forced-private rule: what is actually true in October 2026
+
+
+For the lock: the July 28, 2020 revision entry says uploads from “unverified API projects created after 28 July 2020 will be restricted to private viewing mode” until audit. YouTube Help “Videos locked as private” (answer 7300965) says such videos “will not be able to appeal. You’ll need to re-upload the video via a verified API service or via the YouTube app/site.” googlegoogle
+Against the lock: the current videos.insert and Videos resource pages (last updated 2026-10-15) state “Videos uploaded from unverified API projects are not restricted to private viewing mode.” No revision-history entry announces this reversal, and some localized or cached copies of the same page still carry the old banner. googlegoogle
+Field evidence: every first-hand report found shows locking. In porjo/youtubeuploader issue #86 (opened Aug 24, 2020), users quote YouTube’s notice that “the video was uploaded using a third party tool that failed our verification.” The 2026 PyPI package youtube-cli-uploader still warns that “API projects that have not completed YouTube’s compliance audit may be restricted to private uploads.” The only 2026 claim that the lock is gone is a GitHub comment that reasons from the new doc wording without a test upload.
+Workaround “change privacy later in Studio”: if a video is locked, Studio does not let you change it (Help page above; users in issue #86 report “can’t be changed to public”). googlegithub Uploading as private and publishing later works only if the project is not locked. That is exactly why the first upload should be a throwaway private test, checking both the API response and Studio.
+Interpretation: the safest reading is that the doc sentence may reflect a real policy relaxation that hasn’t been announced, or it may be an error. Design so either outcome is fine: upload private, verify, and fall back to C until the audit clears.
+
+
+4. Quota budget for a typical day (Oct 2026 costs)
+
+ActionCountBucketUnitsvideos.insert (1 long-form + 1 Short)2Video Uploads (100/day)2 callsthumbnails.set2Shared 10,000100captions.insert2Shared800playlistItems.insert2Shared100videos.update (publish / fix metadata)2Shared100videos.list statistics (batched IDs)5Shared5commentThreads.list10Shared10comments.insert replies3Shared150search.list research10Search (100/day)10 callsShared total≈1,265 of 10,000
+
+Captions are the most expensive item. Even 5 uploads a day would stay well under the limits. Every request, including invalid ones, costs at least 1 unit. Resets happen at midnight Pacific. googlegoogle
+
+5. Terms on automation, AI and data retention
+
+
+Developer Policies III.E.4: Authorized Data other than statistics may be stored for no more than 30 days, then refreshed or deleted. Statistics may be kept longer, but you must re-verify authorization every 30 days. fandomgithub On revocation through your app, revoke the token and delete Authorized Data. The compliance guide gives 7 days for in-app deletion requests and 30 days when authorization can’t be verified. githubgoogle Since May 4 / June 1, 2026, the new “Additional policies on derived metrics and data storage” allow storing statistics beyond 30 days only for audited projects that apply for it. google For a local app, keep a 30-day refresh job and a “disconnect” button that revokes and purges.
+No sharding: don’t create multiple Cloud projects to multiply quota (Complying with Developer Policies guide). google
+Automation: no clause found that bans human-approved, API-based uploads to your own channel; the human-approval step is a strong compliance signal. notifySubscribers=false exists for bulk uploaders. google
+AI content: disclose realistic altered or synthetic content via status.containsSyntheticMedia. google YPP’s “repetitious content” policy was renamed “inauthentic content” on July 15, 2025, targeting mass-produced, templated videos. A YouTube statement carried by Social Media Today and Yahoo Finance in July 2025 said “channels that use AI in their content remain eligible for monetization… creators are required to disclose when their realistic content is altered or synthetic.” YouTube Creator Liaison Rene Ritchie called the change “a minor update to YouTube’s long-standing YPP policies.”
+
+
+6. Breaking and notable changes, 2025–2026 (revision histories)
+
+
+Data API:
+
+Mar 26, 2025: Shorts view-count change effective Mar 31, 2025.
+Jul 10, 2025: mostPopular chart re-based on July 21, 2025.
+Dec 4, 2025: upload cost ~1,600 → ~100 units.
+Jun 1, 2026: granular quota buckets for videos.insert and search.list. google
+Jun 3, 2026: videos.batchGetStats added.
+Jul 7, 2026: brandPartner part added.
+Aug 27, 2026: public views now count from the first frame for all formats; google viewCount semantics changed from Aug 24, 2026. googlegoogle
+Sep 1, 2026: getRating accepts youtube.readonly. google
+Sep 11, 2026: fhd/qhd/uhd thumbnail keys added.
+Sep 14, 2026: thumbnail max size raised to 50MB. google
+Sep 30, 2026: comments.snippet.imageUrl added, available November 2026. google
+Oct 15, 2026: made-for-kids fields clarified. googlegoogle
+
+
+
+Analytics/Reporting:
+
+Jun 24, 2025: new bulk report versions with engaged_views; old versions deprecated Oct 31, 2025. google
+Jan 15, 2026: reach reports (thumbnail impressions/CTR). google
+Mar 9, 2026: ageGroup now includes users estimated to be under 18. google
+Jun 25, 2026: content-owner city report removed. google
+Aug 27, 2026: engagedViews redefined. google
+Sep 9, 2026: latency, monetary-scope and 400-error clarifications. googlegoogle
+
+
+
+Terms:
+
+Jul 7, 2025: RMF embedded-player client identity. google
+May 4 and Jun 1, 2026: derived-metrics/storage policy. google
+
+
+
+
+
+7. Rust stack
+
+
+google-youtube3 (Byron/google-apis-rs): latest is 7.0.0+20251222, generated from the Dec 22, 2025 discovery revision. The matching google-youtube3-cli 7.0.0+20251222 was published 2026-01-01; the library’s exact publish date was not confirmed, and is presumably the same release. docsgithub It depends on google-apis-common ^8 and optional yup-oauth2 ^12, and offers resumable upload (upload_resumable) plus simple and multipart upload through google-apis-common. docslib Maintenance: generated and periodically republished. The schema predates brandPartner (Jul 2026) and comments.imageUrl (Sep 2026), so recent fields may need raw JSON. containsSyntheticMedia (2024) is included.
+yup-oauth2: latest 12.1.2 (2026-01-07); previously 12.1.1 (2025-11-29). About 1.6M downloads/month. docslib InstalledFlowAuthenticator with InstalledFlowReturnMethod::HTTPRedirect gives you the loopback desktop flow, and persist_tokens_to_disk handles token storage. docs Actively maintained.
+Alternative: reqwest plus the resumable protocol directly. POST uploadType=resumable with the JSON metadata, receive a session URI, PUT chunks in multiples of 256 KiB with Content-Range, and on interruption query bytes */total and resume. This is about 200 lines of code, gives full control over current fields, and avoids generated-code churn. Pair it with yup-oauth2 or the oauth2 crate. Recommendation: use yup-oauth2 for auth and either crate for upload. Hand-rolled reqwest is preferable if you want the newest fields and simple dependencies.
+
+
+Corrections to the March 2026 evidence
+
+ClaimStatus (Oct 2026)Upload via refresh-token exchangeFine, but in Testing mode that token dies after 7 days. Switch to “In production” (unverified, personal use).categoryId 22Valid (People & Blogs, as in Google’s samples). Optional on insert; required on videos.update when updating snippet.privacy publicRisky. If the project is treated as unaudited, the video is locked private, can’t be appealed and must be re-uploaded. It also bypasses your human publish gate. Use private + publishAt/manual publish and read status.privacyStatus back.“#Shorts” appendedUnnecessary for classification. Shorts status comes from square/vertical aspect ratio and ≤3 min. Harmless as a hashtag.Whole file in memory, no chunked resumeCorrect the design. The max file size is 256GB; a failed single-shot upload wastes the attempt and an upload-bucket call. Use resumable chunked upload streaming from disk.Read only viewCount/likeCount/commentCountAccurate, but note viewCount semantics changed (Shorts Mar 31, 2025; all formats Aug 2026). dislikeCount is available to the owner. Use the Analytics API for watch time and engaged views.Unverified apps limited to 100 usersCorrect (Google Cloud help). google Irrelevant for owner-only.Shorts up to 3 minutesCorrect for uploads on/after Oct 15, 2024 (YouTube Help).10,000 units/day, reset midnight PTPartly outdated. 10,000 units/day for “all other endpoints”, plus separate 100-call/day buckets for videos.insert and search.list since June 1, 2026. Reset at midnight PT is confirmed. googlegoogle(implied) upload = 1,600 unitsOutdated. ~100 units from Dec 4, 2025; 1 call from a dedicated bucket since June 1, 2026.
+
+Recommendations
+
+
+Day 0: Create a Cloud project. Enable the Data API v3 and Analytics API. Set up an External consent screen and a Desktop OAuth client. Set publishing status to In production and do not submit for verification. Authorize once via the loopback flow and persist the token.
+Day 0: Submit the YouTube API Services Audit and Quota Extension Form describing an owner-only, human-approved publisher. Expect weeks to months.
+Day 1: Make a throwaway resumable upload with privacyStatus=private, then try flipping it to public in Studio. If it is not locked, proceed with A-in-production: upload private, set publishAt, add thumbnail, captions and playlist via API. If it is locked, use C for publishing (Studio upload with app-prepared title, description, tags, thumbnail and captions files) and keep the API for reads, comments and metadata on Studio-uploaded videos until the audit passes.
+Phone-verify the channel before relying on thumbnails.set.
+Set containsSyntheticMedia honestly per upload, implement the 30-day refresh/purge, and make a low-cost API call at least monthly so the project doesn’t go 90 days idle. google
+Skip B unless you ever add other users.
+
+
+Caveats
+
+
+The forced-private status is contradicted inside Google’s own docs. Verify empirically before trusting either version.
+Audit timelines come from anecdotal reports (2020–2026), not from Google.
+Third-party blogs disagree on quota figures; this report uses the Quota Calculator (updated 2026-10-15) and the revision history.
+The YouTube Analytics API’s per-query quota cost and an official Google list classifying YouTube scopes as sensitive or restricted were not retrieved.
+
+
+Not found
+
+
+Any API flag to mark a video as a Short; any requirement for “#Shorts”.
+Any API for community, image or poll posts. apify
+Any revision-history entry or official statement explaining the 2026 “not restricted to private” wording.
+An official audit SLA or turnaround time. google
+A 2026-dated first-hand report of a solo developer passing the audit, or of an unaudited project’s upload going public.
+The exact publish date of the google-youtube3 7.0.0 library crate (the CLI is dated 2026-01-01).
+The YouTube Analytics API quota cost per query. google
+An official Google page listing YouTube scope sensitivity classes.
+

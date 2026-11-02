@@ -72,3 +72,9 @@ Open questions: Which Threads HTTPS redirect host and local handoff? Which publi
 
 - [Design](../../openspec/changes/archive/2026-10-30-add-bluesky-x-threads/design.md)
 - [Research convention](../research/README.md)
+
+## Dated outcome/linkage review: 2026-11-02
+
+Implementation is present in local history at `bfa582b`: [Bluesky](../../crates/syncloom-core/src/bluesky.rs), [X](../../crates/syncloom-core/src/x.rs), [Threads](../../crates/syncloom-core/src/threads.rs), [fake HTTP journeys](../../crates/syncloom-server/tests/social_delivery.rs). Q1 is Claude-only/reduced, not two-provider agreement. Threads images, redirect host, public hosting and real X registration/prices remain unresolved as originally recorded.
+
+This is source/history inspection, not a fresh platform smoke or newly accepted rationale. Status, agreed boundaries and historical method identity remain unchanged: this record was not made through the current Decide method. [research/0001](research/0001-research-custody-and-retrieval.md) makes only the new reversible custody/retrieval choice and links its executed local evaluation.

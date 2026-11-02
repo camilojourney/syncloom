@@ -62,3 +62,9 @@ The ChatGPT challenger scanned zero sources and weighs below the cited Claude re
 ## References
 
 - [Vision](../vision.md), [migration ledger](../migration.md), [visual operations](../visual-assets.md)
+
+## Dated outcome/linkage review: 2026-11-02
+
+The original header's branch/not-landed wording describes its creation time. The renderer is now present in this repository's local history at `9cd7f25`: [renderer](../../crates/syncloom-core/src/visual.rs), [render/view/approve/edit HTTP journey](../../crates/syncloom-server/tests/visuals.rs). Q7's native incomplete outcome remains unchanged by HAND retention. No new distribution, Typst, PDF/UA or cross-machine proof exists. Generated-asset rendering research does not select the application UI stack/palette; that belongs to syncloom-text-ui.
+
+This is source/history inspection, not a fresh platform smoke or newly accepted rationale. Status, agreed boundaries and historical method identity remain unchanged: this record was not made through the current Decide method. [research/0001](research/0001-research-custody-and-retrieval.md) makes only the new reversible custody/retrieval choice and links its executed local evaluation.

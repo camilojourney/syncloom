@@ -1,0 +1,85 @@
+{
+ "study": "main969-q4-youtube",
+ "phase": "incomplete",
+ "outcome": {
+  "reason": "other",
+  "details": "The original coordinator model request failed; no replacement model or fresh allowance was selected"
+ },
+ "usage": {
+  "coordinatorCalls": 37,
+  "nativeCalls": 0,
+  "knownMicroUsd": 112519,
+  "ceilingMicroUsd": 2653479,
+  "costKnown": false
+ },
+ "trace": {
+  "id": "23cabdc692501319f2d9d3d39708723e",
+  "received": 205,
+  "pending": 0
+ },
+ "defaultEligible": false,
+ "primary": "claude",
+ "chatgpt": {
+  "label": "HAND",
+  "bytes": 9536,
+  "chars": 9460,
+  "sha256": "a36b47247720652cc935c0adbb058bbe8e222cfd1a8ab36be9a658659f358539",
+  "path": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q4-chatgpt-HAND-report.txt",
+  "url": "https://chatgpt.com/c/6ae4e8a8-3c98-83e9-8f7b-dae9c0339d8f",
+  "panelText": "Sources\nActivity \u00b7 6m\n\nCitations\n\nNo sources detected\n\nSources scanned \u00b7 0\n\nNo sources scanned\n\nConnector sources scanned\n\nNo connector sources scanned",
+  "sourcesScanned": 0,
+  "citationsNoSources": true,
+  "inReportLinks": [
+   {
+    "text": "Quota Calculator",
+    "href": "https://developers.google.com/youtube/data/determine_quota_cost"
+   },
+   {
+    "text": "google-youtube3",
+    "href": "https://crates.io/crates/google-youtube3"
+   },
+   {
+    "text": "YouTube API Services Terms",
+    "href": "https://developers.google.com/youtube/terms/api-services-terms-of-service"
+   }
+  ],
+  "busy": 0,
+  "h1": [
+   "YouTube Data API Video/Shorts Upload",
+   "Quota Costs and Limits",
+   "OAuth / Verification and Refresh Tokens",
+   "Reading Data (Stats, Comments, Search, A",
+   "Rust Libraries",
+   "Automation, AI Content, and Policies",
+   "Option Comparison and Recommendations"
+  ],
+  "inputEvents": 0,
+  "clicks": 0,
+  "assoc": {
+   "associated": true,
+   "turns": 1,
+   "url": "https://chatgpt.com/c/6ae4e8a8-3c98-83e9-8f7b-dae9c0339d8f"
+  },
+  "tail": "ube Data API v3 reference and quotas documentation, Google OAuth docs, and Google Developers guides."
+ },
+ "claude": {
+  "label": "NATIVE",
+  "path": "/Users/camiloslaptop/.local/state/phrona/durable-study-5.0.12-candidate/studies/main969-q4-youtube/reports/claude-61e9241478cbd6390794797ef7076c2a6e087cc7de3e89bd2a01ba03845c5221.txt",
+  "copy": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q4-claude-NATIVE-report.txt",
+  "bytes": 23933,
+  "chars": 23425,
+  "sha256": "61e9241478cbd6390794797ef7076c2a6e087cc7de3e89bd2a01ba03845c5221",
+  "citations": 89,
+  "url": "https://claude.ai/chat/03589a1c-dac5-4375-b747-2cb237a57092",
+  "method": "complete-loaded-claude-document"
+ },
+ "failures": {
+  "chatgpt": {
+   "report-unfinished-or-ambiguous": 10,
+   "report-model-only-no-sources": 1
+  },
+  "claude": {
+   "research-not-finished": 2
+  }
+ }
+}

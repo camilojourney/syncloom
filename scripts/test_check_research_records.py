@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 import pathlib
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -261,6 +263,59 @@ class CheckResearchRecords(unittest.TestCase):
         (self.root / "docs" / "decisions" / "sources").mkdir()
         (self.root / "docs" / "decisions" / "sources" / "c.md").write_text("contract\n")
         self.assert_problem("c.md: file is not listed")
+
+    def domain_decision(self):
+        directory = self.root / "docs" / "decisions" / "research"
+        directory.mkdir()
+        original = self.root / "docs" / "decisions" / "0001-pick.md"
+        target = directory / original.name
+        original.rename(target)
+        self.edit("docs/decisions/research/0001-pick.md", "../../openspec/", "../../../openspec/")
+        self.edit("docs/decisions/research/0001-pick.md", "../research/", "../../research/")
+        self.edit("docs/research/INDEX.md", "../decisions/0001-pick.md", "../decisions/research/0001-pick.md")
+        design = self.root / "openspec" / "changes" / "archive" / "2026-01-01-add-x" / "design.md"
+        design.write_text("Decisions: `docs/decisions/research/0001-pick.md`\n")
+        return target
+
+    def test_domain_qualified_record_resolves_links_and_backlink(self):
+        self.domain_decision()
+        self.assertEqual(self.problems(), [])
+
+    def test_domain_qualified_record_missing_field_fails(self):
+        self.domain_decision()
+        self.edit("docs/decisions/research/0001-pick.md", "**Live-proven:** no\n", "")
+        self.assert_problem("missing field 'Live-proven'")
+
+    def test_domain_qualified_backlink_requires_full_identity(self):
+        self.domain_decision()
+        design = self.root / "openspec" / "changes" / "archive" / "2026-01-01-add-x" / "design.md"
+        design.write_text("Decisions: `docs/decisions/0001-pick.md`\n")
+        self.assert_problem("does not name docs/decisions/research/0001-pick.md")
+
+    def test_domain_qualified_numbers_are_checked_per_domain(self):
+        target = self.domain_decision()
+        # A legacy record and a different domain both start at 0001.
+        (self.root / "docs" / "decisions" / "0001-pick.md").write_text(
+            DECISION.replace("[add-x](../../openspec/changes/archive/2026-01-01-add-x/)", "none - historical")
+        )
+        self.assertEqual(self.problems(), [])
+        target.rename(target.with_name("0003-pick.md"))
+        self.assert_problem("docs/decisions/research/: decision numbers must run 0001, 0002")
+
+    def test_domain_source_files_still_require_hashes(self):
+        self.domain_decision()
+        (self.root / "docs" / "decisions" / "research" / "source.txt").write_text("source\n")
+        self.assert_problem("research/source.txt: file is not listed")
+
+    def test_cli_checks_domain_qualified_decision(self):
+        self.domain_decision()
+        command = [sys.executable, "-I", "-B", str(HERE / "check-research-records.py"), "--root", str(self.root)]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertEqual((result.returncode, result.stdout), (0, "0 problem(s)\n"))
+        self.edit("docs/decisions/research/0001-pick.md", "../../research/2026-01-01-topic/README.md", "../../research/gone.md")
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("broken link ../../research/gone.md", result.stdout)
 
     def test_repository_records_are_consistent(self):
         self.assertEqual(checker.check(HERE.parent), [])
