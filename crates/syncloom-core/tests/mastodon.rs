@@ -65,7 +65,7 @@ async fn per_instance_registration_consent_token_and_signout_are_private_and_iso
             .into_owned()
             .collect();
     assert_eq!(form["client_name"], "Syncloom");
-    assert_eq!(form["scopes"], "write:statuses write:media");
+    assert_eq!(form["scopes"], "read:accounts write:statuses write:media");
     assert!(form["redirect_uris"].starts_with("http://127.0.0.1:"));
     assert_eq!(fake.calls("token").len(), 1);
     let token = store.get(&m.account()).unwrap();

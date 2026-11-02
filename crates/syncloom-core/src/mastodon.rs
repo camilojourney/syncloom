@@ -12,7 +12,7 @@ use std::{sync::Arc, time::Duration};
 
 pub const INSTANCE_ENV: &str = "SYNCLOOM_MASTODON_INSTANCE";
 pub const REDIRECT_ENV: &str = "SYNCLOOM_MASTODON_REDIRECT_URL";
-pub const SCOPES: &str = "write:statuses write:media";
+pub const SCOPES: &str = "read:accounts write:statuses write:media";
 const DEFAULT_REDIRECT: &str = "http://127.0.0.1:8792/mastodon/callback";
 #[derive(Clone, Debug)]
 pub struct MastodonConfig {

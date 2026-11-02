@@ -6,12 +6,12 @@
 - [x] 1.3 Preserve the conclusion-free packet and sealed recommendation; obtain and resolve the different-family challenge through firstmate, retaining Main1333 and differences-only evidence.
 
 ## 2. Identity and approval
-- [ ] 2.1 Resolve canonical targets in existing adapters and verify missing identity, same-account renewal and identity-mismatch signout with fake-protocol tests; document identity limits.
-- [ ] 2.2 Bind content/assets approval to expected_target, expose review context and fresh approval through API/CLI/review, and prove stale forms cannot bind another account; update supported interface documentation.
+- [x] 2.1 Resolve canonical targets in existing adapters and verify missing identity, same-account renewal and identity-mismatch signout with fake-protocol tests; document identity limits.
+- [x] 2.2 Bind content/assets approval to expected_target, expose review context and fresh approval through API/CLI/review, and prove stale forms cannot bind another account; update supported interface documentation.
 
 ## 3. Durable dispatch
-- [ ] 3.1 Add target-scoped durable intent identity and immutable attempt binding, preserving legacy uncertain intents and history; prove switch/restart/unknown/snapshot-race paths with existing loopback fakes and document recovery.
-- [ ] 3.2 Run all seven red regressions green plus no-switch good paths, retain actual target evidence, and break/restore the shared guards to prove test sensitivity.
+- [x] 3.1 Add target-scoped durable intent identity and immutable attempt binding, preserving legacy uncertain intents and history; prove switch/restart/unknown/snapshot-race paths with existing loopback fakes and document recovery.
+- [x] 3.2 Run all seven red regressions green plus no-switch good paths, retain actual target evidence, and break/restore the shared guards to prove test sensitivity.
 
 ## 4. Integration
 - [ ] 4.1 Reconcile onto local main, run applicable tests, formatting, lint, specs/record checks and Code Verify against original base and current parent; disposition residue without waiver/suppression.

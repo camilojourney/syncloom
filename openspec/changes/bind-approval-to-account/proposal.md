@@ -32,6 +32,7 @@ None.
 - `dispatch-outbox`: target-bound dispatch and historical intents.
 - `platform-credentials`: observed canonical target identity.
 - `studio-cli`: explicit account approval input.
+- `mastodon-integration`: identity-read consent permission.
 
 Checked these owners and all platform integration owners; no competing capability is needed.
 
