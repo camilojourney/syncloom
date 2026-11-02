@@ -45,6 +45,7 @@ async fn approved_with(dir: &TempDir, platform: Option<Arc<ScriptedPlatform>>) -
         .review(
             &piece.piece_id,
             ReviewRequest {
+                expected_target: None,
                 status: Some(Status::Approved),
                 text: None,
                 expected_revision: piece.revision.clone(),
@@ -277,9 +278,10 @@ async fn a_posting_or_unknown_intent_found_later_answers_unknown_and_sends_nothi
     let platform = ScriptedPlatform::new(posted());
     let (studio, piece) = approved_with(&dir, Some(platform.clone())).await;
     // Plant the record an interrupted attempt leaves behind.
-    let key = syncloom_core::outbox::intent_key("publish", &piece.piece_id, &piece.revision);
+    let key = syncloom_core::outbox::intent_key("publish", &piece.piece_id, &piece.revision, None);
     let intent = syncloom_core::DispatchIntent {
-        request_id: syncloom_core::request_id("publish", &piece.piece_id, &piece.revision),
+        approval_target: None,
+        request_id: syncloom_core::request_id("publish", &piece.piece_id, &piece.revision, None),
         operation: "publish".to_owned(),
         piece_id: piece.piece_id.clone(),
         revision: piece.revision.clone(),
@@ -380,6 +382,7 @@ async fn a_grant_does_not_bypass_approval_or_revision_checks() {
         .review(
             &piece.piece_id,
             ReviewRequest {
+                expected_target: None,
                 status: None,
                 text: Some("Edited after approval, still about zebrafish.".to_owned()),
                 expected_revision: piece.revision.clone(),

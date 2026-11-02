@@ -98,6 +98,8 @@ pub fn stored_token(expires_at: &str) -> Token {
     Token {
         access_token: Secret::new(fake_linkedin::DEFAULT_TOKEN),
         expires_at: Some(expires_at.to_owned()),
+        identity_authority: Some("fake-client-id".into()),
+        page_id: None,
         member_id: fake_linkedin::MEMBER_ID.to_owned(),
         scope: "openid,profile,w_member_social".to_owned(),
         obtained_at: FIXED_AT.to_owned(),

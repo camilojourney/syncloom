@@ -238,7 +238,16 @@ fn approval_note(piece: &Piece) -> &'static str {
 fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>) -> Html<String> {
     let id = escape(&piece.piece_id);
     let channel = piece.channel.display_name();
-    let fields = revision_fields(state, piece);
+    // The displayed account and form name the same observation, even during reconnect.
+    let target = state.studio.review_target(piece).ok().flatten();
+    let fields = format!(
+        "{}{}",
+        revision_fields(state, piece),
+        target
+            .as_deref()
+            .map(|target| hidden("expected_target", target))
+            .unwrap_or_default()
+    );
     let mut hashes = String::new();
     if let Some(assets) = &piece.assets {
         hashes = format!(
@@ -253,15 +262,26 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
             ));
         }
     }
-    let approval_disabled = if piece.status != Status::PendingReview
+    let needs_account = state
+        .studio
+        .account_approval_required(piece, target.as_deref());
+    let approval_disabled = if (piece.status != Status::PendingReview
+        && !(piece.status == Status::Approved && needs_account))
         || (piece.visual.is_some() && piece.assets.is_none())
     {
         " disabled"
     } else {
         ""
     };
-    let approval_note = approval_note(piece);
-    let publish_controls = publish_controls(state, piece);
+    let approval_note = if needs_account {
+        "Account changed or approval is unbound. Connect, review and approve this account before publishing."
+    } else {
+        approval_note(piece)
+    };
+    let account = target
+        .map(|target| format!("<p class=\"label\">Connected account fingerprint</p><code class=\"hash\">{}</code>", escape(&target)))
+        .unwrap_or_default();
+    let publish_controls = publish_controls(state, piece, needs_account);
     let receipt = receipt.map(publish_receipt).unwrap_or_default();
     let last_outcome = piece
         .publish_status
@@ -276,7 +296,7 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
     document(
         "Review piece",
         &format!(
-            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} {} / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p><form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr>{publish_controls}{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
+            r#"<a class="back" href="/">← All thoughts &amp; pieces</a><div class="review-heading"><div><p class="eyebrow">{channel}</p><h1>Make it yours.</h1></div><span class="status prominent">{}</span></div>{receipt}<div class="review-layout"><div class="review-controls"><section class="card"><span class="step">01 / The thought</span><p class="source">{}</p></section><section class="card"><div class="section-heading"><span class="step">02 / Saved draft</span><a href="/review/{id}/edit">Edit draft ↗</a></div><p class="draft-text">{}</p><p class="hint">{} {} / {} maximum · {:?}</p><p class="label">Exact revision</p><code class="hash">{}</code></section><section class="card"><span class="step">03 / Visuals</span><h2>Render previews</h2><p class="hint">Configure slides on a separate screen, then return to inspect and approve the saved bytes. Rendering clears earlier approval.</p><a class="button secondary" href="/review/{id}/render">Render previews ↗</a></section><section class="card approval"><span class="step">04 / Your decision</span><h2>Review. Then approve.</h2><p>{approval_note}</p>{account}<form method="post" action="/review/{id}/approve">{fields}{hashes}<button type="submit"{approval_disabled}>Approve exact revision</button></form><hr>{publish_controls}{last_outcome}</section></div><section class="previews" aria-label="Phone-sized previews"><p class="eyebrow">A smaller screen. The same content.</p><div class="section-heading preview-heading"><h2>Phone previews</h2><span class="muted">360 px</span></div><p class="hint">Preview on this laptop, not a phone connection.</p>{}</section></div>"#,
             status(piece.status),
             escape(&piece.source.raw_input),
             escape(&piece.text),
@@ -291,14 +311,15 @@ fn piece_page(state: &AppState, piece: &Piece, receipt: Option<&PublishResponse>
 }
 
 /// Keep delivery availability, cost acceptance and the Publish control together.
-fn publish_controls(state: &AppState, piece: &Piece) -> String {
+fn publish_controls(state: &AppState, piece: &Piece, needs_account: bool) -> String {
     let id = escape(&piece.piece_id);
     let fields = revision_fields(state, piece);
     let unavailable_image =
         piece.channel == syncloom_core::Channel::Threads && piece.visual.is_some();
     let delivery_note = delivery_note(piece, unavailable_image);
     let accepted_cost = state.cost_consents.accepted(piece);
-    let publish_disabled = if piece.status != Status::Approved
+    let publish_disabled = if needs_account
+        || piece.status != Status::Approved
         || unavailable_image
         || (piece.channel == syncloom_core::Channel::X && accepted_cost.is_none())
     {
@@ -448,6 +469,7 @@ pub(crate) async fn thought(
 pub(crate) struct PieceForm {
     csrf: String,
     expected_revision: String,
+    expected_target: Option<String>,
     text: Option<String>,
     template: Option<String>,
     slides: Option<String>,
@@ -488,6 +510,7 @@ impl PieceForm {
             status,
             text,
             expected_assets,
+            expected_target: self.expected_target,
             expected_revision: self.expected_revision,
         })
     }

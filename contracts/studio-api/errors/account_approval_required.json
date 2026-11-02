@@ -1,0 +1,10 @@
+{
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "account_approval_required",
+      "message": "The connected account is not approved for this revision. Review and approve this account before publishing.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

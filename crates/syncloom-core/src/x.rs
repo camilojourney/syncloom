@@ -99,7 +99,7 @@ impl X {
                 ("code_verifier", verifier.expose()),
             ])
             .await?;
-        self.save(issued, None, generation)?;
+        self.save(issued, None, generation).await?;
         self.connection()
     }
     fn token_request(&self, form: &[(&str, &str)]) -> reqwest::RequestBuilder {
@@ -114,12 +114,34 @@ impl X {
     async fn issue(&self, form: &[(&str, &str)]) -> Result<Issued, StudioError> {
         crate::oauth::exchange_json(self.token_request(form)).await
     }
-    fn save(
+    async fn save(
         &self,
         issued: Issued,
         old: Option<&Token>,
         generation: u64,
     ) -> Result<(), StudioError> {
+        #[derive(Deserialize)]
+        struct Identity {
+            data: User,
+        }
+        #[derive(Deserialize)]
+        struct User {
+            id: String,
+        }
+        let identity: Identity = crate::oauth::exchange_json(
+            self.context
+                .client
+                .get(format!("{}/2/users/me", self.context.config.x_api.as_str()))
+                .bearer_auth(issued.access_token.expose()),
+        )
+        .await?;
+        if old.is_some_and(|old| old.member_id != identity.data.id) {
+            self.context.credentials.clear()?;
+            return Err(StudioError::SignInRejected);
+        }
+        if !crate::social::numeric_id(&identity.data.id) {
+            return Err(StudioError::SignInRejected);
+        }
         let scope = issued
             .scope
             .or_else(|| old.map(|t| t.scope.clone()))
@@ -147,7 +169,7 @@ impl X {
                 refresh_token,
             })?,
             crate::social::expiry(self.context.credentials.clock.as_ref(), issued.expires_in)?,
-            String::new(),
+            identity.data.id,
             scope,
         )
     }
@@ -174,20 +196,25 @@ impl crate::oauth_context::OAuthLifecycle for X {
             ("refresh_token", bundle.refresh_token.expose()),
         ]))
     }
-    fn save_refreshed(
+    async fn save_refreshed(
         &self,
         issued: Issued,
         old: &Token,
         generation: u64,
     ) -> Result<(), StudioError> {
-        self.save(issued, Some(old), generation)
+        self.save(issued, Some(old), generation).await
     }
 }
 impl Platform for X {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.context.credentials.usable()?;
+        crate::platform::account_target("x", "", &token.member_id)
+    }
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::X, &request, 5_000_000)?;
             let token = self.context.credentials.usable()?;
+            request.require_target(crate::platform::account_target("x", "", &token.member_id))?;
             let bundle: Bundle = decode(&token).map_err(|_| PostFailure::ConsentRequired)?;
             let mut body = serde_json::json!({"text":request.text});
             if let Some(image) = request.image.take() {

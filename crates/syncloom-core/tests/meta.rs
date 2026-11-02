@@ -10,8 +10,16 @@ use syncloom_core::{
     PostFailure, PostRequest, TokenStore,
     meta::{MetaTarget, PublicMediaUrl},
 };
-fn request(images: usize) -> PostRequest {
+fn request(target: MetaTarget, images: usize) -> PostRequest {
     PostRequest {
+        approval_target: match target {
+            MetaTarget::Facebook => {
+                syncloom_core::platform::account_target("facebook", "", "101").ok()
+            }
+            MetaTarget::Instagram => {
+                syncloom_core::platform::account_target("instagram", "101", "202").ok()
+            }
+        },
         request_id: "intent-1".into(),
         text: "Build with measured evidence.".into(),
         image: None,
@@ -101,7 +109,7 @@ async fn instagram_checks_ready_status_and_never_publishes_failed_or_expired_con
         );
         assert!(
             meta.target(MetaTarget::Instagram)
-                .publish(request(1))
+                .publish(request(MetaTarget::Instagram, 1))
                 .await
                 .is_err()
         );
@@ -127,7 +135,7 @@ async fn processing_is_polled_once_per_minute_then_published_when_ready() {
     let start = std::time::Instant::now();
     assert!(
         meta.target(MetaTarget::Instagram)
-            .publish(request(1))
+            .publish(request(MetaTarget::Instagram, 1))
             .await
             .is_ok()
     );
@@ -146,7 +154,7 @@ async fn carousel_orders_children_then_parent_and_ai_disclosure_never_on_childre
     );
     let posted = meta
         .target(MetaTarget::Instagram)
-        .publish(request(3))
+        .publish(request(MetaTarget::Instagram, 3))
         .await
         .unwrap();
     assert_eq!(posted.post_id, "303");
@@ -187,7 +195,9 @@ async fn graph_error_codes_and_http_statuses_are_truthful_without_hidden_retries
             Arc::new(Media::default()),
         );
         assert_eq!(
-            meta.target(MetaTarget::Facebook).publish(request(0)).await,
+            meta.target(MetaTarget::Facebook)
+                .publish(request(MetaTarget::Facebook, 0))
+                .await,
             Err(expected)
         );
         assert_eq!(fake.calls("101/feed").len(), 1);
@@ -199,31 +209,39 @@ async fn absent_expired_unlinked_or_missing_media_sends_nothing() {
     let tokens = MemoryStore::new();
     let meta = adapter(&fake, tokens.clone(), Arc::new(Media::default()));
     assert_eq!(
-        meta.target(MetaTarget::Facebook).publish(request(0)).await,
+        meta.target(MetaTarget::Facebook)
+            .publish(request(MetaTarget::Facebook, 0))
+            .await,
         Err(PostFailure::ConsentRequired)
     );
     let mut token = stored();
     token.expires_at = Some("2026-10-31T00:00:00Z".into());
     tokens.save("meta:101", &token).unwrap();
     assert_eq!(
-        meta.target(MetaTarget::Facebook).publish(request(0)).await,
+        meta.target(MetaTarget::Facebook)
+            .publish(request(MetaTarget::Facebook, 0))
+            .await,
         Err(PostFailure::ConsentRequired)
     );
     token = stored();
     token.member_id.clear();
     tokens.save("meta:101", &token).unwrap();
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(1)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 1))
+            .await,
         Err(PostFailure::ConsentRequired)
     );
     tokens.save("meta:101", &stored()).unwrap();
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(0)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 0))
+            .await,
         Err(PostFailure::Refused)
     );
     assert_eq!(
         meta.target(MetaTarget::Instagram)
-            .publish(request(11))
+            .publish(request(MetaTarget::Instagram, 11))
             .await,
         Err(PostFailure::Refused)
     );
@@ -238,7 +256,9 @@ async fn missing_host_and_failed_child_prevent_status_creation() {
     });
     let meta = adapter(&fake, MemoryStore::with("meta:101", stored()), media);
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(1)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 1))
+            .await,
         Err(PostFailure::Refused)
     );
     assert!(fake.all().is_empty());
@@ -255,7 +275,9 @@ async fn missing_host_and_failed_child_prevent_status_creation() {
         Arc::new(Media::default()),
     );
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(2)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 2))
+            .await,
         Err(PostFailure::Refused)
     );
     assert!(fake.calls("202/media_publish").is_empty());
@@ -290,11 +312,11 @@ async fn jpeg_byte_bound_format_and_alt_text_are_checked_before_any_media_delive
         MemoryStore::with("meta:101", stored()),
         media.clone(),
     );
-    let mut invalid_format = request(1);
+    let mut invalid_format = request(MetaTarget::Instagram, 1);
     invalid_format.slides[0].bytes = b"not jpeg".to_vec();
-    let mut empty_alt = request(1);
+    let mut empty_alt = request(MetaTarget::Instagram, 1);
     empty_alt.slides[0].alt_text = "  ".into();
-    let mut oversized = request(1);
+    let mut oversized = request(MetaTarget::Instagram, 1);
     oversized.slides[0].bytes = vec![255; 8 * 1024 * 1024 + 1];
     oversized.slides[0].bytes[..2].copy_from_slice(&[255, 216]);
     for r in [invalid_format, empty_alt, oversized] {
@@ -305,7 +327,7 @@ async fn jpeg_byte_bound_format_and_alt_text_are_checked_before_any_media_delive
     }
     assert!(fake.all().is_empty());
     assert!(media.images.lock().unwrap().is_empty());
-    let mut exact = request(1);
+    let mut exact = request(MetaTarget::Instagram, 1);
     exact.slides[0].bytes = vec![255; 8 * 1024 * 1024];
     exact.slides[0].bytes[..2].copy_from_slice(&[255, 216]);
     assert!(
@@ -379,7 +401,9 @@ async fn empty_http_errors_keep_auth_refusal_and_rate_limit_meaning() {
             Arc::new(Media::default()),
         );
         assert_eq!(
-            meta.target(MetaTarget::Facebook).publish(request(0)).await,
+            meta.target(MetaTarget::Facebook)
+                .publish(request(MetaTarget::Facebook, 0))
+                .await,
             Err(expected)
         );
         assert_eq!(fake.calls("101/feed").len(), 1);
@@ -398,7 +422,7 @@ async fn photo_id_alone_and_malformed_publish_or_foreign_permalink_never_claim_p
         MemoryStore::with("meta:101", stored()),
         Arc::new(Media::default()),
     );
-    let mut photo = request(0);
+    let mut photo = request(MetaTarget::Facebook, 0);
     photo.image = Some(syncloom_core::platform::PostImage {
         bytes: b"synthetic-png".to_vec(),
         alt_text: "Evidence".into(),
@@ -413,7 +437,9 @@ async fn photo_id_alone_and_malformed_publish_or_foreign_permalink_never_claim_p
         ..Default::default()
     });
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(1)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 1))
+            .await,
         Err(PostFailure::Unknown)
     );
     fake.configure(fake_meta::Config {
@@ -421,7 +447,9 @@ async fn photo_id_alone_and_malformed_publish_or_foreign_permalink_never_claim_p
         ..Default::default()
     });
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(1)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 1))
+            .await,
         Err(PostFailure::Unknown)
     );
 }
@@ -446,7 +474,9 @@ async fn sign_in_callback_deadline_releases_port_and_unconfigured_host_refuses()
     );
     assert!(std::net::TcpListener::bind(address).is_ok());
     assert_eq!(
-        meta.target(MetaTarget::Instagram).publish(request(1)).await,
+        meta.target(MetaTarget::Instagram)
+            .publish(request(MetaTarget::Instagram, 1))
+            .await,
         Err(PostFailure::Refused)
     );
     assert!(fake.all().is_empty());
