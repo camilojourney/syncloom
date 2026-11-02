@@ -105,7 +105,12 @@ async fn publish_inspection_is_revision_scoped_read_only_and_fails_closed() {
         .publish(&piece.piece_id, publish(&piece.revision, false))
         .await
         .unwrap();
-    let key = intent_key("publish", &piece.piece_id, &piece.revision);
+    let key = intent_key(
+        "publish",
+        &piece.piece_id,
+        &piece.revision,
+        piece.approval_target.as_deref(),
+    );
     let store = Store::open(dir.path()).unwrap();
     let mut intent = store.lock().unwrap().load_intent(&key).unwrap().unwrap();
     intent.status = IntentStatus::Posting;
@@ -138,7 +143,12 @@ async fn publish_inspection_is_revision_scoped_read_only_and_fails_closed() {
             .publish_intent
             .is_none()
     );
-    let new_key = intent_key("publish", &edited.piece_id, &edited.revision);
+    let new_key = intent_key(
+        "publish",
+        &edited.piece_id,
+        &edited.revision,
+        edited.approval_target.as_deref(),
+    );
     std::fs::write(
         dir.path().join("outbox").join(format!("{new_key}.json")),
         b"corrupt",
