@@ -26,6 +26,28 @@ Open: slice 5b records its choices and primary-source verification in decision 0
 
 [0006 X/Threads/Bluesky publishing](../../decisions/0006-social-platform-integrations.md), including separate primary-source verification notes.
 
+
+## Composition and adoption review (2026-11-02)
+
+Domain: `syncloom.v2` (repository scope, not a delivered catalog identity). Phrona catalog ID: **pending owner/Main1308**.
+
+Original study `main969-q1-xtb`, Phrona 5.0.12; question SHA256 `285735365f261f18051e8a92c3b0aacca6577933a7871500151bbdb919ed80aa`. Original result receipt: `/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/run/main969-q1-xtb-result.json`, SHA256 `023f69984c3e48d4751f4f125b121f9838c539a81f662de66c79af9509d25b0f`.
+
+Native phase: **complete**; native confidence: **reduced**; default eligibility false. Native outcome has no failure.
+
+| Actual member | Provider link | Preserved full report | Outcome |
+|---|---|---|---|
+| chatgpt | none: not sent | none | No Send; no report |
+| claude | [original conversation](https://claude.ai/chat/0ba608e3-1e74-4f9f-a261-d9fa5eec596a) | [NATIVE bytes](q1-claude-NATIVE-report.txt), SHA256 `734b594c25035a5034ece477ae387a60e80443a8c031c1523af9159e3cce8c17`, 24514 bytes | Native full report |
+
+Challenger: `failed`, `unsupported-ui`. Missing challengers are not agreement. Provider claims remain reported, not independently verified by preservation. Original full report files are never annotated.
+
+### Finding disposition
+
+Historical [0006](../../decisions/0006-social-platform-integrations.md), Proposed, no `/decide` marker. Built at `bfa582b`: [Bluesky](../../../crates/syncloom-core/src/bluesky.rs), [X](../../../crates/syncloom-core/src/x.rs), [Threads](../../../crates/syncloom-core/src/threads.rs); [fake API journeys](../../../crates/syncloom-server/tests/social_delivery.rs). Text and approved PNG for Bluesky/X, Threads text only. No live proof, hosting, unattended policy clearance or new spend authority.
+
+See [research/0001](../../decisions/research/0001-research-custody-and-retrieval.md) for this new archive choice, not retrospective acceptance of product recommendations.
+
 ## Files
 
 Copies only, never edited. Origins are the study operator's exact files.

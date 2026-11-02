@@ -70,3 +70,9 @@ Open gaps: real-instance compatibility, account permissions and effective per-in
 
 - [Mastodon and export operator guide](../mastodon-and-export.md)
 - [Design](../../openspec/changes/archive/2026-10-30-add-mastodon-manual-export/design.md)
+
+## Dated outcome/linkage review: 2026-11-02
+
+The original header's branch/landing claim is historical. Implementation is present in local history at `206b464`: [Mastodon adapter](../../crates/syncloom-core/src/mastodon.rs), [manual export](../../crates/syncloom-core/src/manual_export.rs), [fake HTTP journeys](../../crates/syncloom-server/tests/mastodon_export.rs). Q5 remains single-provider/reduced; Q6 has no platform-reader implementation or substantive decision. No live-instance compatibility or Reddit/TikTok API is implied.
+
+This is source/history inspection, not a fresh platform smoke or newly accepted rationale. Status, agreed boundaries and historical method identity remain unchanged: this record was not made through the current Decide method. [research/0001](research/0001-research-custody-and-retrieval.md) makes only the new reversible custody/retrieval choice and links its executed local evaluation.

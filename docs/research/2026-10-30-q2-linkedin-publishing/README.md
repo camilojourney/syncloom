@@ -26,6 +26,28 @@ Open. Answered for the decision (personal profile through self-serve Share on Li
 
 [0002 LinkedIn personal-profile integration: self-serve Share on LinkedIn, Keychain tokens, loopback sign-in](../../decisions/0002-linkedin-integration-decisions.md).
 
+
+## Composition and adoption review (2026-11-02)
+
+Domain: `syncloom.v2` (repository scope, not a delivered catalog identity). Phrona catalog ID: **pending owner/Main1308**.
+
+Original study `main969-q2-linkedin`, Phrona 5.0.12; question SHA256 `dc08cbb4ca38f3720635068d934130b30488673bf7181ec463decc355ca8ef29`. Original result receipt: `/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/run/main969-q2-linkedin-result.json`, SHA256 `1723c767f14368445a119703c3ad1a147a757b22e5ca23d2f73adf2a60694060`.
+
+Native phase: **incomplete**; native confidence: **none**; default eligibility false. Original outcome: `original-limits`: Original coordinator call limit reached: 40 of 40 calls used
+
+| Actual member | Provider link | Preserved full report | Outcome |
+|---|---|---|---|
+| chatgpt | [original conversation](https://chatgpt.com/c/6ae4dcd1-8908-83ea-ad95-841df8b1cbf3) | [HAND bytes](q2-chatgpt-HAND-report.txt), SHA256 `ba56b1f5a9e117e6790fac4a52efa7237faceecfd5204420d10589ca5f490fe5`, 10114 bytes | Native report unresolved; later HAND retention, sources scanned 0; `report-document-changed`, `report-model-only-no-sources`, `report-unfinished-or-ambiguous` |
+| claude | [original conversation](https://claude.ai/chat/fbfdf97a-0d29-4dda-a4ff-4568946a45bf) | [NATIVE bytes](q2-claude-NATIVE-report.txt), SHA256 `d7482cd4daaaf2025f6871642133a24c47bd6b8368380281960ee179d864954e`, 26525 bytes | Native full report |
+
+Challenger: `unresolved`. HAND text does not repair the native terminal outcome and does not establish sourced corroboration. Missing challengers are not agreement. Provider claims remain reported, not independently verified by preservation. Original full report files are never annotated.
+
+### Finding disposition
+
+Historical [0002](../../decisions/0002-linkedin-integration-decisions.md), Proposed, no `/decide` marker. Built at `9e83462`: [LinkedIn adapter](../../../crates/syncloom-core/src/linkedin.rs), [fake HTTP sign-in/publish journeys](../../../crates/syncloom-server/tests/linkedin_api.rs). Personal-profile text only; company pages/visual upload/live registration remain unbuilt or unproven as recorded, not newly approved.
+
+See [research/0001](../../decisions/research/0001-research-custody-and-retrieval.md) for this new archive choice, not retrospective acceptance of product recommendations.
+
 ## Files
 
 Verbatim copies; the repository never edits them. Origins are paths on the machine that ran the study.

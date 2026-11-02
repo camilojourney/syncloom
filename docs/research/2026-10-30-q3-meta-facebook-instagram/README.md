@@ -42,6 +42,28 @@ Re-opened Meta's current official pages before specifying the adapter:
 - [Media creation reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/): JPEG, 8 MB, 4:5 to 1.91:1; parent-only is_ai_generated.
 Current examples and token guide name v26.0. The adapter pins v26.0 rather than copying the study's v25.0 recommendation. Retain the local renderer's conservative ten-slide cap. Hosting, real app eligibility/redirect acceptance and public visibility remain unproven; no sign-in or publishing was performed. No claim relies on the uncited ChatGPT report.
 
+
+## Composition and adoption review (2026-11-02)
+
+Domain: `syncloom.v2` (repository scope, not a delivered catalog identity). Phrona catalog ID: **pending owner/Main1308**.
+
+Original study `main969-q3-meta`, Phrona 5.0.12; question SHA256 `0376181b391f348548d182fc20f50a55e289f8b8dde58a1865dc82948b98c1d0`. Original result receipt: `/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/run/main969-q3-meta-result.json`, SHA256 `c092157d8922583d881f0960fec84f54fa6a8bb82af11b95bf1c48555f7111f0`.
+
+Native phase: **incomplete**; native confidence: **none**; default eligibility false. Original outcome: `original-limits`: Original coordinator call limit reached: 40 of 40 calls used
+
+| Actual member | Provider link | Preserved full report | Outcome |
+|---|---|---|---|
+| chatgpt | [original conversation](https://chatgpt.com/c/6ae4dccd-4330-83ea-a952-ffde6ce84f30) | [HAND bytes](q3-chatgpt-HAND-report.txt), SHA256 `292af096c339f97c3b636e152d15615aa02b4aaba30e35e89722e38ad1035abc`, 9039 bytes | Native report unresolved; later HAND retention, sources scanned 0; `report-document-changed`, `report-model-only-no-sources`, `report-unfinished-or-ambiguous` |
+| claude | [original conversation](https://claude.ai/chat/65c9c98f-6fca-4074-8259-5a3272c13c7c) | [NATIVE bytes](q3-claude-NATIVE-report.txt), SHA256 `a8822295654e92188effbceccf4a0f8f2891a4f64f8e40027d992eb633256336`, 31771 bytes | Native full report; `research-not-finished` |
+
+Challenger: `unresolved`. HAND text does not repair the native terminal outcome and does not establish sourced corroboration. Missing challengers are not agreement. Provider claims remain reported, not independently verified by preservation. Original full report files are never annotated.
+
+### Finding disposition
+
+Historical [0005](../../decisions/0005-meta-integration.md), Proposed, and [0003](../../decisions/0003-visual-renderer.md), Proposed, have no `/decide` marker. Built at `809c77b`: [Meta publishing](../../../crates/syncloom-core/src/meta/publish.rs), [fake HTTP carousel/repeat/unknown tests](../../../crates/syncloom-server/tests/meta_api.rs). Public-media hosting, real eligibility and public visibility remain unresolved. Existing official-source follow-on notes reject the report's v25.0 in favor of v26.0; the report is unchanged.
+
+See [research/0001](../../decisions/research/0001-research-custody-and-retrieval.md) for this new archive choice, not retrospective acceptance of product recommendations.
+
 ## Files
 
 Verbatim copies; the repository never edits them. Origins are paths on the machine that ran the study.

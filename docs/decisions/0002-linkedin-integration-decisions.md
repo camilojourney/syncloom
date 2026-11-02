@@ -90,3 +90,9 @@ Gaps: whether LinkedIn accepts an `http://127.0.0.1` (or `http://localhost`) red
 
 - [Vision](../vision.md) sections 3 and 6.2, [migration ledger](../migration.md), [README](../../README.md)
 - Specs: `openspec/specs/` (`platform-credentials`, `linkedin-integration`, and the modified `dispatch-outbox`, `studio-api`, `studio-cli`, `provenance-log`); the archived change: [add-linkedin-integration-slice-2](../../openspec/changes/archive/2026-10-30-add-linkedin-integration-slice-2/)
+
+## Dated outcome/linkage review: 2026-11-02
+
+Implementation is present in local history at `9e83462`: [LinkedIn adapter](../../crates/syncloom-core/src/linkedin.rs), [Keychain store](../../crates/syncloom-core/src/credentials.rs), [fake HTTP journey](../../crates/syncloom-server/tests/linkedin_api.rs). Q2 native outcome is incomplete/original-limits despite retained HAND text; Q8 r2 is reduced with no challenger report. Credentials are built, scheduling is not; vision 7.1 still defers the scheduler. Real app/redirect/first-post and media-upload prerequisites remain open.
+
+This is source/history inspection, not a fresh platform smoke or newly accepted rationale. Status, agreed boundaries and historical method identity remain unchanged: this record was not made through the current Decide method. [research/0001](research/0001-research-custody-and-retrieval.md) makes only the new reversible custody/retrieval choice and links its executed local evaluation.

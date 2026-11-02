@@ -1,0 +1,17 @@
+{
+  "id": "syncloom-v2-meta-media-hosting-20261031",
+  "question": "Decision: How to host ephemeral public image URLs for Meta (Threads API and Instagram Graph API) publishing from a single-user local-first desktop application on macOS.\nOptions: (1) Object storage with short-lived presigned URLs (Cloudflare R2, AWS S3, or Backblaze B2) where locally generated images are uploaded, signed URLs passed to Meta container creation, and objects deleted once Meta finishes processing; (2) Inbound secure tunnel (Cloudflare Tunnel, Tailscale Funnel, or local loopback tunnel) exposing an ephemeral local HTTP endpoint directly to Meta crawlers during container creation; (3) Dedicated media hosting API.\nConstraints: Single-user operator running on a MacBook; no dedicated persistent backend server fleet; low cost (under $1/month); zero public search indexing or persistent public exposure of user content; 100% reliable ingestion by Meta's crawler bots (no CAPTCHA, Cloudflare bot-management challenge, or user-agent rejection).\nRanked criteria: Meta bot crawler fetch reliability, credential and operational simplicity, privacy/ephemerality, cost.\nCurrent numbers: Image payloads 200 KB to 2 MB (PNG/JPEG); publishing volume 1-10 posts per day; Meta container processing takes 5-60 seconds before status becomes FINISHED.\nWhat would change the answer: Primary evidence showing Meta Graph API/Threads API media crawlers consistently fail on presigned R2/S3 query strings (e.g. signature expiration, header stripping, or TLS handshake issues); or evidence that reverse tunnels trigger Meta crawler anti-bot challenge walls; or documented best practices for single-tenant desktop publisher apps from Meta developer community.\nRequested evidence: Published developer postmortems, official Meta API crawler specifications, real-world failure modes with presigned S3/R2 URLs, and concrete minimal architectures for local-first publisher tools.",
+  "publicApproved": true,
+  "primary": "claude",
+  "challenger": "own-web-search",
+  "model": {
+    "provider": "claude-bridge",
+    "modelId": "claude-sonnet-5-5"
+  },
+  "limits": {
+    "nativeCalls": 32,
+    "coordinatorCalls": 40,
+    "costMicroUsd": 40000000,
+    "wallSeconds": 10800
+  }
+}

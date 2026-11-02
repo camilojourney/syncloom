@@ -51,3 +51,9 @@ Open question: which public media host, retention duration and deletion policy i
 ## References
 
 - [Design](../../openspec/changes/archive/2026-10-30-add-meta-publishing/design.md)
+
+## Dated outcome/linkage review: 2026-11-02
+
+The original branch/not-landed field is historical. Implementation is present in local history at `809c77b`: [Meta publish](../../crates/syncloom-core/src/meta/publish.rs), [fake HTTP carousel/repeat/unknown tests](../../crates/syncloom-server/tests/meta_api.rs). Q3 native incomplete/original-limits remains incomplete after HAND retention. The [media-hosting request](../research/2026-10-31-meta-media-hosting/README.md) has unavailable original result custody; it supplies no finding or permission to choose public hosting, retention, budget or real app setup.
+
+This is source/history inspection, not a fresh platform smoke or newly accepted rationale. Status, agreed boundaries and historical method identity remain unchanged: this record was not made through the current Decide method. [research/0001](research/0001-research-custody-and-retrieval.md) makes only the new reversible custody/retrieval choice and links its executed local evaluation.

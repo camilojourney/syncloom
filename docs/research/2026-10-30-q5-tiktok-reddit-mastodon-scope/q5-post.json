@@ -1,0 +1,36 @@
+{
+ "study": "main969-q5-scope",
+ "phase": "complete",
+ "outcome": null,
+ "usage": {
+  "coordinatorCalls": 17,
+  "nativeCalls": 0,
+  "knownMicroUsd": 78800,
+  "ceilingMicroUsd": 78800,
+  "costKnown": true
+ },
+ "trace": {
+  "id": "cc08fcb260c5dfb9d0d0fd4557b94bb7",
+  "received": 84,
+  "pending": 0
+ },
+ "defaultEligible": false,
+ "primary": "claude",
+ "claude": {
+  "label": "NATIVE",
+  "path": "/Users/camiloslaptop/.local/state/phrona/durable-study-5.0.13-candidate/studies/main969-q5-scope/reports/claude-13ce580e1d566aadca542df93eff2619bbdbfe6647a419597cef6f70ca50c10b.txt",
+  "copy": "/Users/camiloslaptop/.firstmate-homes/phrona-lab/data/phrona-syncloom-studies-20261030/q5-claude-NATIVE-report.txt",
+  "bytes": 23033,
+  "chars": 22489,
+  "sha256": "13ce580e1d566aadca542df93eff2619bbdbfe6647a419597cef6f70ca50c10b",
+  "citations": 110,
+  "url": "https://claude.ai/chat/b9e37486-b2f3-4bf4-9780-1241c94f83fd",
+  "method": "complete-loaded-claude-document"
+ },
+ "failures": {
+  "chatgpt": {},
+  "claude": {
+   "research-not-finished": 2
+  }
+ }
+}

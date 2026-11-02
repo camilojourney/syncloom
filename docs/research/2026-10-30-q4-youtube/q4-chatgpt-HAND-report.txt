@@ -1,0 +1,68 @@
+YouTube Data API Video/Shorts Upload
+
+A Rust app can upload videos (including Shorts) via the YouTube Data API’s videos.insert (resumable upload) to the own channel. Uploaded files can be up to 256 GB and must have MIME video/* or application/octet-stream. The API lets you set all standard metadata: title (snippet.title), description, tags (snippet.tags), category ID, default language, and any localized titles/descriptions. It also supports scheduling (status.publishAt), privacy (status.privacyStatus: public/unlisted/private), embeddability, license, and special flags (status.selfDeclaredMadeForKids for COPPA, status.containsSyntheticMedia for AI-generated content). Thumbnails must be set separately via thumbnails.set (cost 50 units). Captions can be managed via the Captions API (captions.insert/update/delete costs 400/450 units). You can also add a video to playlists via playlistItems.insert (50 units).
+
+Shorts: There is no special “Shorts” endpoint. To publish a Short, upload it just like any video but ensure it meets YouTube’s Short criteria (vertical format, ≤3 minutes long, and include “#Shorts” in the title or description as per YouTube guidelines). (YouTube recognizes a Short by these conventions; the Data API itself has no separate field.)
+
+Importantly, uploads from unverified projects are not forced private – the normal privacy setting applies. (The docs explicitly say “Videos uploaded from unverified API projects are not restricted to private viewing mode.”) You can set a custom thumbnail and other metadata immediately. By default a new video is public unless you set status.privacyStatus; if the channel’s default is private, it applies instead.
+
+Quota Costs and Limits
+
+By default, a new project using the YouTube Data API gets 100 videos.insert calls per day and 100 search.list calls per day, plus 10,000 quota units per day for all other methods. (Daily quotas reset at midnight Pacific Time.) Each videos.insert (upload) call costs only 1 unit (in its own “Video Uploads” bucket) and counts against the 100/day call limit. Likewise, search.list is limited to 100 calls per day (each costing 1 unit). All other API methods draw from the 10,000-unit pool.
+
+Key costs (per Quota Calculator) include:
+
+videos.insert (upload): 100 calls/day, 1 unit each.
+videos.list (read video metadata/statistics): 1 unit.
+search.list: 100 calls/day, 1 unit each.
+Comments: listing threads or replies costs 1 unit, inserting/updating/deleting comments or threads costs 50 units each.
+Playlists: inserting or updating a playlist or playlist item costs 50 units.
+Thumbnails: thumbnails.set costs 50 units.
+Captions: insert 400, update 450, delete 50.
+
+You can view and raise your quotas in the Google Cloud Console (APIs & Services → Quotas). For example, if you need more than 100 uploads or more API units per day, you must request a quota increase through the console.
+
+OAuth / Verification and Refresh Tokens
+
+The app must use OAuth 2.0 with an Installed or Desktop client ID. You’ll likely set up the OAuth consent screen as an External user-type and put your own Google account under “Test users.” In Testing mode (unverified), only listed test users (up to 100 people) can authorize the app. For a single-founder app, you’d add yourself as the sole tester. In this mode, access is limited but sufficient for one user. However, refresh tokens issued to a project in Testing mode expire after 7 days, so your app will need re-authentication each week (unless using only basic profile scopes).
+
+To remove these limits, you “publish” the app for production (External) via Google’s OAuth consent screen. This requires verification by Google’s team. Clicking the Publish button triggers an App Verification process which “can take several days to several weeks”. You may need to supply a YouTube demo video, test account credentials, privacy policy, etc. Once approved, the app can be used by any Google user (not just test users), and refresh tokens won’t auto-expire weekly (though they can still be revoked for other reasons).
+
+In summary:
+
+Option A (Testing mode): No verification needed, but refresh tokens last only 7 days and only up to 100 test users. (Uploads are allowed to be public; they just won’t notify subscribers if not set.)
+Option B (Verified/Production): Requires Google review (days–weeks), then no artificial 7-day expiry and you can scale beyond 100 users if needed.
+Option C (Manual upload): Bypasses OAuth/quotas for uploads since a human does the upload. Your app simply prepares metadata. This avoids verification and token limits entirely, at the cost of manual work. (However, you could still use the API for analytics, comments, etc.)
+Reading Data (Stats, Comments, Search, Analytics)
+
+Once authenticated, the app can read the channel’s own data. For each uploaded video you can fetch basic stats via videos.list?part=statistics (cost 1 unit per call) to get viewCount, likeCount, commentCount, etc. The YouTube Analytics API (a separate service) can provide deeper metrics (watch time, demographics, etc.) for your channel; it uses its own OAuth scopes (e.g. youtube.readonly) and quotas.
+
+For comments and moderation, use the CommentThreads and Comments endpoints:
+
+commentThreads.list (cost 1) to list top-level comments on a video.
+comments.list (cost 1) to list replies within a thread.
+Post replies with comments.insert, and moderate (set status or delete) with comments.setModerationStatus or comments.delete (50 units each).
+
+To search public videos (for research or inspiration), use search.list (cost 1 per call, 100 calls/day). You can filter by query, upload date, or even videoDuration if needed. Keep in mind the 100/day limit – if more search is needed, request higher quotas.
+
+Rust Libraries
+
+There are maintained Rust clients for YouTube API v3. In particular, the google-youtube3 crate (latest 7.0.0+20251222 as of 2026) covers most Data API functionality. It generates Rust types (e.g. google_youtube3::api::Video) and methods for all endpoints. You can use that, or call the REST API directly with an HTTP client and an OAuth2 crate (like yup-oauth2). Note that neither the Data API nor this crate supports YouTube Community Posts (text/image posts on channel feeds) – those must be done via the YouTube website or another interface.
+
+Automation, AI Content, and Policies
+
+Using the API to automate uploads is generally allowed if you comply with all policies. You must declare if content is AI-generated via status.containsSyntheticMedia. If your content is for children, set status.selfDeclaredMadeForKids appropriately. You also must publish and follow a privacy policy for your app if it collects or stores any user data (even your own). The API terms state you must clearly disclose what Google user info you access or store. Do not store more data than necessary or share it improperly. In short, follow the YouTube API Services Terms and [Developer Policies]; violations (spam uploads, scraping beyond allowed data, etc.) can lead to quotas being cut off.
+
+Option Comparison and Recommendations
+
+Option A (Testing mode API): Quickest to set up (no review), fine for one person. Drawback: you must re-authenticate weekly (refresh token expires in 7 days), and only your Google account (or other designated testers) can authorize. Uploads can be public/unlisted as normal. Quotas are limited to defaults, but you can apply to raise them. Good for prototyping or very low-volume use.
+
+Option B (Verified API): Involves Google review (can take days/weeks), but grants stable long-term access. Refresh tokens won’t auto-expire weekly, and others can grant access if needed. You still get the same base quotas, but nothing stops you from requesting more. Recommended if you want fully hands-off automation (especially scheduling) without weekly re-logins, and if you might ever expand beyond yourself. Note: verification may require you to provide things like a privacy policy, app description, and demonstration.
+
+Option C (Manual uploads): No API upload at all. You (or someone) manually uploads the video and thumbnail in YouTube Studio using the title/description that your app prepared. This avoids all OAuth/quota issues for the upload itself, but you lose the ability to schedule publishes or programmatically control the process. You could still use the API for comment moderation, analytics, and playlist management. This might be simplest if you only occasionally upload and don’t need tight automation.
+
+Quota/Cost summary: Uploading videos via API is extremely cheap (1 unit each, 100/day max by default). Reading stats and searching is also cheap. Heavy operations (setting thumbnails, captions, posting comments) cost more (tens to hundreds of units). The default 10,000-unit/day and 100-call limits are generally sufficient for a single-channel app, and quotas can be raised via Google’s console if needed.
+
+Conclusion: For a “local-first” one-person studio, using the Data API (Options A/B) is fully supported and efficient. If you can handle weekly re-auth, Testing mode works immediately. For long-term ease, completing OAuth verification (Option B) is ideal. Only use manual Studio uploads (Option C) if you want to skip all API setup entirely – but even then, the app can still use the API for ancillary tasks (comments, analytics) as desired.
+
+Sources: Official YouTube Data API v3 reference and quotas documentation, Google OAuth docs, and Google Developers guides.
