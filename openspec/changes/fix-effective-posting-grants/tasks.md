@@ -18,8 +18,8 @@
 
 ## 3. Integration and review
 
-- [ ] 3.1 Run tests, fmt, lint, spec/shape/research checks and Code Verify against original base and current parent; retain failed attempts and residue dispositions.
-- [ ] 3.2 Reconcile with local main; coordinate the Token seam with account-approval through firstmate; rerun affected checks, send Main before/after evidence, and commit only the local clean ready branch.
+- [x] 3.1 Run tests, fmt, lint, spec/shape/research checks and Code Verify against original base and current parent; retain failed attempts and residue dispositions.
+- [x] 3.2 Reconcile with local main; coordinate the Token seam with account-approval through firstmate; rerun affected checks, send Main before/after evidence, and commit only the local clean ready branch.
 
 ## Workflow follow-up
 
