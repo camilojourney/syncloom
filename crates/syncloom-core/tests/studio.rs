@@ -19,6 +19,7 @@ fn thought(text: &str) -> ThoughtRequest {
 
 fn status(status: Status, revision: &str) -> ReviewRequest {
     ReviewRequest {
+        expected_target: None,
         status: Some(status),
         text: None,
         expected_revision: revision.to_owned(),
@@ -28,6 +29,7 @@ fn status(status: Status, revision: &str) -> ReviewRequest {
 
 fn edit(text: &str, revision: &str) -> ReviewRequest {
     ReviewRequest {
+        expected_target: None,
         status: None,
         text: Some(text.to_owned()),
         expected_revision: revision.to_owned(),
@@ -496,12 +498,14 @@ async fn a_review_needs_exactly_one_of_status_or_text_and_text_cannot_be_blank()
     let dir = TempDir::new().unwrap();
     let (studio, piece) = drafted(&dir, text("A draft.")).await;
     let both = ReviewRequest {
+        expected_target: None,
         status: Some(Status::Approved),
         text: Some("x".into()),
         expected_revision: piece.revision.clone(),
         expected_assets: None,
     };
     let neither = ReviewRequest {
+        expected_target: None,
         status: None,
         text: None,
         expected_revision: piece.revision.clone(),

@@ -73,6 +73,8 @@ pub fn stored_token(expires_at: &str) -> Token {
     Token {
         access_token: Secret::new(fake_linkedin::DEFAULT_TOKEN),
         expires_at: Some(expires_at.to_owned()),
+        identity_authority: Some("fake-client-id".into()),
+        page_id: None,
         member_id: fake_linkedin::MEMBER_ID.to_owned(),
         scope: "openid,profile,w_member_social".to_owned(),
         obtained_at: "2026-10-30T18:00:00Z".to_owned(),
@@ -300,11 +302,12 @@ pub fn revision_of(piece: &Value) -> String {
 }
 
 pub async fn approve(server: &TestServer, piece: &Value) -> Answer {
+    let context = get(server, &format!("/v1/pieces/{}", id_of(piece))).await;
     patch(
         server,
         &format!("/v1/pieces/{}", id_of(piece)),
-        json!({"status": "approved", "expected_revision": revision_of(piece),
-            "expected_assets": piece.get("assets").map(|a| json!({"image_sha256":a["image_sha256"],"carousel_sha256":a["carousel_sha256"]}))}),
+        json!({"status": "approved", "expected_revision": revision_of(piece), "expected_target":context.body["current_target"],
+            "expected_assets": piece.get("assets").map(|a| json!({"image_sha256":a["image_sha256"],"carousel_sha256":a["carousel_sha256"],"slides_sha256":a.get("slides_sha256").cloned().unwrap_or_else(||json!([]))}))}),
     )
     .await
 }

@@ -46,6 +46,7 @@ impl PieceForm {
             text,
             expected_assets,
             expected_revision: self.expected_revision,
+            expected_target: None,
         })
     }
 

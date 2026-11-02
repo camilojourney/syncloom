@@ -168,6 +168,8 @@ impl Page {
         Ok(Token {
             access_token: self.access_token,
             expires_at: None,
+            identity_authority: None,
+            page_id: Some(self.id),
             member_id: instagram,
             scope: SCOPES.join(" "),
             obtained_at,

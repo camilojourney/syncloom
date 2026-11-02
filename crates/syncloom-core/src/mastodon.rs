@@ -162,10 +162,28 @@ impl Mastodon {
         {
             return Err(StudioError::SignInRejected);
         }
+        #[derive(Deserialize)]
+        struct Identity {
+            id: String,
+        }
+        let identity: Identity = crate::oauth::exchange_json(
+            self.client
+                .get(format!(
+                    "{}/api/v1/accounts/verify_credentials",
+                    self.instance()?
+                ))
+                .bearer_auth(issued.access_token.expose()),
+        )
+        .await?;
+        if !valid_id(&identity.id) {
+            return Err(StudioError::SignInRejected);
+        }
         let token = Token {
             access_token: issued.access_token,
             expires_at: None,
-            member_id: String::new(),
+            identity_authority: None,
+            page_id: None,
+            member_id: identity.id,
             scope: issued.scope,
             obtained_at: self.session.now_rfc3339(),
         };
@@ -275,10 +293,20 @@ impl Mastodon {
 }
 
 impl Platform for Mastodon {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.session.usable_token()?;
+        let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
+        crate::platform::account_target("mastodon", base, &token.member_id)
+    }
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
             let token = self.session.usable_token()?;
+            request.require_target(crate::platform::account_target(
+                "mastodon",
+                base,
+                &token.member_id,
+            ))?;
             let instance: Instance =
                 request_json(self.client.get(format!("{base}/api/v2/instance"))).await?;
             instance.configuration.check_text(&request.text)?;

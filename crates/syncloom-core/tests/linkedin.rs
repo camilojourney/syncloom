@@ -49,6 +49,12 @@ fn linkedin_with(
 
 fn request() -> PostRequest {
     PostRequest {
+        approval_target: syncloom_core::platform::account_target(
+            "linkedin",
+            "fake-client-id",
+            support::fake_linkedin::MEMBER_ID,
+        )
+        .ok(),
         request_id: "dispatch-904f4c443cf556d7f34c6c307a86dfe3".to_owned(),
         text: "A draft about zebrafish.".to_owned(),
         image: None,
@@ -89,6 +95,32 @@ async fn the_standard_authorization_url_carries_the_exact_parameters_and_no_chal
         linkedin.connection().unwrap().status,
         ConnectionStatus::AwaitingConsent
     );
+}
+
+#[tokio::test]
+async fn app_scoped_subjects_do_not_share_an_account_approval()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fake = fake().await;
+    let mut targets = Vec::new();
+    for app in ["synthetic-app-a", "synthetic-app-b"] {
+        let mut config = linkedin_config(&fake.base_url(), free_port(), AuthFlow::Standard, true);
+        config.client_id = Some(app.into());
+        let adapter = Linkedin::new(
+            config,
+            MemoryStore::new(),
+            fixed_clock(),
+            fast().sign_in_deadline,
+        );
+        let start = adapter.sign_in_begin()?;
+        browser(&start.authorization_url).await;
+        adapter.sign_in_wait().await?;
+        targets.push(adapter.posting_target().map_err(|e| format!("{e:?}"))?);
+    }
+    assert_ne!(
+        targets[0], targets[1],
+        "same app-scoped subject is not cross-app account evidence"
+    );
+    Ok(())
 }
 
 fn linkedin_redirect(linkedin: &Linkedin) -> String {

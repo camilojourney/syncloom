@@ -169,7 +169,7 @@ async fn show_piece(
     State(state): State<Arc<AppState>>,
     path: Result<Path<String>, PathRejection>,
 ) -> Result<Response, Failure> {
-    let piece = state.studio.show(&piece_id(path)?)?;
+    let piece = state.studio.review_context(&piece_id(path)?)?;
     Ok(axum::Json(piece).into_response())
 }
 

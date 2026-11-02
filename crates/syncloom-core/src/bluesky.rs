@@ -94,6 +94,7 @@ impl Bluesky {
             .await
             .map_err(|_| StudioError::SignInRejected)?;
         if renewed.did != bundle.session.did {
+            self.credentials.clear()?;
             return Err(StudioError::SignInRejected);
         }
         bundle.session.access_jwt = renewed.access_jwt.clone();
@@ -119,11 +120,23 @@ impl Bluesky {
     }
 }
 impl Platform for Bluesky {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.credentials.usable()?;
+        crate::platform::account_target("bluesky", "", &token.member_id)
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::Bluesky, &request, 1_000_000)?;
             let token = self.credentials.usable()?;
             let bundle: Bundle = decode(&token).map_err(|_| PostFailure::ConsentRequired)?;
+            if bundle.session.did.to_string() != token.member_id {
+                return Err(PostFailure::ConsentRequired);
+            }
+            request.require_target(crate::platform::account_target(
+                "bluesky",
+                "",
+                &token.member_id,
+            ))?;
             let api = AtpServiceClient::new(Transport::new(
                 self.base.clone(),
                 Some(Secret::new(bundle.session.access_jwt.clone())),

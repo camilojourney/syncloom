@@ -80,7 +80,7 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
         reqwest::Method::PATCH,
         &path,
         json!({
-            "expected_revision":rev,"status":"approved","expected_assets":{
+            "expected_revision":rev,"expected_target":get(&server, &path).await.body["current_target"],"status":"approved","expected_assets":{
                 "image_sha256":rendered.body["assets"]["image_sha256"],
                 "carousel_sha256":rendered.body["assets"]["carousel_sha256"]
             }
@@ -161,6 +161,92 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
     assert_eq!(
         get(&server, "/v1/mastodon/connection").await.body,
         signed_out.body
+    );
+}
+
+#[tokio::test]
+async fn mastodon_account_switch_requires_fresh_approval() {
+    let fake = fake_mastodon::start(Default::default()).await;
+    let adapter = Arc::new(Mastodon::new(
+        MastodonConfig::parse(
+            Some(fake.base()),
+            Some(&format!(
+                "http://127.0.0.1:{}/mastodon/callback",
+                free_port()
+            )),
+        )
+        .unwrap(),
+        memory_store::MemoryStore::new(),
+        fixed_clock(),
+        Duration::from_secs(3),
+    ));
+    let server = start_studio(
+        Scripted::new(text("Build with evidence.")),
+        Settings::default(),
+        |s| {
+            s.with_mastodon(adapter.clone())
+                .with_delivery("mastodon", adapter)
+        },
+    )
+    .await;
+    for switched in [false, true] {
+        let start = post_empty(&server, "/v1/mastodon/sign-in").await;
+        client()
+            .get(start.body["authorization_url"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            get(&server, "/v1/mastodon/sign-in").await.body["status"],
+            "signed_in"
+        );
+        if !switched {
+            let created = post(
+                &server,
+                "/v1/thoughts",
+                json!({"text":THOUGHT,"channels":["mastodon"]}),
+            )
+            .await;
+            assert_eq!(
+                approve(&server, &created.body["pieces"][0]).await.status,
+                200
+            );
+            send_json(
+                &server,
+                reqwest::Method::DELETE,
+                "/v1/mastodon/connection",
+                serde_json::Value::Null,
+            )
+            .await;
+            fake.set_account("222");
+        }
+    }
+    let pieces = get(&server, "/v1/pieces").await;
+    let p = &pieces.body["pieces"][0];
+    let path = format!("/v1/pieces/{}/publish", p["piece_id"].as_str().unwrap());
+    let result = post(&server, &path, json!({"expected_revision":p["revision"]})).await;
+    let targets: Vec<_> = fake
+        .calls("statuses")
+        .into_iter()
+        .map(|c| c.target_account)
+        .collect();
+    assert_eq!(
+        result.code(),
+        "account_approval_required",
+        "actual accounts={targets:?}; {}",
+        result.raw
+    );
+    assert!(targets.is_empty());
+    assert_eq!(approve(&server, p).await.status, 200);
+    assert_eq!(
+        post(&server, &path, json!({"expected_revision":p["revision"]}))
+            .await
+            .body["status"],
+        "posted"
+    );
+    assert_eq!(
+        fake.calls("statuses")[0].target_account.as_deref(),
+        Some("222")
     );
 }
 

@@ -54,8 +54,9 @@ pub fn social(
     .unwrap();
     SocialPlatforms::new(config, store, clock, Duration::from_secs(2))
 }
-pub fn text() -> PostRequest {
+pub fn text(platform: &dyn syncloom_core::Platform) -> PostRequest {
     PostRequest {
+        approval_target: platform.posting_target().ok(),
         request_id: "dispatch-test".into(),
         text: "An approved test post.".into(),
         image: None,

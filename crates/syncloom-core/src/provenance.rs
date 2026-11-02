@@ -39,6 +39,9 @@ pub struct Event {
     pub piece_id: String,
     pub channel: Channel,
     pub revision: String,
+    /// The target actually reviewed or claimed for this event, not today's connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_target: Option<String>,
     pub status: Status,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
