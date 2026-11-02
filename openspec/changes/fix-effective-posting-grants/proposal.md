@@ -7,7 +7,7 @@
 pending
 
 New capability requested: none.
-Duplicate kept: none.
+Duplicate kept: Main1360's Meta/OAuth signature fragment355ce241 only; see design.md.
 
 ## Why
 
@@ -31,7 +31,7 @@ None.
 - `platform-credentials`: action readiness, legacy evidence and precise refusal.
 - `threads-integration`: effective evidence after exchange/rotation.
 - `linkedin-integration`: reduced-consent refusal.
-- `x-integration`: optional renewal credentials.
+- `x-integration`: optional renewal credentials and response-scope provenance.
 - `dispatch-outbox`: additive permission outcomes.
 
 Checked LinkedIn, Mastodon, X, Bluesky, Meta, Threads, platform-credentials, dispatch-outbox and studio-api owners. Existing platform protocols and dispatch rules otherwise remain authoritative.
@@ -46,4 +46,4 @@ Timing: after inherited first edits; pre-recovery inventories and broad searches
 
 ## Open questions
 
-Will Main approve the before/after evidence and specifically authorize landing? Independent consequential-policy challenge remains pending.
+Will Main approve the before/after evidence and specifically authorize landing? Main1357/1360 challenge is late and existing-context, not fresh independent review.

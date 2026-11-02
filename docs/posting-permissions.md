@@ -9,7 +9,7 @@ All behavioral proof uses MemoryStore and stateful loopback fakes. Real account 
 | Platform | Pattern / effective evidence | Action boundary | Regression proof |
 |---|---|---|---|
 | LinkedIn | Affected: token response scope was not enforced; legacy returned scope remains evidence | Text needs exact w_member_social, not a substring | server linkedin_api reduced consent, saved grant, exact-token and full-grant controls |
-| X | Affected: saved/rotated reduced grants could appear ready; fresh text incorrectly required a refresh token | Text needs tweet.write and users.read; PNG adds media.write. Offline permission is not needed to post | server social_delivery narrowed refresh, saved denial and fresh text/no-refresh positive; core social_sessions rotation |
+| X | Affected: saved/rotated reduced grants could appear ready; fresh text incorrectly required a refresh token | Text needs tweet.write and users.read; PNG adds media.write. Offline permission is not needed to post | server social_delivery 15-case absent/null/present scope matrix, narrowed refresh, saved denial and fresh text/no-refresh positive; core social_sessions rotation |
 | Mastodon | Affected: saved reduced scopes could appear ready | Text needs write:statuses; PNG adds write:media; broad write covers write children | core mastodon reduced saved grant, text-only positive and image refusal |
 | Facebook Page | Fresh consent already checked provider /me/permissions; legacy requested strings are unverified | Page posting needs pages_manage_posts; selecting a Page still needs pages_show_list and content-creation tasks | core meta fresh per-target positive/negative and legacy/saved denial |
 | Instagram | Same shared Meta evidence issue; grants are target-specific | Posting needs instagram_content_publish; Page discovery and linked professional-account requirements remain independent | core meta independent target grant and legacy controls |
@@ -28,6 +28,14 @@ The existing sign-in operations reconnect: `syncloom linkedin sign-in`, `syncloo
 Historical Meta/Threads bundles deserialize without scope_verified and remain unresolved until reconnection establishes effective evidence. Their old requested scope text is not trusted. Historical LinkedIn/X/Mastodon scopes came from provider token responses.
 
 A failed token exchange preserves prior credentials. A successful rotation is different: the actual narrowed or unverified rotated credential is persisted before reporting its permission error, so the old broader grant cannot remain publish-ready. There is no hidden retry or renewal during publishing. X can post text without a refresh token; explicit refresh then refuses without a request.
+
+## X omission versus malformed evidence
+
+X response decoding preserves absent, null and present as distinct cases. An absent refresh scope may retain the prior provider-returned scope. Fresh absence and explicit null, empty, noncanonical or wrong-typed evidence are unverified, not a grant or known denial. A valid rotated credential with unresolved evidence is saved atomically with empty normalized scope and false provenance, never the old broader scope. Historical nonempty X scope strings retain their provider-returned meaning.
+
+[RFC6749 section5.1](https://www.rfc-editor.org/rfc/rfc6749#section-5.1) makes response scope optional only when identical to requested scope; [section6](https://www.rfc-editor.org/rfc/rfc6749#section-6) separately defines omitted refresh-request scope as the originally granted scope and refers successful responses to5.1. Direct source text was read2026-11-02. This informs the bounded omission policy; it does not establish X conformance or permit interpreting null as omission. The legacy comma/whitespace parser is not used to invent grants from noncanonical new X response values.
+
+Permission-unverified means no publishing write was sent. Outbox unknown instead means an effect may already have occurred. Token obtained_at is acquisition time, not a claim of remotely verified current permission. Generic403 does not establish a permission-specific revocation.
 
 ## Threads source check
 

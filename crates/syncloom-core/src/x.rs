@@ -11,9 +11,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 pub const SCOPES: &str = "tweet.read tweet.write users.read media.write offline.access";
-fn posting_granted(scope: &str) -> bool {
-    crate::credentials::posting_scope(crate::Channel::X, scope, false)
-}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CostEstimate {
     pub currency: String,
@@ -57,12 +54,45 @@ struct Bundle {
     access_token: Secret,
     refresh_token: Option<Secret>,
 }
+#[derive(Default)]
+enum ResponseScope {
+    #[default]
+    Absent,
+    Null,
+    Present(serde_json::Value),
+}
+impl<'de> Deserialize<'de> for ResponseScope {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match serde_json::Value::deserialize(deserializer)? {
+            serde_json::Value::Null => Self::Null,
+            value => Self::Present(value),
+        })
+    }
+}
+impl ResponseScope {
+    fn resolve(self, old: Option<&Token>) -> Option<String> {
+        match self {
+            Self::Absent => old.map(|token| token.scope.clone()),
+            Self::Present(serde_json::Value::String(scope)) if valid_response_scope(&scope) => {
+                Some(scope)
+            }
+            _ => None,
+        }
+    }
+}
+fn valid_response_scope(scope: &str) -> bool {
+    !scope.trim().is_empty()
+        && scope.bytes().all(|byte| {
+            byte == b' ' || (byte.is_ascii_graphic() && !matches!(byte, b',' | b'"' | b'\\'))
+        })
+}
 #[derive(Deserialize)]
 pub(crate) struct Issued {
     access_token: Secret,
     refresh_token: Option<Secret>,
     expires_in: u64,
-    scope: Option<String>,
+    #[serde(default)]
+    scope: ResponseScope,
     token_type: String,
 }
 pub struct X {
@@ -123,25 +153,17 @@ impl X {
         old: Option<&Token>,
         generation: u64,
     ) -> Result<(), StudioError> {
-        let Some(scope) = issued.scope.or_else(|| old.map(|t| t.scope.clone())) else {
-            return Err(StudioError::PostingPermissionUnverified);
-        };
-        let can_post = posting_granted(&scope);
-        if !can_post && old.is_none() {
-            return Err(StudioError::PostingPermissionMissing);
-        }
-        if !issued.token_type.eq_ignore_ascii_case("bearer")
+        let (scope, scope_verified) = issued
+            .scope
+            .resolve(old)
+            .map(|scope| (scope, true))
+            .unwrap_or_default();
+        let invalid_credential = !issued.token_type.eq_ignore_ascii_case("bearer")
             || issued.access_token.expose().is_empty()
-        {
-            return Err(StudioError::SignInRejected);
-        }
-        if issued
-            .refresh_token
-            .as_ref()
-            .is_some_and(|token| token.expose().is_empty())
-        {
-            return Err(StudioError::SignInRejected);
-        }
+            || issued
+                .refresh_token
+                .as_ref()
+                .is_some_and(|token| token.expose().is_empty());
         let refresh_token = issued
             .refresh_token
             .or_else(|| {
@@ -149,21 +171,34 @@ impl X {
                     .and_then(|b| b.refresh_token)
             })
             .filter(|s| !s.expose().is_empty());
-        self.context.credentials.commit(
-            generation,
-            encode(&Bundle {
+        let mut token = Token {
+            access_token: encode(&Bundle {
                 access_token: issued.access_token,
                 refresh_token,
             })?,
-            crate::social::expiry(self.context.credentials.clock.as_ref(), issued.expires_in)?,
-            String::new(),
+            expires_at: None,
+            member_id: String::new(),
             scope,
-        )?;
-        // A successful rotation's narrowed grant replaces stale authorization evidence.
-        if !can_post {
-            return Err(StudioError::PostingPermissionMissing);
+            scope_verified,
+            obtained_at: self.context.credentials.clock.now_rfc3339(),
+        };
+        let permission = token
+            .posting_permission(crate::Channel::X, false)
+            .map_err(|e| e.error());
+        // Preserve fresh consent-error precedence before credential/expiry validation.
+        if permission.is_err() && old.is_none() {
+            return permission;
         }
-        Ok(())
+        if invalid_credential {
+            return Err(StudioError::SignInRejected);
+        }
+        token.expires_at = Some(crate::social::expiry(
+            self.context.credentials.clock.as_ref(),
+            issued.expires_in,
+        )?);
+        // A valid rotation replaces token and evidence together, even if evidence is unknown.
+        self.context.credentials.commit_token(generation, &token)?;
+        permission
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.session.sign_out()

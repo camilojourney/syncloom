@@ -11,7 +11,7 @@ Decision records for syncloom.v2. Historical flat `NNNN-<topic>.md` identities r
 | [0005 Owned Facebook Page and linked Instagram delivery](0005-meta-integration.md) | Proposed |
 | [0006 Bluesky, X and Threads publishing](0006-social-platform-integrations.md) | Proposed |
 | [research/0001 Original study custody and direct retrieval](research/0001-research-custody-and-retrieval.md) | Accepted within delegated reversible engineering scope, decide@1.3.1; not product acceptance |
-| [posting-permissions/0001 Effective posting grants](posting-permissions/0001-effective-grants.md) | Proposed, decide@1.3.1; challenger and Main landing review pending |
+| [posting-permissions/0001 Effective posting grants](posting-permissions/0001-effective-grants.md) | Accepted bounded repair, decide@1.3.1; late existing-context Main1360 challenge, security landing pending |
 | [frontend/0007 Small Rust server-rendered text studio](frontend/0007-text-studio-frontend-stack.md) | Delegated implementation selection, decide@1.3.1 |
 | [frontend/0008 Provisional mineral-botanical palette/type](frontend/0008-text-studio-palette-and-typography.md) | Provisional direction, not captain taste acceptance, decide@1.3.1 |
 
@@ -44,4 +44,4 @@ The immutable legacy checker treats nested records as files needing a listed has
 | `research/0001-research-custody-and-retrieval.md` | `project-authored domain decision; structure owned by current Code Verify` | `4b77fce5d2127ae7a842744697afe401572c4294b456d45128a6ccb2ad8963ff` |
 | `frontend/0007-text-studio-frontend-stack.md` | `project-authored import of completed decide packet; original bytes retained in design archive` | `9212471c0651d080b4590d1da92fdafed7e950d48a72cd7517fb1021630f2654` |
 | `frontend/0008-text-studio-palette-and-typography.md` | `project-authored import of completed decide packet; original bytes retained in design archive` | `419c967692c259ee27b364d86bfa9992f9b592b5824127abfd8333ea8ad7622a` |
-| `posting-permissions/0001-effective-grants.md` | `project-authored proposed domain decision; structure owned by current Code Verify` | `a49769fc113f48d3d6b847aff9fc6352507c6b4a4ecdfb64d7ebc6b24d180687` |
+| `posting-permissions/0001-effective-grants.md` | `project-authored domain decision; structure owned by current Code Verify` | `90d2b1de78a64fd90f11cc9a4e13ed7691303afee39da46db592a2262ec712a2` |
