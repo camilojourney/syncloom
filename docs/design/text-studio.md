@@ -14,7 +14,7 @@ The browser studio is small Rust/Axum server-rendered HTML, with native forms an
 | Accent / hover / ink | #1b5442 / #133e30 / #ffffff | #34d399 / #6ee7b7 / #091e16 |
 | Accent tint / focus | #e6f0ec / #b45309 | #132a23 / #fbbf24 |
 
-OS/browser `prefers-color-scheme` selects light/dark. Status words and authored CSS geometry distinguish Review from Publish intent and Last operation; color alone never carries a result. Native disabled buttons remain readable. Visible3px focus, skip link, native checkboxes/details/forms and minimum44px controls support keyboard use. No optimistic sent state, fake loading bar or client-only validation.
+OS/browser `prefers-color-scheme` selects light/dark. Status words and authored CSS geometry distinguish Review from Publish intent and Last operation; color alone never carries a result. Native disabled buttons remain readable and do not use the accent or subtle fill. Visible3px focus, skip link, native checkboxes/details/forms and minimum44px controls support keyboard use. No optimistic sent state, fake loading bar or client-only validation.
 
 ## Screens and honest states
 

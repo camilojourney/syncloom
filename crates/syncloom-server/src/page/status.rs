@@ -19,7 +19,7 @@ pub(super) fn label(value: &str) -> &'static str {
 }
 
 fn presentation(value: &str) -> (&'static str, &'static str) {
-    if let Some((label, _)) = posting_permission_copy(value) {
+    if let Some(label) = posting_label(value) {
         return ("failed", label);
     }
     match value {
@@ -42,25 +42,34 @@ pub(super) fn badge(role: &str, label: &str) -> String {
     )
 }
 
-// One view-copy pair per additive outcome. Credential code owns permission decisions.
-fn posting_permission_copy(value: &str) -> Option<(&'static str, &'static str)> {
+fn posting_label(value: &str) -> Option<&'static str> {
     match value {
-        "posting_permission_missing" => Some((
-            "Posting permission missing",
-            "connected, cannot post: posting permission missing. Sign in again to reconnect.",
+        "posting_permission_missing" => Some("Posting permission missing"),
+        "posting_permission_unverified" => Some("Posting permission unverified"),
+        _ => None,
+    }
+}
+
+/// Browser sentences for stable readiness reasons. Credential code owns the decision.
+pub(super) fn readiness_sentence(reason: &str, platform: &str) -> Option<String> {
+    match reason {
+        "posting_permission_missing" => Some(format!(
+            "Your {platform} account is connected, but Syncloom isn't allowed to post to it. Reconnect and allow posting."
         )),
-        "posting_permission_unverified" => Some((
-            "Posting permission unverified",
-            "connected, cannot post: posting permission could not be verified. Sign in again to reconnect.",
+        "posting_permission_unverified" => Some(format!(
+            "Syncloom couldn't confirm it's allowed to post to your {platform} account. Reconnect to check again."
+        )),
+        "identity_unconfirmed" => Some(format!(
+            "Syncloom couldn't confirm this is your {platform} account. Reconnect to check again."
         )),
         _ => None,
     }
 }
 
 /// Intent-local descriptions, never claims about complete piece or account history.
-pub(super) fn explanation(status: &str) -> &'static str {
-    if let Some((_, explanation)) = posting_permission_copy(status) {
-        return explanation;
+pub(super) fn explanation(status: &str, platform: &str) -> String {
+    if let Some(sentence) = readiness_sentence(status, platform) {
+        return sentence;
     }
     match status {
         "contained" => "Nothing was sent to the platform. Your post stays saved on this laptop.",
@@ -83,4 +92,5 @@ pub(super) fn explanation(status: &str) -> &'static str {
         }
         _ => "Check your platform account to find out whether this was sent.",
     }
+    .to_owned()
 }

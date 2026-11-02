@@ -296,6 +296,26 @@ async fn assert_transient_identity_recovery(
             ),
             (403, "identity_unconfirmed", Some("identity_unconfirmed"))
         );
+        assert_eq!(
+            connection.body["message"],
+            "connected, cannot post: account identity could not be confirmed. Sign in again."
+        );
+        let label = if platform == "x" { "X" } else { "Threads" };
+        let page = get(
+            &server,
+            &format!("/review/{}", piece["piece_id"].as_str().ok_or("piece")?),
+        )
+        .await;
+        assert!(
+            page.raw.contains(&format!(
+                "Syncloom couldn&#39;t confirm this is your {label} account. Reconnect to check again."
+            )),
+            "{}",
+            page.raw
+        );
+        assert!(!page.raw.contains("connected, cannot post:"));
+        assert!(page.raw.contains("Reconnect account"));
+        assert!(page.raw.contains("disabled>Publish"));
         let before = fake.calls().len();
         let refused = post(
             &server,

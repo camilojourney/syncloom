@@ -43,6 +43,42 @@ async fn setup(
     .await;
     (server, q, clock, store)
 }
+
+/// Studio and provider share one movable clock, starting at the historical approval instant.
+async fn setup_timed(
+    fake: &fake::Fake,
+    platform: &str,
+    granted: bool,
+) -> (
+    TestServer,
+    Arc<SocialPlatforms>,
+    Arc<fixture::TestClock>,
+    Arc<memory_store::MemoryStore>,
+) {
+    let clock = Arc::new(fixture::TestClock(std::sync::Mutex::new(
+        time::macros::datetime!(2026-10-30 18:00 UTC),
+    )));
+    let store = memory_store::MemoryStore::new();
+    let q = Arc::new(fixture::social(fake, store.clone(), clock.clone()));
+    let adapter = adapter(&q, platform);
+    let attached = q.clone();
+    let studio_clock = clock.clone();
+    let server = start_studio_at(
+        Scripted::new(text("Build with evidence.")),
+        Settings::default(),
+        studio_clock,
+        |s| {
+            let s = s.with_social(attached);
+            if granted {
+                s.with_delivery(platform, adapter)
+            } else {
+                s
+            }
+        },
+    )
+    .await;
+    (server, q, clock, store)
+}
 #[expect(
     clippy::panic,
     reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
@@ -843,7 +879,7 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
 -> Result<(), Box<dyn std::error::Error>> {
     for posted_a in [false, true] {
         let fake = fake::Fake::bluesky().await;
-        let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+        let (server, _, clock, _) = setup_timed(&fake, "bluesky", true).await;
         login(&server, "bluesky").await;
         let p = draft(&server, "bluesky", false).await;
         let id = p["piece_id"].as_str().ok_or("piece id")?;
@@ -939,6 +975,7 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
         );
         assert!(!page.raw.contains("badge-approved\">Review: Approved"));
         assert!(page.raw.contains("Historical approval on <time"));
+        assert!(page.raw.contains("2026-10-30T18:00:00Z"));
         assert!(!page.raw.contains("<p>Approved on <time"));
         let explanation = page
             .raw
@@ -991,6 +1028,7 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
                 .count(),
             before
         );
+        *clock.0.lock().map_err(|_| "controlled studio clock")? += time::Duration::hours(8);
         let fresh_fields = [
             ("csrf", server.token.as_str()),
             ("expected_revision", revision),
@@ -1006,11 +1044,26 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
         )
         .await;
         assert_eq!(fresh.status, 200);
-        assert!(fresh.raw.contains("2026-10-30</time>"));
+        assert!(fresh.raw.contains("2026-10-31T02:00:00Z"));
+        assert!(fresh.raw.contains("2026-10-31</time>"));
+        assert!(!fresh.raw.contains("2026-10-30"));
         assert!(fresh.raw.contains("badge-approved\">Review: Approved"));
         assert!(fresh.raw.contains("<p>Approved on <time"));
         assert!(!fresh.raw.contains("Historical approval"));
         assert!(!fresh.raw.contains(&format!("action=\"{path}/approve\"")));
+        let reviewed: Vec<_> = events(&server.dir)
+            .into_iter()
+            .filter(|event| event["event"] == "piece_reviewed" && event["status"] == "approved")
+            .map(|event| event["at"].as_str().unwrap_or("").to_owned())
+            .collect();
+        assert_eq!(
+            reviewed,
+            vec![
+                "2026-10-30T18:00:00Z".to_owned(),
+                "2026-10-31T02:00:00Z".to_owned()
+            ],
+            "displayed dates must match the approval events"
+        );
         if let Some(old) = first_request {
             assert!(
                 !fresh.raw.contains(old.as_str().ok_or("A request")?),
@@ -1652,8 +1705,29 @@ async fn assert_permission_review(
     let denied = get(&server, &page_path).await;
     assert_eq!(denied.status, 200);
     assert_eq!(disabled(&denied.raw), Some(true));
-    assert!(denied.raw.contains("connected, cannot post:"));
-    assert!(denied.raw.contains("Sign in again to reconnect."));
+    let sentence = if expected == "posting_permission_missing" {
+        "Your Threads account is connected, but Syncloom isn&#39;t allowed to post to it. Reconnect and allow posting."
+    } else {
+        "Syncloom couldn&#39;t confirm it&#39;s allowed to post to your Threads account. Reconnect to check again."
+    };
+    assert!(denied.raw.contains(sentence), "{}", denied.raw);
+    assert!(!denied.raw.contains("connected, cannot post:"));
+    assert!(denied.raw.contains("Reconnect account"));
+    let css = get(&server, "/studio.css").await;
+    assert!(
+        css.raw.contains(
+            "button:disabled { background: var(--surface); color: var(--muted); border-color: var(--border); cursor: not-allowed; }"
+        ),
+        "disabled Publish must not use the pale subtle or accent fill"
+    );
+    assert!(
+        !css.raw
+            .contains("button:disabled { background: var(--subtle)")
+    );
+    assert!(
+        !css.raw
+            .contains("button:disabled { background: var(--accent)")
+    );
     let published = post(
         &server,
         &publish_path(&piece),
@@ -1663,6 +1737,8 @@ async fn assert_permission_review(
     assert_eq!(published.body["status"], expected);
     let receipt = get(&server, &page_path).await;
     assert_eq!(disabled(&receipt.raw), Some(true));
+    assert!(receipt.raw.contains(sentence), "{}", receipt.raw);
+    assert!(!receipt.raw.contains("connected, cannot post:"));
     assert!(receipt.raw.contains(label));
     assert!(
         !receipt.raw.contains("Sending not confirmed"),

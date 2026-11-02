@@ -30,13 +30,15 @@ pub(super) fn piece_page(
     let publish_badge = record
         .map(|r| status::delivery(r.status.as_str(), "Publishing"))
         .unwrap_or_default();
-    let receipt_html = record.map(receipt_view).unwrap_or_default();
+    let receipt_html = record
+        .map(|record| receipt_view(record, channel))
+        .unwrap_or_default();
     let last_operation = match piece.publish_status.as_deref() {
         // Only hide an exact duplicate of the visible banner, never separate export history.
         Some(s) if record.is_some_and(|r| r.status.as_str() == s) => String::new(),
         Some(s) => format!(
             r#"<p class="hint last-operation">Most recently: <strong>{}</strong>. {}</p><details class="operation-details"><summary>Latest action details</summary><p class="hint">Last operation: {}</p></details>"#,
-            status::label(s), status::explanation(s), escape(s)
+            status::label(s), status::explanation(s, channel), escape(s)
         ),
         None if record.is_some() => String::new(),
         None => "<p class=\"hint\">This version hasn't been sent. Approval alone does not connect an account or allow publishing.</p>".into(),
@@ -229,12 +231,15 @@ fn cannot_post_note(state: &AppState, piece: &Piece) -> Option<String> {
     if connection.status != ConnectionStatus::CannotPost {
         return None;
     }
-    let message = connection
-        .message
-        .unwrap_or_else(|| "connected, cannot post: posting permission missing.".into());
+    let platform = piece.channel.display_name();
+    let sentence = connection
+        .reason
+        .as_deref()
+        .and_then(|reason| status::readiness_sentence(reason, platform))
+        .or_else(|| status::readiness_sentence("posting_permission_missing", platform))?;
     Some(format!(
-        r#"<p class="hint">{} Sign in again to reconnect.</p><form method="post" action="/review/{}/reconnect">{}<button class="secondary" type="submit">Reconnect account</button></form>"#,
-        escape(&message),
+        r#"<p class="hint">{}</p><form method="post" action="/review/{}/reconnect">{}<button class="secondary" type="submit">Reconnect account</button></form>"#,
+        escape(&sentence),
         escape(&piece.piece_id),
         csrf(state)
     ))
@@ -265,7 +270,7 @@ fn cost_confirmation(state: &AppState, piece: &Piece, accepted: bool) -> String 
 }
 
 /// Publish redirects here: one persisted snapshot owns both receipt and visible actions.
-fn receipt_view(record: &DispatchIntent) -> String {
+fn receipt_view(record: &DispatchIntent, platform: &str) -> String {
     let status = record.status.as_str();
     let attempts = record.attempts;
     let estimate = record.cost_estimate.as_ref().map(|cost| format!(
@@ -275,7 +280,7 @@ fn receipt_view(record: &DispatchIntent) -> String {
     format!(
         r#"<section class="receipt" aria-label="Publishing result"><div class="receipt-heading"><h2>{}</h2><span class="hint">Publishing result</span></div><p>{}</p><details class="receipt-details"><summary>Publishing details</summary><p class="hint">Status: {status}. Request: <code class="hash">{}</code> · Attempts: {attempts}</p><p class="hint receipt-detail">Post id: {} · Post URL: {}</p>{estimate}</details></section>"#,
         status::label(status),
-        status::explanation(status),
+        status::explanation(status, platform),
         escape(&record.request_id),
         escape(record.post_id.as_deref().unwrap_or("not recorded")),
         escape(record.post_url.as_deref().unwrap_or("not recorded"))

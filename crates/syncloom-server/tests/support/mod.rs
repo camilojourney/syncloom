@@ -130,20 +130,29 @@ pub async fn start_with(provider: Arc<Scripted>, settings: Settings) -> TestServ
     start_studio(provider, settings, |studio| studio).await
 }
 
+pub async fn start_studio(
+    provider: Arc<Scripted>,
+    settings: Settings,
+    shape: impl FnOnce(Studio) -> Studio,
+) -> TestServer {
+    start_studio_at(provider, settings, fixed_clock(), shape).await
+}
+
 #[expect(
     clippy::unwrap_used,
     reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
 )]
-pub async fn start_studio(
+pub async fn start_studio_at(
     provider: Arc<Scripted>,
     settings: Settings,
+    clock: Arc<dyn syncloom_core::Clock>,
     shape: impl FnOnce(Studio) -> Studio,
 ) -> TestServer {
     let dir = TempDir::new().unwrap();
     let studio = shape(Studio::new(
         Store::open(dir.path()).unwrap(),
         provider,
-        fixed_clock(),
+        clock,
         settings,
     ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

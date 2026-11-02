@@ -138,7 +138,7 @@ button, .button {
 }
 button:hover:not(:disabled), .button:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
 button:active:not(:disabled), .button:active { transform: translateY(1px); }
-button:disabled { background: var(--subtle); color: var(--secondary); border-color: var(--control-border); cursor: not-allowed; }
+button:disabled { background: var(--surface); color: var(--muted); border-color: var(--border); cursor: not-allowed; }
 button.secondary, .button.secondary { background: var(--surface); border-color: var(--control-border); color: var(--ink); }
 button.secondary:hover, .button.secondary:hover { background: var(--subtle); border-color: var(--control-border); }
 .composer button { width: 100%; }
