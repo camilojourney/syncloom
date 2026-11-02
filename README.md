@@ -23,7 +23,7 @@ cargo run -p syncloom-server            # binds 127.0.0.1:8790, override with SY
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-Open **http://127.0.0.1:8790/** in the laptop browser to see thoughts and pieces, edit a draft, render phone-sized PNG/PDF previews, approve the exact revision and hashes, and explicitly publish through the existing outbox. Edits open on a separate screen so unsaved text cannot be mistaken for an approved draft. [Browser studio and HTTP session protection](docs/studio.md).
+Open **http://127.0.0.1:8790/** in the laptop browser to draft for selected channels, read your full saved text in light or dark mode, edit a draft, render phone-sized PNG/PDF previews, approve the exact revision and hashes, and explicitly publish through the existing outbox. Edits open on a separate screen so unsaved text cannot be mistaken for an approved draft. [Browser studio and HTTP session protection](docs/studio.md).
 
 Command line, same core, same errors:
 
@@ -121,7 +121,7 @@ Export requires current approval, produces text and optional PNG/PDF files plus 
 
 [Q1 platform guide](docs/social-platforms.md) covers app-password/PKCE/Meta consent, explicit refresh, Keychain-only credentials, protected connection operations and configuration. The new channels are `bluesky`, `x` and `threads`; each has its own local fake E2E proof, not live proof.
 
-X dry runs show a dated integer-micro-USD estimate: USD 0.015 plain or USD 0.200 with URL-like text, plus USD 0.005 for PNG alt metadata. Granted X delivery requires exact `accepted_cost_microusd` confirmation (CLI `--accepted-cost-microusd` or the review checkbox); the estimate stays with every outcome and is never called an actual charge. Threads redirect hosting and public image hosting remain written open questions; no host is invented.
+X dry runs show a dated integer-micro-USD estimate: USD 0.015 plain or USD 0.200 with URL-like text, plus USD 0.005 for PNG alt metadata. Granted X delivery requires exact `accepted_cost_microusd` confirmation (CLI `--accepted-cost-microusd` or the separate review cost-acceptance form); the estimate stays with every outcome and is never called an actual charge. Threads redirect hosting and public image hosting remain written open questions; no host is invented.
 
 ```sh
 cargo run -p syncloom-cli -- thought --text "<thought>" --channel bluesky

@@ -235,7 +235,7 @@ async fn saved_new_channels_are_not_mislabeled_as_linkedin_in_the_browser() {
         assert!(
             review
                 .raw
-                .contains(&format!("class=\"eyebrow\">{display}</p>"))
+                .contains(&format!("class=\"channel-name\">{display}</p>"))
         );
         assert!(review.raw.contains(&format!("{display} preview")));
         assert!(!review.raw.contains("Visual uploads remain contained."));

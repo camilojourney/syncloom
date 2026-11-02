@@ -1,6 +1,9 @@
 //! The one owner of channel identities, their platforms and text bounds (`platform-rules`).
 use serde::{Deserialize, Serialize};
 
+/// Additional UTF-8 byte cap alongside Bluesky's grapheme bound, shared with previews.
+pub const BLUESKY_MAX_BYTES: usize = 3000;
+
 /// A channel a piece is drafted for. The table of channels is this enum and its methods;
 /// no other module carries a channel name or a limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -80,6 +83,24 @@ impl Channel {
             _ => "characters",
         }
     }
+    /// Explain the implemented count without claiming exact remote-service parity.
+    pub fn count_explanation(self) -> &'static str {
+        match self {
+            Channel::Bluesky => {
+                "Characters count graphemes: a combined letter or emoji can count as one. A separate UTF-8 byte limit also applies."
+            }
+            Channel::X => {
+                "Characters use the app's conservative weighted units, not an exact X counter: Unicode values through U+10FF count as one, others as two. X may count links and other text differently."
+            }
+            Channel::Threads => {
+                "Characters use a conservative UTF-8 bytes count here. A letter or emoji can occupy more than one byte; this is not an exact Threads character counter."
+            }
+            _ => {
+                "Characters count Unicode scalar values, including spaces and line breaks. A combined letter or emoji can count as more than one."
+            }
+        }
+    }
+
     /// Retained from the old pipeline for LinkedIn text: 20 to 3000 characters.
     pub fn bounds(self) -> Bounds {
         match self {
@@ -153,7 +174,7 @@ pub fn fit(channel: Channel, text: &str) -> Fit {
         Channel::Threads => text.len(),
         _ => text.chars().count(),
     };
-    let bytes_fit = channel != Channel::Bluesky || text.len() <= 3000;
+    let bytes_fit = channel != Channel::Bluesky || text.len() <= BLUESKY_MAX_BYTES;
     let verdict = if bytes_fit && (min_chars..=max_chars).contains(&char_count) {
         Verdict::Pass
     } else {

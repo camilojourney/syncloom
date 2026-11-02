@@ -12,7 +12,7 @@ use crate::provenance::Event;
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
 };
 
@@ -213,6 +213,26 @@ impl Lock<'_> {
         Ok(bundle)
     }
 
+    /// Look up the recorded approval time, never a later export or dispatch timestamp.
+    /// Stream the local history under the caller's lock; missing history is unavailable.
+    pub(crate) fn approval_at(&self, piece_id: &str, revision: &str) -> io::Result<Option<String>> {
+        let path = self.store.root.join(PROVENANCE).join(EVENTS);
+        let Some(metadata) = optional_record(fs::symlink_metadata(&path))? else {
+            return Ok(None);
+        };
+        if !metadata.file_type().is_file() {
+            return Err(io::Error::other("event log is not a regular file"));
+        }
+        let mut approved_at = None;
+        for line in io::BufReader::new(File::open(path)?).lines() {
+            let event: Event = serde_json::from_str(&line?).map_err(io::Error::other)?;
+            if matches_approval(&event, piece_id, revision) {
+                approved_at = Some(event.at);
+            }
+        }
+        Ok(approved_at)
+    }
+
     /// Append one event line and flush it to disk. Earlier lines are never touched.
     pub fn append_event(&self, event: &Event) -> io::Result<()> {
         let mut line = serde_json::to_vec(event).map_err(io::Error::other)?;
@@ -226,6 +246,19 @@ impl Lock<'_> {
     }
 }
 
+/// Match the exact approved version, never a later dispatch or another revision.
+fn matches_approval(event: &Event, piece_id: &str, revision: &str) -> bool {
+    event.piece_id == piece_id
+        && event.revision == revision
+        && matches!(
+            (event.event, event.status),
+            (
+                crate::provenance::EventKind::PieceReviewed,
+                crate::piece::Status::Approved
+            )
+        )
+}
+
 fn checked_directory(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.is_dir() && !meta.file_type().is_symlink() {
@@ -237,14 +270,21 @@ fn checked_directory(path: &Path) -> io::Result<()> {
 
 /// `None` when the file does not exist; a corrupt file is an error, never a silent `None`.
 fn read_json<T: DeserializeOwned>(path: &Path) -> io::Result<Option<T>> {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
+    let Some(file) = optional_record(File::open(path))? else {
+        return Ok(None);
     };
-    serde_json::from_slice(&bytes)
+    serde_json::from_reader(io::BufReader::new(file))
         .map(Some)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
+/// One missing-record policy for streamed JSON records and provenance history.
+fn optional_record<T>(result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(record) => Ok(Some(record)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {

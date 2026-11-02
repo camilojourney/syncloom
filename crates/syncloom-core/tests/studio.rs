@@ -82,6 +82,138 @@ fn nothing_stored(dir: &TempDir) {
     assert!(support::events(dir).is_empty(), "an event was appended");
 }
 
+// [itest->req~dispatch-outbox.current-publish-inspection~1]
+#[tokio::test]
+async fn publish_inspection_is_revision_scoped_read_only_and_fails_closed() {
+    use syncloom_core::outbox::{IntentStatus, intent_key};
+    let dir = TempDir::new().unwrap();
+    let (studio, piece) = approved(&dir).await;
+    assert_eq!(
+        studio.inspect_publish("missing").unwrap_err(),
+        StudioError::PieceNotFound
+    );
+    assert!(
+        studio
+            .inspect_publish(&piece.piece_id)
+            .unwrap()
+            .publish_intent
+            .is_none()
+    );
+    studio
+        .publish(&piece.piece_id, publish(&piece.revision, false))
+        .await
+        .unwrap();
+    let key = intent_key("publish", &piece.piece_id, &piece.revision);
+    let store = Store::open(dir.path()).unwrap();
+    let mut intent = store.lock().unwrap().load_intent(&key).unwrap().unwrap();
+    intent.status = IntentStatus::Posting;
+    store.lock().unwrap().save_intent(&key, &intent).unwrap();
+    let before = support::events(&dir);
+    let bytes = std::fs::read(dir.path().join("outbox").join(format!("{key}.json"))).unwrap();
+    let snapshot = studio.inspect_publish(&piece.piece_id).unwrap();
+    assert_eq!(snapshot.piece.revision, piece.revision);
+    assert_eq!(snapshot.approved_at.as_deref(), Some(FIXED_AT));
+    assert_eq!(
+        snapshot.publish_intent.unwrap(),
+        intent,
+        "GET must not normalize Posting to Unknown"
+    );
+    assert_eq!(support::events(&dir), before);
+    assert_eq!(
+        std::fs::read(dir.path().join("outbox").join(format!("{key}.json"))).unwrap(),
+        bytes
+    );
+    let edited = studio
+        .review(
+            &piece.piece_id,
+            edit("A new synthetic revision.", &piece.revision),
+        )
+        .unwrap();
+    assert!(
+        studio
+            .inspect_publish(&edited.piece_id)
+            .unwrap()
+            .publish_intent
+            .is_none()
+    );
+    let new_key = intent_key("publish", &edited.piece_id, &edited.revision);
+    std::fs::write(
+        dir.path().join("outbox").join(format!("{new_key}.json")),
+        b"corrupt",
+    )
+    .unwrap();
+    assert_eq!(
+        studio.inspect_publish(&edited.piece_id).unwrap_err(),
+        StudioError::Internal
+    );
+}
+
+#[tokio::test]
+async fn approval_time_comes_from_matching_history_not_later_activity_or_a_guessed_date() {
+    let dir = TempDir::new().unwrap();
+    let (studio, piece) = approved(&dir).await;
+    let log = dir.path().join("provenance/events.jsonl");
+    let original = std::fs::read(&log).unwrap();
+    let mut other = support::events(&dir).last().unwrap().clone();
+    other["event"] = serde_json::json!("piece_exported");
+    other["at"] = serde_json::json!("2026-11-03T19:00:00Z");
+    let store = Store::open(dir.path()).unwrap();
+    store
+        .lock()
+        .unwrap()
+        .append_event(&serde_json::from_value(other.clone()).unwrap())
+        .unwrap();
+    other["event"] = serde_json::json!("piece_reviewed");
+    other["revision"] = serde_json::json!("another-revision");
+    store
+        .lock()
+        .unwrap()
+        .append_event(&serde_json::from_value(other).unwrap())
+        .unwrap();
+    let before = std::fs::read(&log).unwrap();
+    assert_eq!(
+        studio
+            .inspect_publish(&piece.piece_id)
+            .unwrap()
+            .approved_at
+            .as_deref(),
+        Some(FIXED_AT)
+    );
+    assert_eq!(
+        std::fs::read(&log).unwrap(),
+        before,
+        "date lookup never writes history"
+    );
+    std::fs::remove_file(&log).unwrap();
+    assert!(
+        studio
+            .inspect_publish(&piece.piece_id)
+            .unwrap()
+            .approved_at
+            .is_none(),
+        "legacy records without history do not get invented dates"
+    );
+    std::fs::write(&log, b"not-json\n").unwrap();
+    assert_eq!(
+        studio.inspect_publish(&piece.piece_id).unwrap_err(),
+        StudioError::Internal
+    );
+    std::fs::write(&log, original).unwrap();
+    let edited = studio
+        .review(
+            &piece.piece_id,
+            edit("A changed saved version.", &piece.revision),
+        )
+        .unwrap();
+    assert!(
+        studio
+            .inspect_publish(&edited.piece_id)
+            .unwrap()
+            .approved_at
+            .is_none()
+    );
+}
+
 // thought-drafting: Create pieces from a thought
 #[tokio::test]
 async fn a_thought_becomes_one_pending_linkedin_piece() {

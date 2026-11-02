@@ -1,0 +1,134 @@
+{
+  "repository": "https://github.com/pbakaus/impeccable",
+  "commit": "e89e3ada3e875a89ac2c5d33d11e65ebef6fe285",
+  "method": "gh-axi GitHub contents GET at exact ref; no code executed",
+  "note": "All declared SHA256 digests match. Recorded byte counts are independently compared below, not silently treated as passing.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "02bb8c3b4e70190e3986c0404ad2fd8d639b4f534252d82379cc1b502b6d1812",
+      "bytes": 10766,
+      "declared_bytes": 11356,
+      "declared_size_matches": false
+    },
+    {
+      "path": "NOTICE.md",
+      "sha256": "c60a093c2845fd9fb82f9c6f742ece31f379f8190b535309d32d66c45ccffdcb",
+      "bytes": 503,
+      "declared_bytes": 396,
+      "declared_size_matches": false
+    },
+    {
+      "path": ".pi/skills/impeccable/SKILL.md",
+      "sha256": "1771f63c1b51d5546399698b981da70e601662997045ba67215338a5435b6279",
+      "bytes": 11849,
+      "declared_bytes": 8543,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/craft-floor.md",
+      "sha256": "086e731940b72db13d9693b575db377a7b102729a56da5c79a21461635695c87",
+      "bytes": 7166,
+      "declared_bytes": 5571,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/operate.md",
+      "sha256": "e5bf4980c547e60b091f82f38d0eec4cc3ab85610b4b15ec8f1d86584f9eb404",
+      "bytes": 5200,
+      "declared_bytes": 3846,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/mode-operate.md",
+      "sha256": "7a52dd7a94ee75f6ae89542c86a1b6e1d306812b16e0d9dbf12d4acad44d148b",
+      "bytes": 4716,
+      "declared_bytes": 3981,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/mode-read.md",
+      "sha256": "a569989e6a3d6453b4c45e9474e162a15cc54e11732ac6baa7990a6e7cccc0b5",
+      "bytes": 4396,
+      "declared_bytes": 3772,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/critique.md",
+      "sha256": "f2ece6380e378ab644d0508adf10e213eb2d6e241e3d7339727fb8e61cd2d39b",
+      "bytes": 48194,
+      "declared_bytes": 29973,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/audit.md",
+      "sha256": "6f2850794a8e74fd07ab9410104f99e3f20dee5490d5e82c98880852203341d0",
+      "bytes": 8893,
+      "declared_bytes": 7206,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/polish.md",
+      "sha256": "c504e12ea076fd1a57b8c9ece79fbb532c54226b2b6298c5c62fa889ae1dd34d",
+      "bytes": 6612,
+      "declared_bytes": 5095,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/typeset.md",
+      "sha256": "925720c1d610d2a08a6811001303f395e4b2c971ef3d2506fbce43b2a1303152",
+      "bytes": 6263,
+      "declared_bytes": 5074,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/colorize.md",
+      "sha256": "dcc0c3ebb76bd22c543f45d73c283e3890e5b8a44eb5053ca2f7fdd425635c32",
+      "bytes": 4554,
+      "declared_bytes": 3802,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/layout.md",
+      "sha256": "14ba132b6168bf0a7498f8c3fbbb41b73ff704da5dc3688fd842807446e54a05",
+      "bytes": 5161,
+      "declared_bytes": 4769,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/clarify.md",
+      "sha256": "4738e125835bd6c166aec2622977c9bc59bada52aaeb186585ed38b3900860b5",
+      "bytes": 4607,
+      "declared_bytes": 3826,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/harden.md",
+      "sha256": "fb00cb42a9cb17d717aefabc418bd4dcb1be540d95d8498d8e3bd4e3e0b2a0a3",
+      "bytes": 10765,
+      "declared_bytes": 8476,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/adapt.md",
+      "sha256": "004b339416187222206adee5ff08ef1fa9bc346d4ceba2932f770d640449ec6d",
+      "bytes": 11330,
+      "declared_bytes": 10969,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/distill.md",
+      "sha256": "54be6eca781b8e2d0f7e850277b330cade905ee4df4d9986519aac27538af724",
+      "bytes": 5489,
+      "declared_bytes": 5106,
+      "declared_size_matches": false
+    },
+    {
+      "path": "skill/reference/quieter.md",
+      "sha256": "c4755f41462f3534195912b64333df94dbdd0f54b8f2da1c9ef69ce94d974896",
+      "bytes": 4911,
+      "declared_bytes": 4358,
+      "declared_size_matches": false
+    }
+  ]
+}

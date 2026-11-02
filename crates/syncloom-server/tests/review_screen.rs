@@ -51,6 +51,7 @@ async fn empty_studio_is_accessible_and_has_no_script_runtime() {
     let page = get(&server, "/").await;
     assert_eq!(page.status, 200);
     assert!(page.raw.contains("No pieces yet"));
+    assert!(page.raw.contains("<main id=\"main\" tabindex=\"-1\">"));
     assert!(page.raw.contains("<label for=\"thought\""));
     assert!(page.raw.contains("Draft a piece"));
     assert!(!page.raw.contains("<script"));
@@ -322,7 +323,11 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
     let page = form(
         &server,
         "/actions/thought",
-        &[("csrf", &token), ("text", THOUGHT)],
+        &[
+            ("csrf", &token),
+            ("text", THOUGHT),
+            ("channels", "linkedin_text"),
+        ],
     )
     .await;
     assert_eq!(page.status, 200, "{}", page.raw);
@@ -337,6 +342,19 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
     )
     .await;
     assert!(approved.raw.contains("Approved"));
+    assert!(!approved.raw.contains(&format!("action=\"{path}/approve\"")));
+    let approval_at = events(&server.dir)
+        .into_iter()
+        .find(|event| event["event"] == "piece_reviewed" && event["status"] == "approved")
+        .unwrap()["at"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        approved
+            .raw
+            .contains(&format!("Approved on <time datetime=\"{approval_at}\""))
+    );
     let receipt = form(
         &server,
         &format!("{path}/publish"),
@@ -346,6 +364,17 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
     assert!(receipt.raw.contains("contained"));
     assert!(receipt.raw.contains("Nothing was sent"));
     assert!(receipt.raw.contains("Attempts: 0"));
+    assert!(receipt.raw.contains("Not sent - saved on this laptop"));
+    assert!(
+        receipt
+            .raw
+            .contains("<details class=\"receipt-details\"><summary>Details</summary>")
+    );
+    assert!(
+        receipt
+            .raw
+            .contains(&format!("Approved on <time datetime=\"{approval_at}\""))
+    );
     let intent = files(&server.dir, "outbox");
     let again = form(
         &server,
@@ -367,6 +396,8 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
     .await;
     assert_eq!(edited.status, 200);
     assert!(edited.raw.contains("Pending review"));
+    assert!(edited.raw.contains(&format!("action=\"{path}/approve\"")));
+    assert!(!edited.raw.contains("Approved on <time"));
     assert!(edited.raw.contains("disabled>Publish"));
     let new_revision = field(&edited.raw, "expected_revision");
     assert_ne!(revision, new_revision);
@@ -396,14 +427,27 @@ async fn browser_forms_edit_approve_publish_and_invalidate_without_another_rule_
 async fn browser_receipts_preserve_fake_platform_outcomes_and_repeat_safety() {
     use fake_linkedin::{AuthMode, PostMode, TokenMode};
     use memory_store::MemoryStore;
-    for (mode, expected) in [
-        (PostMode::Status(403), "refused"),
-        (PostMode::Status(401), "consent_required"),
-        (PostMode::Status(429), "rate_limited"),
-        (PostMode::NoId, "unknown"),
+    for (mode, expected, heading) in [
+        (
+            PostMode::Status(403),
+            "refused",
+            "Platform declined this post",
+        ),
+        (
+            PostMode::Status(401),
+            "consent_required",
+            "Account permission needed",
+        ),
+        (
+            PostMode::Status(429),
+            "rate_limited",
+            "Platform limit reached",
+        ),
+        (PostMode::NoId, "unknown", "Sending not confirmed"),
         (
             PostMode::Posted("urn:li:share:7000000000000000001".into()),
             "posted",
+            "Posted",
         ),
     ] {
         let fake = fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), mode).await;
@@ -427,19 +471,20 @@ async fn browser_receipts_preserve_fake_platform_outcomes_and_repeat_safety() {
         let receipt = form(&server, &path, &fields).await;
         assert_eq!(receipt.status, 200);
         assert!(
-            receipt.raw.contains(&format!("<h2>{expected}</h2>")),
+            receipt.raw.contains(&format!("<h2>{heading}</h2>")),
             "{}",
             receipt.raw
         );
         assert!(receipt.raw.contains("Attempts: 1"));
+        assert!(receipt.raw.contains(&format!("Status: {expected}.")));
         assert_eq!(fake.posts().len(), 1);
         if expected != "posted" {
-            assert!(!receipt.raw.contains("<h2>posted</h2>"));
-            assert!(receipt.raw.contains("Post id: none"));
+            assert!(!receipt.raw.contains("<h2>Posted</h2>"));
+            assert!(receipt.raw.contains("Post id: not recorded"));
         }
         if matches!(expected, "posted" | "unknown") {
             let repeated = form(&server, &path, &fields).await;
-            assert!(repeated.raw.contains(&format!("<h2>{expected}</h2>")));
+            assert!(repeated.raw.contains(&format!("<h2>{heading}</h2>")));
             assert_eq!(fake.posts().len(), 1);
         }
     }
@@ -639,7 +684,7 @@ async fn platform_display_names_are_shared_by_review_preview_and_discovery() {
         let page = get(&server, &format!("/review/{}", id_of(&p))).await;
         assert!(
             page.raw
-                .contains(&format!("<p class=\"eyebrow\">{display}</p>")),
+                .contains(&format!("<p class=\"channel-name\">{display}</p>")),
             "{channel}: {}",
             page.raw
         );
@@ -792,7 +837,7 @@ async fn x_cost_consent_records_only_matching_quote_and_clears_on_revision() {
     assert!(
         accepted
             .raw
-            .contains("Estimated cost accepted for this revision.")
+            .contains("Estimated cost accepted for this version.")
     );
     assert!(
         accepted
@@ -809,6 +854,12 @@ async fn x_cost_consent_records_only_matching_quote_and_clears_on_revision() {
     let published = form(&server, &format!("{path}/publish"), &fields[..2]).await;
     assert_eq!(published.status, 200, "{}", published.raw);
     assert!(published.raw.contains("contained"));
+    assert!(published.raw.contains("Recorded estimate: USD 0.015"));
+    assert!(published.raw.contains("Post id: not recorded"));
+    assert!(published.raw.contains("Post URL: not recorded"));
+    let saved_receipt = get(&server, &path).await;
+    assert!(saved_receipt.raw.contains("Recorded estimate: USD 0.015"));
+    assert!(saved_receipt.raw.contains("2026-10-31"));
     let edited = send_json(
         &server,
         reqwest::Method::PATCH,
@@ -834,7 +885,7 @@ async fn x_cost_consent_records_only_matching_quote_and_clears_on_revision() {
     assert!(
         !page
             .raw
-            .contains("Estimated cost accepted for this revision.")
+            .contains("Estimated cost accepted for this version.")
     );
     let refused = form(
         &server,
@@ -847,4 +898,209 @@ async fn x_cost_consent_records_only_matching_quote_and_clears_on_revision() {
     )
     .await;
     assert!(refused.raw.contains("cost_confirmation_required"));
+}
+
+// [itest->req~studio-api.browser-text-channel-selection~1]
+#[tokio::test]
+async fn text_channels_are_repeated_fields_with_strict_scalar_and_unknown_field_checks() {
+    let provider = Scripted::new(scripted::text("A synthetic draft."));
+    let server = start(provider.clone()).await;
+    let token = server.token.as_str();
+    let valid = [
+        ("csrf", token),
+        ("text", THOUGHT),
+        ("channels", "bluesky"),
+        ("channels", "x"),
+    ];
+    let created = form(&server, "/actions/thought", &valid).await;
+    assert_eq!(created.status, 200, "{}", created.raw);
+    let requests = provider.requests();
+    assert_eq!(requests.len(), 2);
+    let pieces = get(&server, "/v1/pieces").await;
+    assert_eq!(pieces.body["pieces"].as_array().unwrap().len(), 2);
+    for (extra, expected) in [
+        (vec![], 400),
+        (vec![("channels", "x"), ("channels", "x")], 400),
+        (vec![("channels", "unregistered")], 422),
+        (vec![("channels", "x"), ("text", THOUGHT)], 400),
+        (vec![("channels", "x"), ("unexpected", "ignored?")], 400),
+        (vec![("channels", "x"), ("csrf", token)], 403),
+    ] {
+        let mut fields = vec![("csrf", token), ("text", THOUGHT)];
+        fields.extend(extra);
+        let refused = form(&server, "/actions/thought", &fields).await;
+        assert_eq!(refused.status, expected, "{}", refused.raw);
+    }
+    assert_eq!(provider.requests().len(), 2, "invalid forms never draft");
+    assert_eq!(get(&server, "/?channel=x").await.status, 400);
+    let home = get(&server, "/").await;
+    assert!(
+        home.raw
+            .contains("name=\"channels\" value=\"linkedin_text\" checked")
+    );
+}
+
+// [itest->req~studio-api.comfortable-text-review~1]
+#[tokio::test]
+async fn plain_counts_keep_channel_rules_in_closed_details_on_every_writing_surface() {
+    let server = start(Scripted::new(scripted::text("e\u{301}🌳"))).await;
+    for (channel, count, unit) in [
+        ("bluesky", 2, "graphemes"),
+        ("x", 4, "weighted units"),
+        ("threads", 7, "UTF-8 bytes"),
+        ("linkedin_text", 3, "characters"),
+    ] {
+        let piece = piece_of(
+            &post(
+                &server,
+                "/v1/thoughts",
+                json!({"text":THOUGHT,"channels":[channel]}),
+            )
+            .await,
+        );
+        assert_eq!(
+            piece["fit"]["char_count"], count,
+            "display must retain the core's counting rule"
+        );
+        let path = format!("/review/{}", id_of(&piece));
+        for route in [
+            "/".into(),
+            path.clone(),
+            format!("{path}/edit"),
+            format!("{path}/render"),
+        ] {
+            let page = get(&server, &route).await;
+            assert!(
+                page.raw.contains(&format!("{count} of ")),
+                "{route}: {}",
+                page.raw
+            );
+            assert!(page.raw.contains("characters - "));
+            assert!(
+                page.raw
+                    .contains("<details class=\"count-details\"><summary>Details</summary>")
+            );
+            assert!(page.raw.contains(unit));
+            assert!(!page.raw.contains("<details open"));
+            assert!(!page.raw.contains("Conservative app"));
+        }
+    }
+    let missing = get(&server, "/review/not-a-saved-piece").await;
+    assert!(
+        missing
+            .raw
+            .contains("We couldn't find that piece. It may have been deleted.")
+    );
+    assert!(
+        missing
+            .raw
+            .contains("<details class=\"error-details\"><summary>Details</summary>")
+    );
+    assert!(!missing.raw.contains("Nothing is assumed"));
+}
+
+// [itest->req~studio-api.comfortable-text-review~1]
+#[tokio::test]
+async fn text_preview_and_all_edit_surfaces_keep_untrusted_content_inert_and_handles_exact() {
+    let markup = "<img src=x onerror=alert('x')> & \"quote\"\n\nSecond paragraph.";
+    let server = start(Scripted::new(scripted::text(markup))).await;
+    let piece = piece_of(&create(&server, markup).await);
+    let id = id_of(&piece);
+    let path = format!("/review/{id}");
+    let mut stored = piece.clone();
+    stored["routing"]["destination"]["handle"] = json!("@synthetic<unsafe>&\"'");
+    std::fs::write(
+        server.dir.path().join("pieces").join(format!("{id}.json")),
+        serde_json::to_vec(&stored).unwrap(),
+    )
+    .unwrap();
+    for route in [
+        "/".into(),
+        path.clone(),
+        format!("{path}/edit"),
+        format!("{path}/render"),
+    ] {
+        let page = get(&server, &route).await;
+        assert_eq!(page.status, 200, "{}", page.raw);
+        assert!(!page.raw.contains("<img src=x"));
+        assert!(page.raw.contains("&lt;img src=x"));
+        assert!(!page.raw.contains("class=\"eyebrow\""));
+    }
+    let review = get(&server, &path).await;
+    assert!(review.raw.contains("Approximate local preview"));
+    assert!(
+        review
+            .raw
+            .contains("@synthetic&lt;unsafe&gt;&amp;&quot;&#39;")
+    );
+    assert!(!review.raw.contains("@@synthetic"));
+    assert!(!review.raw.contains("No current visual assets"));
+    stored.as_object_mut().unwrap().remove("routing");
+    std::fs::write(
+        server.dir.path().join("pieces").join(format!("{id}.json")),
+        serde_json::to_vec(&stored).unwrap(),
+    )
+    .unwrap();
+    assert!(get(&server, &path).await.raw.contains("not recorded"));
+}
+
+// [itest->req~studio-api.composed-browser-actions~1]
+#[tokio::test]
+async fn export_cannot_hide_a_non_retryable_publish_and_get_inspection_never_sends() {
+    use fake_linkedin::{AuthMode, PostMode, TokenMode};
+    use memory_store::MemoryStore;
+    for mode in [
+        PostMode::NoId,
+        PostMode::Posted("urn:li:share:synthetic".into()),
+    ] {
+        let fake = fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), mode).await;
+        let server = start_linkedin(
+            Scripted::new(scripted::text("A synthetic draft.")),
+            fast(),
+            &fake,
+            MemoryStore::with("linkedin", stored_token("2026-12-29T18:00:00Z")),
+            false,
+            true,
+        )
+        .await;
+        let piece = piece_of(&create(&server, THOUGHT).await);
+        assert_eq!(approve(&server, &piece).await.status, 200);
+        let id = id_of(&piece);
+        let publish = post(
+            &server,
+            &format!("/v1/pieces/{id}/publish"),
+            json!({"expected_revision":revision_of(&piece)}),
+        )
+        .await;
+        assert_eq!(publish.status, 200);
+        let export = post(
+            &server,
+            &format!("/v1/pieces/{id}/export"),
+            json!({"expected_revision":revision_of(&piece), "target":"reddit"}),
+        )
+        .await;
+        assert_eq!(export.status, 200, "{}", export.raw);
+        assert_eq!(
+            get(&server, &format!("/v1/pieces/{id}")).await.body["publish_status"],
+            "exported"
+        );
+        let before = events(&server.dir);
+        let review = get(&server, &format!("/review/{id}")).await;
+        assert!(
+            review
+                .raw
+                .contains("class=\"publish\" type=\"submit\" disabled>Publish"),
+            "{}",
+            review.raw
+        );
+        assert!(review.raw.contains("exported"));
+        assert!(
+            review
+                .raw
+                .contains(publish.body["request_id"].as_str().unwrap()),
+            "persisted receipt survives export"
+        );
+        assert_eq!(fake.posts().len(), 1);
+        assert_eq!(events(&server.dir), before, "GET inspection is read-only");
+    }
 }
