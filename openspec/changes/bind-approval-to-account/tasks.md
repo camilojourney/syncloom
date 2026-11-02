@@ -14,8 +14,8 @@
 - [x] 3.2 Run all seven red regressions green plus no-switch good paths, retain actual target evidence, and break/restore the shared guards to prove test sensitivity.
 
 ## 4. Integration
-- [ ] 4.1 Reconcile onto local main, run applicable tests, formatting, lint, specs/record checks and Code Verify against original base and current parent; disposition residue without waiver/suppression.
-- [ ] 4.2 Send Main before/after evidence and limits before landing; commit a clean local branch only, with no push/merge/public action.
+- [x] 4.1 Reconcile onto local main, run applicable tests, formatting, lint, specs/record checks and Code Verify against original base and current parent; retain raw residue and only Main1352's two named Code kept findings, with no other waiver/suppression.
+- [x] 4.2 Send Main before/after evidence and limits before landing; commit a clean local branch only, with no push/merge/public action.
 
 ## Workflow follow-up
 - Firstmate owns guarded local landing only after Main's specific word and later OpenSpec archival.

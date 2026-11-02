@@ -28,6 +28,16 @@ Candidates: Studio review_status/claim_attempt, Piece, DispatchIntent, Credentia
 Decision: deepen those owners, not a new account lifecycle or grant state machine.
 Kept: adapter canonical-ID extraction, because each provider's independent wire protocol and authority differ; fingerprint encoding and equality have one Platform owner.
 
+## Main1352 named kept findings
+
+Main1352 independently inspected the native fragments and authorized only these two Code kept findings. They are normalized syntax matches, not duplicated policy. No wrapper, macro, source reordering, threshold, exclusion or checker change is warranted.
+
+Kept: crates/syncloom-core/src/bluesky.rs:123-127 and crates/syncloom-core/src/threads.rs:220-224, fragment SHA256 88b5f199d65163ee7b5600c9958880c4ada83b8b2271ae2d025247c0be44bd9d, because independent provider owners retain their target-getter tail, object-safe publish signature, async boxing and first distinct call into the shared request-check owner; no account rule is copied.
+
+Kept: crates/syncloom-core/src/mastodon.rs:302-306 and crates/syncloom-core/src/x.rs:206-210, fragment SHA256 857e94d7649c244654d4b8bcce2c57b2a5122e01a73143060d3d745ee0e495c2, because independent instance/account protocol owners retain their target-getter tail, object-safe publish signature, async boxing and first distinct owner call; merging that syntax would couple independently changing integrations without removing policy.
+
+Account equality stays in PostRequest.require_target; refresh drift handling stays in CredentialSession.confirm_identity. Locations above refer to the final source, unchanged by this documentation disposition. Earlier native diagnostic offsets and exact raw fragments remain in task evidence. Code's normal kept mechanism matches paths, not hashes: final residue identities must be compared on both original/current bases to ensure no other new fragment is covered. Raw measurements and the earlier REJECT receipts remain visible. This narrow finding disposition is not security landing approval.
+
 ## Security boundaries
 
 Only the existing trusted local operator may review/post. Approval checks content/assets and the explicitly reviewed target; dispatch checks the durable target against the one token used for effects. Tokens remain in TokenStore or transient memory, never approvals/events/receipts/logs. Only target hashes enter new durable fields.
