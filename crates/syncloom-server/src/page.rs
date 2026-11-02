@@ -298,8 +298,10 @@ fn publish_controls(state: &AppState, piece: &Piece) -> String {
         piece.channel == syncloom_core::Channel::Threads && piece.visual.is_some();
     let delivery_note = delivery_note(piece, unavailable_image);
     let accepted_cost = state.cost_consents.accepted(piece);
+    let cannot_post = cannot_post_note(state, piece);
     let publish_disabled = if piece.status != Status::Approved
         || unavailable_image
+        || cannot_post.is_some()
         || (piece.channel == syncloom_core::Channel::X && accepted_cost.is_none())
     {
         " disabled"
@@ -326,9 +328,43 @@ fn publish_controls(state: &AppState, piece: &Piece) -> String {
     } else {
         String::new()
     };
+    let cannot_post = cannot_post.unwrap_or_default();
     format!(
-        r#"<p class="hint">Without a delivery grant, nothing leaves this laptop. {delivery_note}</p>{cost_confirmation}<form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>"#
+        r#"<p class="hint">Without a delivery grant, nothing leaves this laptop. {delivery_note}</p>{cannot_post}{cost_confirmation}<form method="post" action="/review/{id}/publish">{fields}<button class="publish" type="submit"{publish_disabled}>Publish</button></form>"#
     )
+}
+
+fn cannot_post_note(state: &AppState, piece: &Piece) -> Option<String> {
+    use syncloom_core::{Channel, ConnectionStatus};
+    let connection = match piece.channel {
+        Channel::LinkedinText => state.studio.linkedin_connection().ok(),
+        Channel::Mastodon => state
+            .studio
+            .mastodon_connection_for(piece.visual.is_some())
+            .ok(),
+        Channel::FacebookPage | Channel::Instagram => state.studio.meta().ok().and_then(|meta| {
+            meta.connection_for(piece.channel, piece.visual.is_some())
+                .ok()
+        }),
+        Channel::Bluesky | Channel::X | Channel::Threads => {
+            state.studio.social().ok().and_then(|social| {
+                social
+                    .connection_for(piece.channel, piece.visual.is_some())
+                    .ok()
+            })
+        }
+        Channel::ManualExport => None,
+    }?;
+    if connection.status != ConnectionStatus::CannotPost {
+        return None;
+    }
+    let message = connection
+        .message
+        .unwrap_or_else(|| "connected, cannot post: posting permission missing.".into());
+    Some(format!(
+        r#"<p class="hint">{} Sign in again to reconnect.</p>"#,
+        escape(&message)
+    ))
 }
 
 fn delivery_note(piece: &Piece, unavailable_image: bool) -> &'static str {
@@ -392,6 +428,12 @@ fn publish_receipt(receipt: &PublishResponse) -> String {
         }
         "refused" => "The platform refused the request. Nothing is claimed as posted.",
         "consent_required" => "Sign-in or consent is required. Nothing is claimed as posted.",
+        "posting_permission_missing" => {
+            "connected, cannot post: posting permission missing. Sign in again to reconnect."
+        }
+        "posting_permission_unverified" => {
+            "connected, cannot post: posting permission could not be verified. Sign in again to reconnect."
+        }
         "rate_limited" => "The platform rate-limited the request. Nothing is claimed as posted.",
         "unreachable" => "The platform was unreachable. Nothing is claimed as posted.",
         _ => "See the core outcome below. No delivery is assumed.",

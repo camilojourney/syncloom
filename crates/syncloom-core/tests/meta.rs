@@ -451,3 +451,123 @@ async fn sign_in_callback_deadline_releases_port_and_unconfigured_host_refuses()
     );
     assert!(fake.all().is_empty());
 }
+
+#[tokio::test]
+async fn saved_meta_scope_without_posting_permissions_is_not_publish_ready() {
+    let fake = fake_meta::start(Default::default()).await;
+    let tokens = MemoryStore::new();
+    let meta = adapter(&fake, tokens.clone(), Arc::new(Media::default()));
+    consent(&meta).await;
+    let mut token = tokens.get("meta:101").unwrap();
+    token.scope = "pages_show_list pages_read_engagement".into();
+    tokens.save("meta:101", &token).unwrap();
+    let connection = serde_json::to_value(meta.connection().unwrap()).unwrap();
+    let before = fake.all().len();
+    let published = meta.target(MetaTarget::Facebook).publish(request(0)).await;
+    assert_eq!(connection["status"], "cannot_post", "{connection}");
+    assert_eq!(connection["reason"], "posting_permission_missing");
+    assert_eq!(connection["action"], "sign_in");
+    assert_eq!(published, Err(PostFailure::PostingPermissionMissing));
+    assert_eq!(fake.all().len(), before);
+}
+
+#[tokio::test]
+async fn meta_effective_grants_authorize_each_target_independently() {
+    use syncloom_core::{Channel, ConnectionStatus};
+    for facebook in [true, false] {
+        let omitted = if facebook {
+            "instagram_content_publish"
+        } else {
+            "pages_manage_posts"
+        };
+        let scopes: Vec<String> = fake_meta::SCOPES
+            .iter()
+            .filter(|scope| **scope != omitted)
+            .map(|s| s.to_string())
+            .collect();
+        let fake = fake_meta::start(fake_meta::Config {
+            granted_permissions: Some(scopes.clone()),
+            ..Default::default()
+        })
+        .await;
+        let tokens = MemoryStore::new();
+        let meta = adapter(&fake, tokens.clone(), Arc::new(Media::default()));
+        let start = meta.sign_in_begin().unwrap();
+        reqwest::get(start.authorization_url).await.unwrap();
+        assert_eq!(
+            meta.sign_in_wait().await.unwrap().status,
+            ConnectionStatus::SignedIn
+        );
+        let saved = tokens.get("meta:101").unwrap();
+        assert!(saved.scope_verified);
+        assert_eq!(saved.scope, scopes.join(" "));
+        let (allowed, denied, channel, denied_channel) = if facebook {
+            (
+                MetaTarget::Facebook,
+                MetaTarget::Instagram,
+                Channel::FacebookPage,
+                Channel::Instagram,
+            )
+        } else {
+            (
+                MetaTarget::Instagram,
+                MetaTarget::Facebook,
+                Channel::Instagram,
+                Channel::FacebookPage,
+            )
+        };
+        assert_eq!(
+            meta.connection_for(channel, !facebook).unwrap().status,
+            ConnectionStatus::SignedIn
+        );
+        assert_eq!(
+            meta.connection_for(denied_channel, facebook)
+                .unwrap()
+                .status,
+            ConnectionStatus::CannotPost
+        );
+        let before = fake.all().len();
+        assert_eq!(
+            meta.target(denied)
+                .publish(request(usize::from(facebook)))
+                .await,
+            Err(PostFailure::PostingPermissionMissing)
+        );
+        assert_eq!(fake.all().len(), before);
+        assert!(
+            meta.target(allowed)
+                .publish(request(usize::from(!facebook)))
+                .await
+                .is_ok()
+        );
+    }
+}
+
+#[tokio::test]
+async fn legacy_meta_requested_scope_without_evidence_is_unverified_for_both_targets() {
+    use syncloom_core::{ConnectionStatus, Token};
+    let fake = fake_meta::start(Default::default()).await;
+    let mut shape = serde_json::to_value(stored()).unwrap();
+    shape.as_object_mut().unwrap().remove("scope_verified");
+    let legacy: Token = serde_json::from_value(shape).unwrap();
+    let meta = adapter(
+        &fake,
+        MemoryStore::with("meta:101", legacy),
+        Arc::new(Media::default()),
+    );
+    assert_eq!(
+        meta.connection().unwrap().status,
+        ConnectionStatus::CannotPost
+    );
+    assert_eq!(
+        meta.connection().unwrap().reason.as_deref(),
+        Some("posting_permission_unverified")
+    );
+    for (target, slides) in [(MetaTarget::Facebook, 0), (MetaTarget::Instagram, 1)] {
+        assert_eq!(
+            meta.target(target).publish(request(slides)).await,
+            Err(PostFailure::PostingPermissionUnverified)
+        );
+    }
+    assert!(fake.all().is_empty());
+}

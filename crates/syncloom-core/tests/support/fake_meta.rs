@@ -30,6 +30,7 @@ pub struct Config {
     pub wrong_state: bool,
     pub deny: bool,
     pub missing_permission: bool,
+    pub granted_permissions: Option<Vec<String>>,
     pub wrong_page: bool,
     pub no_tasks: bool,
     pub no_instagram: bool,
@@ -173,7 +174,7 @@ async fn graph_get(
             json!({"access_token":if long {"fake-user-long"} else {"fake-user-short"},"expires_in":5184000})
         }
         "me/permissions" => {
-            json!({"data":SCOPES.iter().enumerate().map(|(n,p)|json!({"permission":p,"status":if c.missing_permission && n==0 {"declined"}else{"granted"}})).collect::<Vec<_>>()})
+            json!({"data":SCOPES.iter().enumerate().map(|(n,p)|json!({"permission":p,"status":if (c.missing_permission && n==0) || c.granted_permissions.as_ref().is_some_and(|granted| !granted.iter().any(|scope| scope == p)) {"declined"}else{"granted"}})).collect::<Vec<_>>()})
         }
         "me/accounts" => {
             assert_eq!(h["authorization"], "Bearer fake-user-long");

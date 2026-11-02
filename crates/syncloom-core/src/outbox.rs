@@ -21,6 +21,10 @@ pub enum IntentStatus {
     Refused,
     /// No usable token, or the platform refused it (401).
     ConsentRequired,
+    /// Stored or returned grant cannot post. Nothing was sent.
+    PostingPermissionMissing,
+    /// Effective permission is unresolved; no platform write was sent.
+    PostingPermissionUnverified,
     /// 429 from the platform.
     RateLimited,
     /// No connection; nothing was sent.
@@ -38,6 +42,8 @@ impl IntentStatus {
             IntentStatus::Posted => "posted",
             IntentStatus::Refused => "refused",
             IntentStatus::ConsentRequired => "consent_required",
+            IntentStatus::PostingPermissionMissing => "posting_permission_missing",
+            IntentStatus::PostingPermissionUnverified => "posting_permission_unverified",
             IntentStatus::RateLimited => "rate_limited",
             IntentStatus::Unreachable => "unreachable",
             IntentStatus::Unknown => "unknown",
@@ -51,6 +57,8 @@ impl IntentStatus {
             IntentStatus::Contained
                 | IntentStatus::Refused
                 | IntentStatus::ConsentRequired
+                | IntentStatus::PostingPermissionMissing
+                | IntentStatus::PostingPermissionUnverified
                 | IntentStatus::RateLimited
                 | IntentStatus::Unreachable
         )

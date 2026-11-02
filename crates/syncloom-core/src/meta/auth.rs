@@ -1,4 +1,4 @@
-use super::{GRAPH_VERSION, Meta, SCOPES, config::numeric_id};
+use super::{GRAPH_VERSION, Meta, config::numeric_id};
 use crate::{Connection, Secret, SignInStart, StudioError, Token};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -60,11 +60,23 @@ impl Meta {
             .filter(|p| p.status == "granted")
             .map(|p| p.permission.as_str())
             .collect();
-        if !SCOPES.iter().all(|p| granted.contains(p)) {
+        let granted_scope = permissions
+            .data
+            .iter()
+            .filter(|p| p.status == "granted")
+            .map(|p| p.permission.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !granted.contains("pages_show_list") {
             return Err(StudioError::SignInRejected);
         }
+        if !crate::credentials::posting_scope(crate::Channel::FacebookPage, &granted_scope, false)
+            && !crate::credentials::posting_scope(crate::Channel::Instagram, &granted_scope, true)
+        {
+            return Err(StudioError::PostingPermissionMissing);
+        }
         let page = self.selected_page(&long.access_token, page_id).await?;
-        page.into_token(self.session.now_rfc3339())
+        page.into_token(self.session.now_rfc3339(), granted_scope)
     }
     async fn exchange_user_token(&self, params: &[(&str, &str)]) -> Result<Issued, StudioError> {
         let (client, secret, _, _) = self.config.require()?;
@@ -110,7 +122,24 @@ impl Meta {
         Err(StudioError::SignInRejected)
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
-        self.configured_session()?.connection()
+        self.configured_session()?.connection_if(|token| {
+            token
+                .posting_permission(crate::Channel::FacebookPage, false)
+                .or_else(|_| token.posting_permission(crate::Channel::Instagram, true))
+        })
+    }
+    pub fn connection_for(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<Connection, StudioError> {
+        if !matches!(
+            channel,
+            crate::Channel::FacebookPage | crate::Channel::Instagram
+        ) {
+            return Err(StudioError::UnsupportedChannel);
+        }
+        self.configured_session()?.connection_for(channel, image)
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.configured_session()?.sign_out()
@@ -150,13 +179,15 @@ struct Page {
     instagram_business_account: Option<Account>,
 }
 impl Page {
-    fn into_token(self, obtained_at: String) -> Result<Token, StudioError> {
-        if self.access_token.expose().is_empty()
-            || !["CREATE_CONTENT", "MANAGE", "MODERATE"]
-                .iter()
-                .all(|t| self.tasks.iter().any(|p| p == t))
-        {
+    fn into_token(self, obtained_at: String, granted_scope: String) -> Result<Token, StudioError> {
+        if self.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
+        }
+        if !["CREATE_CONTENT", "MANAGE", "MODERATE"]
+            .iter()
+            .all(|t| self.tasks.iter().any(|p| p == t))
+        {
+            return Err(StudioError::PostingPermissionMissing);
         }
         let instagram = self
             .instagram_business_account
@@ -169,7 +200,8 @@ impl Page {
             access_token: self.access_token,
             expires_at: None,
             member_id: instagram,
-            scope: SCOPES.join(" "),
+            scope: granted_scope,
+            scope_verified: true,
             obtained_at,
         })
     }

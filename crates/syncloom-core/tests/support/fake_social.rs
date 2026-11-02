@@ -169,6 +169,10 @@ impl Fake {
                 "/refresh_access_token",
                 json!({"access_token":"threads-long-2","expires_in":5184000,"token_type":"bearer"}),
             ),
+            (
+                "/v1.0/debug_token",
+                json!({"data":{"is_valid":true,"user_id":"303","scopes":["threads_basic","threads_content_publish"]}}),
+            ),
             ("/v1.0/303/threads", json!({"id":"404"})),
             ("/v1.0/404", json!({"id":"404","status":"FINISHED"})),
             ("/v1.0/303/threads_publish", json!({"id":"505"})),

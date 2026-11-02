@@ -40,10 +40,72 @@ pub struct Token {
     pub expires_at: Option<String>,
     pub member_id: String,
     pub scope: String,
+    /// Legacy Meta/Threads scopes were requested constants, not grant evidence.
+    #[serde(default)]
+    pub scope_verified: bool,
     pub obtained_at: String,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum GrantError {
+    Missing,
+    Unverified,
+}
+impl GrantError {
+    pub fn error(self) -> crate::StudioError {
+        match self {
+            Self::Missing => crate::StudioError::PostingPermissionMissing,
+            Self::Unverified => crate::StudioError::PostingPermissionUnverified,
+        }
+    }
+    pub fn failure(self) -> crate::PostFailure {
+        match self {
+            Self::Missing => crate::PostFailure::PostingPermissionMissing,
+            Self::Unverified => crate::PostFailure::PostingPermissionUnverified,
+        }
+    }
+}
+
+/// Posting capability belongs to credentials, not to a UI capability registry.
+/// Scopes are exact tokens; Mastodon's broad write grant includes its write children.
+pub(crate) fn posting_scope(channel: crate::Channel, scope: &str, image: bool) -> bool {
+    use crate::Channel;
+    let has = |need: &str| {
+        scope
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .any(|s| s == need)
+    };
+    match channel {
+        Channel::LinkedinText => has("w_member_social"),
+        Channel::X => has("tweet.write") && has("users.read") && (!image || has("media.write")),
+        Channel::Mastodon => {
+            has("write") || (has("write:statuses") && (!image || has("write:media")))
+        }
+        Channel::FacebookPage => has("pages_manage_posts"),
+        Channel::Instagram => has("instagram_content_publish"),
+        Channel::Threads => has("threads_content_publish"),
+        Channel::Bluesky => true,
+        Channel::ManualExport => false,
+    }
+}
 impl Token {
+    pub(crate) fn posting_permission(
+        &self,
+        channel: crate::Channel,
+        image: bool,
+    ) -> Result<(), GrantError> {
+        if matches!(
+            channel,
+            crate::Channel::Threads | crate::Channel::FacebookPage | crate::Channel::Instagram
+        ) && !self.scope_verified
+        {
+            return Err(GrantError::Unverified);
+        }
+        if !posting_scope(channel, &self.scope, image) {
+            return Err(GrantError::Missing);
+        }
+        Ok(())
+    }
     /// Expired at or before `now` (both RFC 3339 UTC with whole seconds, so strings compare).
     pub fn is_expired_at(&self, now: &str) -> bool {
         self.expires_at

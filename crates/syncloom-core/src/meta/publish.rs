@@ -11,10 +11,15 @@ impl Meta {
         target: MetaTarget,
         request: PostRequest,
     ) -> Result<Posted, PostFailure> {
+        let channel = match target {
+            MetaTarget::Facebook => crate::Channel::FacebookPage,
+            MetaTarget::Instagram => crate::Channel::Instagram,
+        };
+        let image = request.image.is_some() || !request.slides.is_empty();
         let token = self
             .configured_session()
             .map_err(|_| PostFailure::ConsentRequired)?
-            .usable_token()?;
+            .usable_for_post(channel, image)?;
         match target {
             MetaTarget::Facebook => self.facebook(&token, request).await,
             MetaTarget::Instagram => self.instagram(&token, request).await,

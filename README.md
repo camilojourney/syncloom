@@ -34,7 +34,7 @@ cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <revision>
 cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision> --dry-run
 cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision>   # contained, or posted when SYNCLOOM_DELIVERY grants the platform
 cargo run -p syncloom-cli -- linkedin sign-in     # prints the authorization URL, waits for the browser, stores the token in the Keychain
-cargo run -p syncloom-cli -- linkedin status      # signed_out | awaiting_consent | signed_in | expired, from the Keychain and the clock
+cargo run -p syncloom-cli -- linkedin status      # signed_out | awaiting_consent | signed_in | expired | cannot_post, from the Keychain and the clock
 cargo run -p syncloom-cli -- linkedin sign-out    # deletes the token
 ```
 

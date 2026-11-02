@@ -1,4 +1,8 @@
 //! The shared fixtures in contracts/studio-api/ equal what the server really returns.
+#[path = "../../syncloom-core/tests/support/fake_social.rs"]
+mod fake;
+#[path = "../../syncloom-core/tests/support/social.rs"]
+mod social_fixture;
 mod support;
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -8,7 +12,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 35] = [
+const ERROR_TABLE: [(u16, &str); 37] = [
     (403, "origin_not_allowed"),
     (403, "session_required"),
     (400, "invalid_request"),
@@ -34,6 +38,8 @@ const ERROR_TABLE: [(u16, &str); 35] = [
     (503, "meta_not_configured"),
     (503, "platform_not_configured"),
     (409, "cost_confirmation_required"),
+    (403, "posting_permission_missing"),
+    (403, "posting_permission_unverified"),
     (504, "provider_timeout"),
     (504, "sign_in_timed_out"),
     (503, "renderer_missing"),
@@ -260,6 +266,61 @@ async fn produce(code: &str) -> Answer {
             )
             .await;
             with_id(client().post(server.url("/v1/linkedin/sign-in"))).await
+        }
+        "posting_permission_missing" => {
+            let fake = fake_linkedin::start(
+                AuthMode::Consent,
+                TokenMode::Ok {
+                    access_token: fake_linkedin::DEFAULT_TOKEN.into(),
+                    expires_in: 3600,
+                    scope: "openid,profile".into(),
+                },
+                PostMode::NoId,
+            )
+            .await;
+            let server = start_linkedin(
+                Scripted::new(text("x")),
+                fast(),
+                &fake,
+                MemoryStore::new(),
+                true,
+                false,
+            )
+            .await;
+            let started = post_empty(&server, "/v1/linkedin/sign-in").await;
+            assert_eq!(started.status, 202, "{}", started.raw);
+            client()
+                .get(started.body["authorization_url"].as_str().unwrap())
+                .send()
+                .await
+                .unwrap();
+            with_id(client().get(server.url("/v1/linkedin/sign-in"))).await
+        }
+        "posting_permission_unverified" => {
+            let fake = fake::Fake::threads().await;
+            fake.reply("/v1.0/debug_token", 200, json!({"data":{"is_valid":true}}));
+            let q = std::sync::Arc::new(social_fixture::social(
+                &fake,
+                MemoryStore::new(),
+                social_fixture::clock(),
+            ));
+            let server = start_studio(
+                Scripted::new(text("x")),
+                syncloom_core::Settings::default(),
+                |s| s.with_social(q),
+            )
+            .await;
+            let started = post_empty(&server, "/v1/threads/sign-in").await;
+            assert_eq!(started.status, 202);
+            let url =
+                reqwest::Url::parse(started.body["authorization_url"].as_str().unwrap()).unwrap();
+            let state = url
+                .query_pairs()
+                .find(|(k, _)| k == "state")
+                .unwrap()
+                .1
+                .into_owned();
+            with_id(client().post(server.url("/v1/threads/complete")).json(&json!({"callback_url":format!("https://redirect.invalid/callback?code=test&state={state}")}))).await
         }
         "sign_in_not_started" => {
             let fake =
