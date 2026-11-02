@@ -25,10 +25,13 @@ impl SocialPlatforms {
         }
     }
     pub fn connection(&self, channel: Channel) -> Result<Connection, StudioError> {
+        self.connection_for(channel, false)
+    }
+    pub fn connection_for(&self, channel: Channel, image: bool) -> Result<Connection, StudioError> {
         match channel {
             Channel::Bluesky => self.bluesky.connection(),
-            Channel::X => self.x.connection(),
-            Channel::Threads => self.threads.connection(),
+            Channel::X => self.x.connection_for(image),
+            Channel::Threads => self.threads.connection_for(image),
             _ => Err(StudioError::UnsupportedChannel),
         }
     }

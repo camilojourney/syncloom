@@ -8,6 +8,7 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{sync::Mutex, time::Instant};
+
 struct Pending {
     state: Secret,
     deadline: Instant,
@@ -122,20 +123,77 @@ impl Threads {
         let long = crate::threads_publish::request(request)
             .await
             .map_err(|_| StudioError::SignInRejected)?;
-        self.save(long, member, generation)?;
+        self.save(long, member, generation, false).await?;
         self.connection()
     }
-    fn save(&self, long: Long, member: String, generation: u64) -> Result<(), StudioError> {
+    async fn verified_scope(&self, access_token: &Secret) -> Result<String, StudioError> {
+        // Official Threads v1.0 token debugging supplies actual granted permissions.
+        // Never log this query: app authentication includes the configured secret.
+        let client = configured(self.context.config.threads_client.as_ref())?;
+        let secret = configured(self.context.config.threads_secret.as_ref())?;
+        let app_token = Secret::new(format!("TH|{client}|{}", secret.expose()));
+        let debug: DebugToken = crate::threads_publish::request(
+            self.context
+                .client
+                .get(format!(
+                    "{}/v1.0/debug_token",
+                    self.context.config.threads_api.as_str()
+                ))
+                .query(&[
+                    ("access_token", app_token.expose()),
+                    ("input_token", access_token.expose()),
+                ]),
+        )
+        .await
+        .map_err(|_| StudioError::PostingPermissionUnverified)?;
+        if !debug.data.is_valid
+            || debug.data.scopes.iter().any(|scope| {
+                scope.is_empty() || scope.chars().any(|c| c == ',' || c.is_whitespace())
+            })
+        {
+            return Err(StudioError::PostingPermissionUnverified);
+        }
+        Ok(debug.data.scopes.join(" "))
+    }
+    async fn save(
+        &self,
+        long: Long,
+        member: String,
+        generation: u64,
+        rotating: bool,
+    ) -> Result<(), StudioError> {
         if long.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
         }
-        self.context.credentials.commit(
+        let expires_at =
+            crate::social::expiry(self.context.credentials.clock.as_ref(), long.expires_in)?;
+        let evidence = self.verified_scope(&long.access_token).await;
+        let scope_verified = evidence.is_ok();
+        let scope = evidence.as_ref().cloned().unwrap_or_default();
+        let permission = evidence.and_then(|scope| {
+            if crate::credentials::posting_scope(crate::Channel::Threads, &scope, false) {
+                Ok(())
+            } else {
+                Err(StudioError::PostingPermissionMissing)
+            }
+        });
+        if permission.is_err() && !rotating {
+            return permission;
+        }
+        // Rotation has already succeeded. Never reuse the old token's grant as proof
+        // for the new credential, including when the subsequent verification fails.
+        self.context.credentials.commit_token(
             generation,
-            long.access_token,
-            crate::social::expiry(self.context.credentials.clock.as_ref(), long.expires_in)?,
-            member,
-            "threads_basic,threads_content_publish".into(),
-        )
+            &crate::Token {
+                access_token: long.access_token,
+                expires_at: Some(expires_at),
+                member_id: member,
+                scope,
+                scope_verified,
+                obtained_at: self.context.credentials.clock.now_rfc3339(),
+            },
+        )?;
+        permission
     }
     #[expect(
         clippy::unwrap_used,
@@ -148,6 +206,7 @@ impl Threads {
 }
 impl crate::oauth_context::OAuthLifecycle for Threads {
     type Issued = Long;
+    const CHANNEL: crate::Channel = crate::Channel::Threads;
     const REFRESH_RULE: crate::credential_session::RefreshRule =
         crate::credential_session::RefreshRule::UnexpiredAfter(time::Duration::days(1));
     fn oauth(&self) -> &OAuthContext {
@@ -180,20 +239,24 @@ impl crate::oauth_context::OAuthLifecycle for Threads {
                 ("access_token", token.access_token.expose()),
             ]))
     }
-    fn save_refreshed(
+    async fn save_refreshed(
         &self,
         long: Long,
         old: &crate::Token,
         generation: u64,
     ) -> Result<(), StudioError> {
-        self.save(long, old.member_id.clone(), generation)
+        self.save(long, old.member_id.clone(), generation, true)
+            .await
     }
 }
 impl Platform for Threads {
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::Threads, &request, 0)?;
-            let token = self.context.credentials.usable()?;
+            let token = self
+                .context
+                .credentials
+                .usable_for_post(crate::Channel::Threads, false)?;
             if !crate::social::numeric_id(&token.member_id) {
                 return Err(PostFailure::ConsentRequired);
             }
@@ -206,6 +269,15 @@ impl Platform for Threads {
             .await
         })
     }
+}
+#[derive(Deserialize)]
+struct DebugToken {
+    data: DebugGrant,
+}
+#[derive(Deserialize)]
+struct DebugGrant {
+    is_valid: bool,
+    scopes: Vec<String>,
 }
 #[derive(Deserialize)]
 struct Short {

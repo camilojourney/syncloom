@@ -11,6 +11,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 pub const SCOPES: &str = "tweet.read tweet.write users.read media.write offline.access";
+fn posting_granted(scope: &str) -> bool {
+    crate::credentials::posting_scope(crate::Channel::X, scope, false)
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CostEstimate {
     pub currency: String,
@@ -52,7 +55,7 @@ pub fn estimate(text: &str, image: bool) -> CostEstimate {
 #[derive(Serialize, Deserialize)]
 struct Bundle {
     access_token: Secret,
-    refresh_token: Secret,
+    refresh_token: Option<Secret>,
 }
 #[derive(Deserialize)]
 pub(crate) struct Issued {
@@ -120,15 +123,22 @@ impl X {
         old: Option<&Token>,
         generation: u64,
     ) -> Result<(), StudioError> {
-        let scope = issued
-            .scope
-            .or_else(|| old.map(|t| t.scope.clone()))
-            .ok_or(StudioError::SignInRejected)?;
+        let Some(scope) = issued.scope.or_else(|| old.map(|t| t.scope.clone())) else {
+            return Err(StudioError::PostingPermissionUnverified);
+        };
+        let can_post = posting_granted(&scope);
+        if !can_post && old.is_none() {
+            return Err(StudioError::PostingPermissionMissing);
+        }
         if !issued.token_type.eq_ignore_ascii_case("bearer")
             || issued.access_token.expose().is_empty()
-            || !SCOPES
-                .split_whitespace()
-                .all(|s| scope.split_whitespace().any(|got| s == got))
+        {
+            return Err(StudioError::SignInRejected);
+        }
+        if issued
+            .refresh_token
+            .as_ref()
+            .is_some_and(|token| token.expose().is_empty())
         {
             return Err(StudioError::SignInRejected);
         }
@@ -136,10 +146,9 @@ impl X {
             .refresh_token
             .or_else(|| {
                 old.and_then(|t| decode::<Bundle>(t).ok())
-                    .map(|b| b.refresh_token)
+                    .and_then(|b| b.refresh_token)
             })
-            .filter(|s| !s.expose().is_empty())
-            .ok_or(StudioError::SignInRejected)?;
+            .filter(|s| !s.expose().is_empty());
         self.context.credentials.commit(
             generation,
             encode(&Bundle {
@@ -149,7 +158,12 @@ impl X {
             crate::social::expiry(self.context.credentials.clock.as_ref(), issued.expires_in)?,
             String::new(),
             scope,
-        )
+        )?;
+        // A successful rotation's narrowed grant replaces stale authorization evidence.
+        if !can_post {
+            return Err(StudioError::PostingPermissionMissing);
+        }
+        Ok(())
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.session.sign_out()
@@ -157,6 +171,7 @@ impl X {
 }
 impl crate::oauth_context::OAuthLifecycle for X {
     type Issued = Issued;
+    const CHANNEL: crate::Channel = crate::Channel::X;
     const REFRESH_RULE: crate::credential_session::RefreshRule =
         crate::credential_session::RefreshRule::Any;
     fn oauth(&self) -> &OAuthContext {
@@ -167,14 +182,15 @@ impl crate::oauth_context::OAuthLifecycle for X {
     }
     fn refresh_request(&self, token: &Token) -> Result<reqwest::RequestBuilder, StudioError> {
         let bundle: Bundle = decode(token)?;
+        let refresh_token = bundle.refresh_token.ok_or(StudioError::SignInRejected)?;
         let client = configured(self.context.config.x_client.as_ref())?;
         Ok(self.token_request(&[
             ("grant_type", "refresh_token"),
             ("client_id", client),
-            ("refresh_token", bundle.refresh_token.expose()),
+            ("refresh_token", refresh_token.expose()),
         ]))
     }
-    fn save_refreshed(
+    async fn save_refreshed(
         &self,
         issued: Issued,
         old: &Token,
@@ -187,7 +203,11 @@ impl Platform for X {
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::X, &request, 5_000_000)?;
-            let token = self.context.credentials.usable()?;
+            let image = request.image.is_some();
+            let token = self
+                .context
+                .credentials
+                .usable_for_post(crate::Channel::X, image)?;
             let bundle: Bundle = decode(&token).map_err(|_| PostFailure::ConsentRequired)?;
             let mut body = serde_json::json!({"text":request.text});
             if let Some(image) = request.image.take() {

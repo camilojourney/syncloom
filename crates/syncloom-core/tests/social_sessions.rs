@@ -123,6 +123,19 @@ async fn threads_external_state_long_lived_exchange_refresh_window_and_text() {
             .query
             .contains("grant_type=th_exchange_token")
     );
+    let query: std::collections::HashMap<_, _> =
+        url::form_urlencoded::parse(fake.calls()[2].query.as_bytes())
+            .into_owned()
+            .collect();
+    assert_eq!(fake.calls()[2].path, "/v1.0/debug_token");
+    assert_eq!(query["input_token"], "threads-long-1");
+    assert_eq!(query["access_token"], "TH|test-client|test-secret-canary");
+    let saved = store
+        .load(&q.account(syncloom_core::Channel::Threads).unwrap())
+        .unwrap()
+        .unwrap();
+    assert!(saved.scope_verified);
+    assert_eq!(saved.scope, "threads_basic threads_content_publish");
     let count = fake.calls().len();
     assert_eq!(
         q.refresh(syncloom_core::Channel::Threads).await,
@@ -132,14 +145,21 @@ async fn threads_external_state_long_lived_exchange_refresh_window_and_text() {
     *c.0.lock().unwrap() += time::Duration::days(1);
     q.refresh(syncloom_core::Channel::Threads).await.unwrap();
     assert!(
-        fake.calls()[2]
+        fake.calls()[3]
             .query
             .contains("access_token=threads-long-1")
     );
     assert_eq!(q.threads.publish(text()).await.unwrap().post_id, "505");
-    assert_eq!(fake.calls()[3].form()["media_type"], "TEXT");
-    assert_eq!(fake.calls()[5].form()["creation_id"], "404");
-    assert_eq!(fake.calls()[5].authorization, "Bearer threads-long-2");
+    let query: std::collections::HashMap<_, _> =
+        url::form_urlencoded::parse(fake.calls()[4].query.as_bytes())
+            .into_owned()
+            .collect();
+    assert_eq!(fake.calls()[4].path, "/v1.0/debug_token");
+    assert_eq!(query["input_token"], "threads-long-2");
+    assert_eq!(fake.calls()[5].form()["media_type"], "TEXT");
+    assert_eq!(fake.calls()[7].form()["creation_id"], "404");
+    assert_eq!(fake.calls()[7].authorization, "Bearer threads-long-2");
+    assert_eq!(fake.calls().len(), 9);
     *c.0.lock().unwrap() += time::Duration::days(60);
     let count = fake.calls().len();
     assert_eq!(

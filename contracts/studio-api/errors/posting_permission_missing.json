@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "posting_permission_missing",
+      "message": "posting permission missing.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -77,6 +77,7 @@ pub fn stored() -> Token {
         expires_at: None,
         member_id: "202".into(),
         scope: fake_meta::SCOPES.join(" "),
+        scope_verified: true,
         obtained_at: "2026-10-31T00:00:00Z".into(),
     }
 }

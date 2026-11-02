@@ -155,26 +155,29 @@ impl Mastodon {
         let issued = tokio::time::timeout(self.session.deadline(), exchange)
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
-        if issued.access_token.expose().is_empty()
-            || !SCOPES
-                .split_whitespace()
-                .all(|s| issued.scope.split_whitespace().any(|got| s == got))
-        {
+        if issued.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
+        }
+        if !crate::credentials::posting_scope(crate::Channel::Mastodon, &issued.scope, false) {
+            return Err(StudioError::PostingPermissionMissing);
         }
         let token = Token {
             access_token: issued.access_token,
             expires_at: None,
             member_id: String::new(),
             scope: issued.scope,
+            scope_verified: true,
             obtained_at: self.session.now_rfc3339(),
         };
         self.session.save_token(generation, &token)?;
         self.connection()
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
+        self.connection_for(false)
+    }
+    pub fn connection_for(&self, image: bool) -> Result<Connection, StudioError> {
         self.instance()?;
-        self.session.connection()
+        self.session.connection_for(crate::Channel::Mastodon, image)
     }
     pub fn sign_out(&self) -> Result<Connection, StudioError> {
         self.instance()?;
@@ -278,7 +281,10 @@ impl Platform for Mastodon {
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
-            let token = self.session.usable_token()?;
+            let image = request.image.is_some();
+            let token = self
+                .session
+                .usable_for_post(crate::Channel::Mastodon, image)?;
             let instance: Instance =
                 request_json(self.client.get(format!("{base}/api/v2/instance"))).await?;
             instance.configuration.check_text(&request.text)?;

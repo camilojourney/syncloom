@@ -35,6 +35,10 @@ pub const DEFAULT_API_BASE: &str = "https://api.linkedin.com";
 pub const API_VERSION: &str = "202610";
 /// `openid profile` for the member id (`userinfo.sub`), `w_member_social` to post.
 pub const SCOPES: &str = "openid profile w_member_social";
+/// LinkedIn's returned token `scope` is the effective grant. Requested scopes are not.
+fn posting_granted(scope: &str) -> bool {
+    crate::credentials::posting_scope(crate::Channel::LinkedinText, scope, false)
+}
 /// Which authorization endpoint and token proof the sign-in uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AuthFlow {
@@ -164,6 +168,9 @@ impl Linkedin {
     pub async fn sign_in_wait(&self) -> Result<Connection, StudioError> {
         let (code, verifier, generation) = self.session.wait().await?;
         let issued = self.exchange(verifier.as_ref(), &code).await?;
+        if !posting_granted(&issued.scope) {
+            return Err(StudioError::PostingPermissionMissing);
+        }
         let member_id = self.member_id(&issued.access_token).await?;
         let now = self.session.now();
         let token = Token {
@@ -171,6 +178,7 @@ impl Linkedin {
             expires_at: Some(rfc3339(now + Duration::from_secs(issued.expires_in))),
             member_id,
             scope: issued.scope,
+            scope_verified: true,
             obtained_at: rfc3339(now),
         };
         self.session.save_token(generation, &token)?;
@@ -219,7 +227,8 @@ impl Linkedin {
 
     /// The connection from the stored token and the clock; no platform call.
     pub fn connection(&self) -> Result<Connection, StudioError> {
-        self.session.connection()
+        self.session
+            .connection_for(crate::Channel::LinkedinText, false)
     }
 
     /// Delete only this platform's token.
@@ -229,7 +238,9 @@ impl Linkedin {
 
     /// Exactly one `POST /rest/posts`. The caller (the studio) applies the deadline.
     async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
-        let token = self.session.usable_token()?;
+        let token = self
+            .session
+            .usable_for_post(crate::Channel::LinkedinText, false)?;
         let response = self
             .client
             .post(format!("{}/rest/posts", self.config.api_base.as_str()))

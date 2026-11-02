@@ -15,11 +15,17 @@ async fn setup(
     fake: &fake::Fake,
     platform: &str,
     granted: bool,
-) -> (TestServer, Arc<SocialPlatforms>, Arc<fixture::TestClock>) {
+) -> (
+    TestServer,
+    Arc<SocialPlatforms>,
+    Arc<fixture::TestClock>,
+    Arc<memory_store::MemoryStore>,
+) {
     let clock = fixture::clock();
+    let store = memory_store::MemoryStore::new();
     let q = Arc::new(fixture::social(
         fake,
-        memory_store::MemoryStore::new(),
+        store.clone(),
         clock.clone(),
     ));
     let adapter = adapter(&q, platform);
@@ -37,7 +43,7 @@ async fn setup(
         },
     )
     .await;
-    (server, q, clock)
+    (server, q, clock, store)
 }
 #[expect(
     clippy::panic,
@@ -86,6 +92,12 @@ async fn login(server: &TestServer, platform: &str) {
         .await
     };
     assert_eq!(signed.body["status"], "signed_in", "{}", signed.raw);
+    if platform == "threads" {
+        assert_eq!(
+            signed.body["scope"], "threads_basic threads_content_publish",
+            "Threads scope must come from verified token-debug evidence"
+        );
+    }
 }
 #[expect(
     clippy::unwrap_used,
@@ -133,7 +145,7 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
             "x" => fake::Fake::x().await,
             _ => fake::Fake::threads().await,
         };
-        let (server, _, clock) = setup(&fake, platform, false).await;
+        let (server, _, clock, _) = setup(&fake, platform, false).await;
         let connection = format!("/v1/{platform}/connection");
         let refresh = format!("/v1/{platform}/refresh");
         let signed_out = get(&server, &connection).await;
@@ -242,7 +254,7 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
 #[tokio::test]
 async fn malformed_credentials_and_callback_refusals_never_reach_a_platform() {
     let fake = fake::Fake::bluesky().await;
-    let (server, _, _) = setup(&fake, "bluesky", false).await;
+    let (server, _, _, _) = setup(&fake, "bluesky", false).await;
     for body in [
         json!({}),
         json!({"identifier":"test.invalid"}),
@@ -324,7 +336,7 @@ async fn malformed_credentials_and_callback_refusals_never_reach_a_platform() {
 #[tokio::test]
 async fn dynamic_connection_and_refresh_routes_refuse_unsupported_targets() {
     let fake = fake::Fake::x().await;
-    let (server, _, _) = setup(&fake, "x", false).await;
+    let (server, _, _, _) = setup(&fake, "x", false).await;
     for target in ["unknown", "facebook", "bluesky_text", "%FF"] {
         for (method, operation) in [
             (reqwest::Method::GET, "connection"),
@@ -352,7 +364,7 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
             "x" => fake::Fake::x().await,
             _ => fake::Fake::threads().await,
         };
-        let (server, q, _) = setup(&fake, platform, true).await;
+        let (server, q, _, _) = setup(&fake, platform, true).await;
         login(&server, platform).await;
         let p = draft(&server, platform, false).await;
         let request = json!({"expected_revision":p["revision"],"accepted_cost_microusd":15000});
@@ -414,7 +426,7 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
 #[tokio::test]
 async fn x_cost_is_visible_before_delivery_requires_exact_confirmation_and_survives_outcome() {
     let fake = fake::Fake::x().await;
-    let (server, _, _) = setup(&fake, "x", true).await;
+    let (server, _, _, _) = setup(&fake, "x", true).await;
     login(&server, "x").await;
     let p = draft(&server, "x", false).await;
     approve_piece(&server, &p).await;
@@ -486,7 +498,7 @@ async fn x_cost_is_visible_before_delivery_requires_exact_confirmation_and_survi
 #[tokio::test]
 async fn numeric_domain_links_show_the_higher_quote_in_review_and_dry_run() {
     let fake = fake::Fake::x().await;
-    let (server, _, _) = setup(&fake, "x", true).await;
+    let (server, _, _, _) = setup(&fake, "x", true).await;
     let p = draft(&server, "x", false).await;
     let id = p["piece_id"].as_str().unwrap();
     let edited = send_json(
@@ -527,7 +539,7 @@ async fn bluesky_and_x_rendered_image_journeys_use_approved_bytes_and_alt_text()
         } else {
             fake::Fake::x().await
         };
-        let (server, _, _) = setup(&fake, platform, true).await;
+        let (server, _, _, _) = setup(&fake, platform, true).await;
         login(&server, platform).await;
         let p = draft(&server, platform, true).await;
         let refused = send_json(
@@ -578,7 +590,7 @@ async fn bluesky_and_x_rendered_image_journeys_use_approved_bytes_and_alt_text()
 #[tokio::test]
 async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
     let fake = fake::Fake::threads().await;
-    let (server, _, _) = setup(&fake, "threads", true).await;
+    let (server, _, _, _) = setup(&fake, "threads", true).await;
     let p = draft(&server, "threads", true).await;
     approve_piece(&server, &p).await;
     let page = get(
@@ -599,7 +611,7 @@ async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
 async fn absent_grants_and_bad_session_or_origin_never_reach_any_social_platform() {
     for platform in ["bluesky", "x", "threads"] {
         let fake = fake::Fake::x().await;
-        let (server, _, _) = setup(&fake, platform, false).await;
+        let (server, _, _, _) = setup(&fake, platform, false).await;
         let p = draft(&server, platform, false).await;
         approve_piece(&server, &p).await;
         let outcome = post(
@@ -632,4 +644,312 @@ async fn absent_grants_and_bad_session_or_origin_never_reach_any_social_platform
         assert_eq!(origin.code(), "origin_not_allowed");
         assert!(fake.calls().is_empty());
     }
+}
+
+async fn complete_threads(server: &TestServer) -> Result<Answer, Box<dyn std::error::Error>> {
+    let start = post_empty(server, "/v1/threads/sign-in").await;
+    assert_eq!(start.status, 202);
+    let url = reqwest::Url::parse(
+        start.body["authorization_url"]
+            .as_str()
+            .ok_or("missing authorization URL")?,
+    )?;
+    let state = url
+        .query_pairs()
+        .find(|(k, _)| k == "state")
+        .ok_or("missing state")?
+        .1
+        .into_owned();
+    Ok(post(server, "/v1/threads/complete", json!({"callback_url":format!("https://redirect.invalid/callback?code=test&state={state}")})).await)
+}
+
+#[tokio::test]
+async fn threads_fresh_exchange_requires_actual_effective_posting_permission() {
+    for (debug, code) in [
+        (
+            json!({"data":{"is_valid":true,"user_id":"303","scopes":["threads_basic"]}}),
+            "posting_permission_missing",
+        ),
+        (
+            json!({"data":{"is_valid":true,"user_id":"303","scopes":["threads_content_publish_extra"]}}),
+            "posting_permission_missing",
+        ),
+        (
+            json!({"data":{"is_valid":true,"user_id":"303"}}),
+            "posting_permission_unverified",
+        ),
+        (
+            json!({"data":{"is_valid":false,"user_id":"303","scopes":["threads_content_publish"]}}),
+            "posting_permission_unverified",
+        ),
+    ] {
+        let fake = fake::Fake::threads().await;
+        fake.reply("/v1.0/debug_token", 200, debug);
+        let (server, q, _, store) = setup(&fake, "threads", true).await;
+        let completed = complete_threads(&server).await.unwrap();
+        assert_eq!(completed.code(), code, "{}", completed.raw);
+        assert_eq!(
+            fake.calls()
+                .iter()
+                .filter(|c| c.path == "/v1.0/debug_token")
+                .count(),
+            1
+        );
+        use syncloom_core::TokenStore;
+        assert!(
+            store
+                .load(&q.account(syncloom_core::Channel::Threads).unwrap())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            !fake
+                .calls()
+                .iter()
+                .any(|c| c.method == "POST" && c.path.contains("/v1.0/"))
+        );
+        for secret in ["test-secret-canary", "threads-long-1", "threads-short"] {
+            assert!(!completed.raw.contains(secret));
+        }
+    }
+}
+
+#[tokio::test]
+async fn saved_legacy_threads_requested_scopes_are_unverified_and_send_nothing() {
+    use syncloom_core::{Channel, Token, TokenStore};
+    let fake = fake::Fake::threads().await;
+    let (server, q, _, store) = setup(&fake, "threads", true).await;
+    // Deserialize the exact legacy shape: it contains no verified grant evidence.
+    let token: Token = serde_json::from_value(json!({
+        "access_token":"legacy-threads", "member_id":"303",
+        "expires_at":"2026-12-29T18:00:00Z", "obtained_at":"2026-10-29T18:00:00Z",
+        "scope":"threads_basic,threads_content_publish"
+    }))
+    .unwrap();
+    store
+        .save(&q.account(Channel::Threads).unwrap(), &token)
+        .unwrap();
+    let connection = get(&server, "/v1/threads/connection").await;
+    let piece = draft(&server, "threads", false).await;
+    approve_piece(&server, &piece).await;
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"]}),
+    )
+    .await;
+    assert_eq!(
+        (
+            connection.body["status"].as_str(),
+            published.body["status"].as_str()
+        ),
+        (Some("cannot_post"), Some("posting_permission_unverified")),
+        "connection={} publish={}",
+        connection.raw,
+        published.raw
+    );
+    assert_eq!(connection.body["reason"], "posting_permission_unverified");
+    assert_eq!(connection.body["action"], "sign_in");
+    assert!(fake.calls().is_empty());
+    assert!(store.load(&q.account(Channel::Threads).unwrap()).unwrap() == Some(token));
+}
+
+#[tokio::test]
+async fn narrowed_x_refresh_cannot_leave_the_old_full_grant_publish_ready() {
+    let fake = fake::Fake::x().await;
+    let (server, _, _, _) = setup(&fake, "x", true).await;
+    login(&server, "x").await;
+    fake.reply("/2/oauth2/token", 200, json!({"access_token":"reduced-rotation","refresh_token":"refresh-rotated","expires_in":7200,"token_type":"bearer","scope":"tweet.read users.read"}));
+    let refreshed = post_empty(&server, "/v1/x/refresh").await;
+    assert_eq!(refreshed.code(), "posting_permission_missing");
+    let connection = get(&server, "/v1/x/connection").await;
+    assert_eq!(
+        connection.body["status"], "cannot_post",
+        "{}",
+        connection.raw
+    );
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let before = fake.calls().len();
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"],"accepted_cost_microusd":15000}),
+    )
+    .await;
+    assert_eq!(published.body["status"], "posting_permission_missing");
+    assert_eq!(fake.calls().len(), before);
+}
+
+async fn assert_threads_rotation_grant(
+    debug: Value,
+    expected: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use syncloom_core::{Channel, TokenStore};
+    let fake = fake::Fake::threads().await;
+    let (server, q, _, store) = setup(&fake, "threads", true).await;
+    login(&server, "threads").await;
+    let account = q.account(Channel::Threads)?;
+    let mut old = store
+        .load(&account)?
+        .ok_or("missing connected credential")?;
+    old.obtained_at = "2026-10-29T18:00:00Z".into();
+    store.save(&account, &old)?;
+    fake.reply("/v1.0/debug_token", 200, debug);
+    let refreshed = post_empty(&server, "/v1/threads/refresh").await;
+    assert_eq!(refreshed.code(), expected, "{}", refreshed.raw);
+    let connection = get(&server, "/v1/threads/connection").await;
+    assert_eq!(
+        connection.body["status"], "cannot_post",
+        "{}",
+        connection.raw
+    );
+    assert_eq!(connection.body["reason"], expected);
+    let piece = draft(&server, "threads", false).await;
+    approve_piece(&server, &piece).await;
+    let before = fake.calls().len();
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"]}),
+    )
+    .await;
+    assert_eq!(published.body["status"], expected);
+    assert_eq!(fake.calls().len(), before);
+    assert!(!refreshed.raw.contains("threads-long"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn narrowed_threads_refresh_cannot_leave_the_old_full_grant_publish_ready() {
+    assert_threads_rotation_grant(
+        json!({"data":{"is_valid":true,"user_id":"303","scopes":["threads_basic"]}}),
+        "posting_permission_missing",
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn unverified_threads_rotation_cannot_reuse_the_old_verified_grant() {
+    assert_threads_rotation_grant(
+        json!({"data":{"is_valid":true,"user_id":"303"}}),
+        "posting_permission_unverified",
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn saved_x_grant_without_tweet_write_cannot_publish() {
+    use syncloom_core::{Channel, Secret, Token, TokenStore};
+    let fake = fake::Fake::x().await;
+    let (server, q, _, store) = setup(&fake, "x", true).await;
+    store
+        .save(
+            &q.account(Channel::X).unwrap(),
+            &Token {
+                access_token: Secret::new(
+                    r#"{"access_token":"reduced-access","refresh_token":"reduced-refresh"}"#,
+                ),
+                expires_at: Some("2026-12-29T18:00:00Z".into()),
+                member_id: String::new(),
+                scope: "tweet.read".into(),
+                scope_verified: true,
+                obtained_at: "2026-10-30T18:00:00Z".into(),
+            },
+        )
+        .unwrap();
+    let connection = get(&server, "/v1/x/connection").await;
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let before = fake.calls().len();
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision": piece["revision"], "accepted_cost_microusd": 15000}),
+    )
+    .await;
+    assert_eq!(
+        (
+            connection.body["status"].as_str(),
+            published.body["status"].as_str(),
+            fake.calls().len() - before
+        ),
+        (Some("cannot_post"), Some("posting_permission_missing"), 0),
+        "connection={} publish={}",
+        connection.raw,
+        published.raw
+    );
+    assert_eq!(connection.body["reason"], "posting_permission_missing");
+    assert_eq!(connection.body["action"], "sign_in");
+}
+
+#[tokio::test]
+async fn fresh_x_text_grant_does_not_need_a_refresh_token_or_offline_permission() {
+    let fake = fake::Fake::x().await;
+    fake.reply("/2/oauth2/token", 200, json!({"access_token":"text-grant","expires_in":7200,"token_type":"bearer","scope":"tweet.read tweet.write users.read"}));
+    let (server, _, _, _) = setup(&fake, "x", true).await;
+    login(&server, "x").await;
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"],"accepted_cost_microusd":15000}),
+    )
+    .await;
+    assert_eq!(published.body["status"], "posted", "{}", published.raw);
+    let before = fake.calls().len();
+    let refreshed = post_empty(&server, "/v1/x/refresh").await;
+    assert_eq!(refreshed.code(), "sign_in_rejected");
+    assert_eq!(fake.calls().len(), before);
+}
+
+#[tokio::test]
+async fn x_text_posting_does_not_require_media_or_offline_scope() {
+    use syncloom_core::{Channel, Secret, Token, TokenStore};
+    let fake = fake::Fake::x().await;
+    let (server, q, _, store) = setup(&fake, "x", true).await;
+    store
+        .save(
+            &q.account(Channel::X).unwrap(),
+            &Token {
+                access_token: Secret::new(
+                    r#"{"access_token":"text-only-access","refresh_token":"text-only-refresh"}"#,
+                ),
+                expires_at: Some("2026-12-29T18:00:00Z".into()),
+                member_id: String::new(),
+                scope: "tweet.read tweet.write users.read".into(),
+                scope_verified: true,
+                obtained_at: "2026-10-30T18:00:00Z".into(),
+            },
+        )
+        .unwrap();
+    let connection = get(&server, "/v1/x/connection").await;
+    assert_eq!(connection.body["status"], "signed_in", "{}", connection.raw);
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision": piece["revision"], "accepted_cost_microusd": 15000}),
+    )
+    .await;
+    assert_eq!(published.body["status"], "posted", "{}", published.raw);
+    let image = draft(&server, "x", true).await;
+    approve_piece(&server, &image).await;
+    let before = fake.calls().len();
+    let refused = post(
+        &server,
+        &publish_path(&image),
+        json!({"expected_revision": image["revision"], "accepted_cost_microusd": 20000}),
+    )
+    .await;
+    assert_eq!(
+        refused.body["status"], "posting_permission_missing",
+        "{}",
+        refused.raw
+    );
+    assert_eq!(fake.calls().len(), before);
 }

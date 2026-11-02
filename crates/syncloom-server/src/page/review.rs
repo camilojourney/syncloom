@@ -135,9 +135,11 @@ fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
     let id = escape(&piece.piece_id);
     let unavailable_image = piece.channel == Channel::Threads && piece.visual.is_some();
     let accepted_cost = state.cost_consents.accepted(piece);
+    let cannot_post = cannot_post_note(state, piece);
     let disabled = if piece.status != Status::Approved
         || blocked
         || unavailable_image
+        || cannot_post.is_some()
         || (piece.channel == Channel::X && accepted_cost.is_none())
     {
         " disabled"
@@ -153,11 +155,45 @@ fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
     } else {
         "Approval does not connect your account or allow publishing. Your account must be set up and publishing allowed separately."
     };
+    let cannot_post = cannot_post.unwrap_or_default();
     format!(
-        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
+        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{cannot_post}{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
         cost_confirmation(state, piece, accepted_cost.is_some()),
         revision_fields(state, piece)
     )
+}
+
+fn cannot_post_note(state: &AppState, piece: &Piece) -> Option<String> {
+    use syncloom_core::{Channel, ConnectionStatus};
+    let connection = match piece.channel {
+        Channel::LinkedinText => state.studio.linkedin_connection().ok(),
+        Channel::Mastodon => state
+            .studio
+            .mastodon_connection_for(piece.visual.is_some())
+            .ok(),
+        Channel::FacebookPage | Channel::Instagram => state.studio.meta().ok().and_then(|meta| {
+            meta.connection_for(piece.channel, piece.visual.is_some())
+                .ok()
+        }),
+        Channel::Bluesky | Channel::X | Channel::Threads => {
+            state.studio.social().ok().and_then(|social| {
+                social
+                    .connection_for(piece.channel, piece.visual.is_some())
+                    .ok()
+            })
+        }
+        Channel::ManualExport => None,
+    }?;
+    if connection.status != ConnectionStatus::CannotPost {
+        return None;
+    }
+    let message = connection
+        .message
+        .unwrap_or_else(|| "connected, cannot post: posting permission missing.".into());
+    Some(format!(
+        r#"<p class="hint">{} Sign in again to reconnect.</p>"#,
+        escape(&message)
+    ))
 }
 
 fn cost_confirmation(state: &AppState, piece: &Piece, accepted: bool) -> String {

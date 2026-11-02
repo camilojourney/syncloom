@@ -33,6 +33,8 @@ pub enum StudioError {
     MetaNotConfigured,
     PlatformNotConfigured,
     CostConfirmationRequired,
+    PostingPermissionMissing,
+    PostingPermissionUnverified,
     Internal,
 }
 
@@ -44,7 +46,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 30] = [
+const ROWS: [Row; 32] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -155,11 +157,19 @@ const ROWS: [Row; 30] = [
         "cost_confirmation_required",
         "Preview the X cost estimate and confirm its exact micro-USD amount before publishing.",
     ),
+    row(
+        "posting_permission_missing",
+        crate::oauth::POSTING_PERMISSION_MESSAGE,
+    ),
+    row(
+        "posting_permission_unverified",
+        "posting permission could not be verified.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 30] = [
+    pub const ALL: [StudioError; 32] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -189,6 +199,8 @@ impl StudioError {
         StudioError::MetaNotConfigured,
         StudioError::PlatformNotConfigured,
         StudioError::CostConfirmationRequired,
+        StudioError::PostingPermissionMissing,
+        StudioError::PostingPermissionUnverified,
         StudioError::Internal,
     ];
 

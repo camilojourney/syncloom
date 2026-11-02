@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "posting_permission_unverified",
+      "message": "posting permission could not be verified.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}
