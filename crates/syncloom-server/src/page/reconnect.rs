@@ -46,10 +46,10 @@ pub(crate) async fn begin(
         "Reconnect account",
         &format!(
             r#"<a class="back" href="/review/{}">Back to piece</a><section class="card"><h1>Reconnect {}.</h1><p>This does not approve or publish your piece.</p><p>Sign in in the new tab, then return here to finish reconnecting.</p><a class="button secondary" id="provider-sign-in" href="{}" target="_blank" rel="noreferrer">Continue to sign in</a><form method="post" action="/review/{}/reconnect/complete">{}{callback}<button type="submit">Finish reconnecting</button></form></section>"#,
-            escape(&id),
+            escape(id),
             piece.channel.display_name(),
             escape(&start.authorization_url),
-            escape(&id),
+            escape(id),
             csrf(&state)
         ),
     ))
