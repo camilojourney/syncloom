@@ -1277,6 +1277,8 @@ async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
         &format!("/review/{}", p["piece_id"].as_str().unwrap()),
     )
     .await;
+    assert_eq!(page.status, 200);
+    assert!(page.raw.contains("Connect the intended account"));
     assert!(page.raw.contains("Image delivery is unavailable"));
     assert!(
         page.raw

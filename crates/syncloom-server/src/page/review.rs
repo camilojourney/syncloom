@@ -177,13 +177,16 @@ fn publish_controls(
         "Connect the intended account, then approve this version for that account before publishing."
     } else if piece.status != Status::Approved {
         "Approve this saved version before publishing."
-    } else if unavailable_image {
-        "Threads supports text only here. Image delivery is unavailable."
     } else {
         "Approval does not connect your account or allow publishing. Your account must be set up and publishing allowed separately."
     };
+    let image_notice = if unavailable_image {
+        "<p class=\"hint\">Threads supports text only here. Image delivery is unavailable.</p>"
+    } else {
+        ""
+    };
     format!(
-        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
+        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{image_notice}{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
         cost_confirmation(state, piece, accepted_cost.is_some()),
         revision_fields(state, piece)
     )
