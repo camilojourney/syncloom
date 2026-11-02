@@ -687,6 +687,14 @@ async fn legacy_unbound_approval_requires_review_and_uncertain_history_cannot_be
         second_bluesky(&fake);
         login(&server, "bluesky").await;
         let count = fake.calls().len();
+        let page = get(&server, &format!("/review/{}", id_of(&p))).await;
+        assert!(page.raw.contains("Review: Needs fresh approval"));
+        assert!(page.raw.contains("Historical approval on <time"));
+        assert!(!page.raw.contains("badge-approved\">Review: Approved"));
+        assert_eq!(
+            std::fs::read(server.dir.path().join("provenance/events.jsonl"))?,
+            history
+        );
         let refused = post(
             &server,
             &publish_path(&p),
@@ -864,6 +872,8 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
         .await;
         assert_eq!(approved.status, 200);
         assert!(approved.raw.contains("Approved on <time"));
+        assert!(approved.raw.contains("badge-approved\">Review: Approved"));
+        assert!(!approved.raw.contains("Historical approval"));
         assert!(!approved.raw.contains(&format!("action=\"{path}/approve\"")));
         let publish_fields = [
             ("csrf", server.token.as_str()),
@@ -922,6 +932,25 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
         assert_ne!(target_a, target_b);
         assert_eq!(b.body["approval_target"], target_a);
         let page = get(&server, &path).await;
+        assert!(
+            page.raw
+                .contains("badge-pending\">Review: Needs fresh approval")
+        );
+        assert!(!page.raw.contains("badge-approved\">Review: Approved"));
+        assert!(page.raw.contains("Historical approval on <time"));
+        assert!(!page.raw.contains("<p>Approved on <time"));
+        let explanation = page
+            .raw
+            .find("A fresh approval is needed for the connected account.")
+            .ok_or("missing plain account explanation")?;
+        let details = page
+            .raw
+            .find("<details class=\"account-details\">")
+            .ok_or("missing technical account details")?;
+        assert!(
+            explanation < details,
+            "plain explanation precedes closed technical details"
+        );
         assert!(page.raw.contains(target_b));
         assert!(
             page.raw
@@ -977,6 +1006,9 @@ async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect(
         .await;
         assert_eq!(fresh.status, 200);
         assert!(fresh.raw.contains("2026-10-30</time>"));
+        assert!(fresh.raw.contains("badge-approved\">Review: Approved"));
+        assert!(fresh.raw.contains("<p>Approved on <time"));
+        assert!(!fresh.raw.contains("Historical approval"));
         assert!(!fresh.raw.contains(&format!("action=\"{path}/approve\"")));
         if let Some(old) = first_request {
             assert!(

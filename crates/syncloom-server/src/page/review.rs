@@ -22,6 +22,11 @@ pub(super) fn piece_page(
         .account_approval_required(piece, current_target);
     let id = escape(&piece.piece_id);
     let channel = piece.channel.display_name();
+    let review_badge = if piece.status == Status::Approved && account_required {
+        status::badge("pending", "Review: Needs fresh approval")
+    } else {
+        status::review(piece.status)
+    };
     let publish_badge = record
         .map(|r| status::delivery(r.status.as_str(), "Publishing"))
         .unwrap_or_default();
@@ -41,7 +46,7 @@ pub(super) fn piece_page(
         "Review piece",
         &format!(
             r#"<a class="back" href="/">All thoughts &amp; pieces</a><div class="review-heading"><div><h1>Review your piece.</h1><p class="channel-name">{channel}</p></div><div class="status-row">{}{publish_badge}</div></div>{receipt_html}<div class="review-layout"><div class="review-content"><section class="card local-preview-card" aria-labelledby="preview-title"><div class="section-heading"><h2 id="preview-title">{channel} preview</h2><a href="/review/{id}/edit">Edit draft</a></div><p class="hint preview-disclaimer">Approximate local preview. It may look different on the platform.</p><p class="preview-prose draft-text">{}</p>{}<details class="revision"><summary>Exact saved version</summary><p class="hint">Exact saved revision. Approval covers this version, not unsaved edits.</p><code class="hash">{}</code></details></section><section class="source-section"><h2>The source thought</h2><p class="source prose">{}</p>{}</section>{}</div><aside class="review-controls" aria-label="Review and publish"><section class="card approval"><h2>Your decision</h2>{}<hr>{}{last_operation}</section><details class="visual-config"><summary>Visual previews</summary><p class="hint">Optional: make slides from your text. Making new previews means you'll need to check and approve them again.</p><a class="button secondary" href="/review/{id}/render">Render previews</a></details></aside></div>"#,
-            status::review(piece.status),
+            review_badge,
             escape(&piece.text),
             counts::summary(piece),
             escape(&piece.revision),
@@ -86,17 +91,22 @@ fn approval_controls(
         "<details class=\"account-details\"><summary>Connected account</summary><p class=\"hint\">A new approval will apply to this connected account fingerprint.</p><code class=\"hash\">{}</code></details>", escape(target)
     )).unwrap_or_default();
     let approved = if piece.status == Status::Approved {
+        let label = if account_required {
+            "Historical approval"
+        } else {
+            "Approved"
+        };
         let date = snapshot
             .approved_at
             .as_deref()
             .map(|at| {
                 format!(
-                    "Approved on <time datetime=\"{}\">{}</time>.",
+                    "{label} on <time datetime=\"{}\">{}</time>.",
                     escape(at),
                     escape(at.split('T').next().unwrap_or(at))
                 )
             })
-            .unwrap_or_else(|| "Approved. Approval date is not recorded.".into());
+            .unwrap_or_else(|| format!("{label}. Approval date is not recorded."));
         format!("<p>{date} Publishing is a separate action.</p>")
     } else {
         String::new()
@@ -109,9 +119,9 @@ fn approval_controls(
     }
     let needs_previews = piece.visual.is_some() && piece.assets.is_none();
     format!(
-        r#"{approved}{account}<p>{}</p><form method="post" action="/review/{}/approve">{}{}{}<button type="submit"{}>Approve this version</button></form>"#,
+        r#"{approved}<p>{}</p>{account}<form method="post" action="/review/{}/approve">{}{}{}<button type="submit"{}>Approve this version</button></form>"#,
         if account_required && piece.status == Status::Approved {
-            "The connected account changed or this approval has no account. Review and approve this version for the connected account before publishing."
+            "A fresh approval is needed for the connected account. The saved approval is for a different account or has no account recorded."
         } else if needs_previews {
             "Make the current previews before approving."
         } else {
