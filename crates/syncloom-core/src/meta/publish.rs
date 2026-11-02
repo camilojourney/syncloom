@@ -6,6 +6,25 @@ use crate::{PostFailure, PostRequest, Posted, Secret, Token};
 use serde::Deserialize;
 use serde_json::json;
 impl Meta {
+    pub(super) fn posting_target(
+        &self,
+        target: MetaTarget,
+        token: &Token,
+    ) -> Result<String, PostFailure> {
+        let page = token
+            .page_id
+            .as_deref()
+            .filter(|id| numeric_id(id))
+            .filter(|id| Some(*id) == self.config.page_id.as_deref())
+            .ok_or(PostFailure::ConsentRequired)?;
+        match target {
+            MetaTarget::Facebook => crate::platform::account_target("facebook", "", page),
+            MetaTarget::Instagram if numeric_id(&token.member_id) => {
+                crate::platform::account_target("instagram", page, &token.member_id)
+            }
+            MetaTarget::Instagram => Err(PostFailure::ConsentRequired),
+        }
+    }
     pub(super) async fn publish(
         &self,
         target: MetaTarget,
@@ -20,6 +39,7 @@ impl Meta {
             .configured_session()
             .map_err(|_| PostFailure::ConsentRequired)?
             .usable_for_post(channel, image)?;
+        request.require_target(self.posting_target(target, &token))?;
         match target {
             MetaTarget::Facebook => self.facebook(&token, request).await,
             MetaTarget::Instagram => self.instagram(&token, request).await,

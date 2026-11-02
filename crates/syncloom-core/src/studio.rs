@@ -73,6 +73,9 @@ pub struct ReviewRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     pub expected_revision: String,
+    /// Account fingerprint shown during review; checked again when approval commits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_assets: Option<crate::visual::AssetHashes>,
 }
@@ -89,6 +92,9 @@ pub struct PublishRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishResponse {
+    /// Historical attempt target, independent of the current connection or review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_target: Option<String>,
     pub piece: Piece,
     pub status: String,
     pub request_id: Option<String>,
@@ -99,6 +105,15 @@ pub struct PublishResponse {
     pub attempts: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_estimate: Option<crate::social::CostEstimate>,
+}
+
+/// Existing show operation with the current account to name in an explicit approval.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ReviewContext {
+    #[serde(flatten)]
+    pub piece: Piece,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_target: Option<String>,
 }
 
 /// A bounded discovery page; the cursor is the last returned piece id.
@@ -112,6 +127,7 @@ pub struct PiecePage {
 #[derive(Debug)]
 pub struct ReviewSnapshot {
     pub piece: Piece,
+    pub current_target: Option<String>,
     pub publish_intent: Option<DispatchIntent>,
     /// Actual provenance time for the current approval, unavailable in history-less records.
     pub approved_at: Option<String>,
@@ -448,11 +464,12 @@ impl Studio {
         let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         self.require_approval(&lock, &piece)?;
         let operation = format!("export:{}", target.name());
-        let key = intent_key(&operation, &piece.piece_id, &piece.revision);
+        let key = intent_key(&operation, &piece.piece_id, &piece.revision, None);
         let existing = lock.load_intent(&key)?;
         let files = self.bundle_files(&lock, &piece, target)?;
         let bundle = lock.save_export(&key, &files, existing.is_some())?;
-        let request_id = crate::outbox::request_id(&operation, &piece.piece_id, &piece.revision);
+        let request_id =
+            crate::outbox::request_id(&operation, &piece.piece_id, &piece.revision, None);
         if existing.is_none() {
             let now = self.clock.now_rfc3339();
             let intent = DispatchIntent {
@@ -460,6 +477,7 @@ impl Studio {
                 operation,
                 piece_id: piece.piece_id.clone(),
                 revision: piece.revision.clone(),
+                approval_target: None,
                 payload: payload_for(&piece),
                 status: IntentStatus::Exported,
                 created_at: now.clone(),
@@ -538,6 +556,7 @@ impl Studio {
                     revision,
                     status: Status::PendingReview,
                     review_decision_id: None,
+                    approval_target: None,
                     publish_status: None,
                     visual: None,
                     assets: None,
@@ -597,8 +616,8 @@ impl Studio {
     pub fn inspect_publish(&self, piece_id: &str) -> Result<ReviewSnapshot, StudioError> {
         let lock = self.store.lock()?;
         let piece = self.load(&lock, piece_id)?;
-        let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
-        let publish_intent = lock.load_intent(&key)?;
+        let (_, publish_intent) = self.publish_intent(&lock, &piece)?;
+        let current_target = self.review_target(&piece)?;
         let approved_at = if piece.status == Status::Approved && piece.review_decision_id.is_some()
         {
             lock.approval_at(&piece.piece_id, &piece.revision)?
@@ -607,8 +626,18 @@ impl Studio {
         };
         Ok(ReviewSnapshot {
             piece,
+            current_target,
             publish_intent,
             approved_at,
+        })
+    }
+
+    pub fn review_context(&self, piece_id: &str) -> Result<ReviewContext, StudioError> {
+        let piece = self.show(piece_id)?;
+        let current_target = self.review_target(&piece)?;
+        Ok(ReviewContext {
+            piece,
+            current_target,
         })
     }
 
@@ -618,7 +647,13 @@ impl Studio {
         let mut piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
         let event = match action {
             ReviewAction::Status(next) => {
-                if !self.review_status(&lock, &mut piece, next, request.expected_assets.as_ref())? {
+                if !self.review_status(
+                    &lock,
+                    &mut piece,
+                    next,
+                    request.expected_assets.as_ref(),
+                    request.expected_target.as_deref(),
+                )? {
                     return Ok(piece);
                 }
                 EventKind::PieceReviewed
@@ -642,6 +677,45 @@ impl Studio {
         };
         self.save_change(&lock, event, &mut piece, Extra::default())?;
         Ok(piece)
+    }
+
+    pub fn review_target(&self, piece: &Piece) -> Result<Option<String>, StudioError> {
+        let Some(platform) = self.delivery.get(&piece.platform) else {
+            return Ok(None);
+        };
+        match platform.posting_target() {
+            Ok(target) => Ok(Some(target)),
+            Err(PostFailure::ConsentRequired) => Ok(None),
+            Err(_) => Err(StudioError::Internal),
+        }
+    }
+
+    /// UI/API callers can distinguish historical content approval from current posting authority.
+    pub fn account_approval_required(&self, piece: &Piece, current_target: Option<&str>) -> bool {
+        self.delivery.contains_key(&piece.platform)
+            && (piece.approval_target.is_none()
+                || current_target != piece.approval_target.as_deref())
+    }
+
+    fn require_account_approval(
+        &self,
+        piece: &Piece,
+        intent: Option<&DispatchIntent>,
+    ) -> Result<(), StudioError> {
+        if intent.is_some_and(|intent| !intent.status.allows_new_attempt()) {
+            return Ok(());
+        }
+        if intent.is_some_and(|intent| intent.approval_target != piece.approval_target) {
+            return Err(StudioError::AccountApprovalRequired);
+        }
+        // Missing credentials still use the existing consent_required outcome. Every adapter
+        // checks the bound target against its one loaded token before any external effect.
+        if let Some(target) = self.review_target(piece)?
+            && piece.approval_target.as_ref() != Some(&target)
+        {
+            return Err(StudioError::AccountApprovalRequired);
+        }
+        Ok(())
     }
 
     fn require_visual_assets(&self, lock: &Lock<'_>, piece: &Piece) -> Result<(), StudioError> {
@@ -685,6 +759,7 @@ impl Studio {
         piece: &mut Piece,
         next: Status,
         expected_assets: Option<&crate::visual::AssetHashes>,
+        expected_target: Option<&str>,
     ) -> Result<bool, StudioError> {
         if next == Status::Approved {
             self.approve_bytes(lock, piece, expected_assets)?;
@@ -692,13 +767,31 @@ impl Studio {
         if !piece.status.can_move_to(next) {
             return Err(StudioError::InvalidStatusTransition);
         }
-        if next == piece.status {
+        let target = self.reviewed_target(piece, next, expected_target)?;
+        if next == piece.status && piece.approval_target == target {
             return Ok(false);
         }
+        piece.approval_target = target;
         piece.status = next;
         piece.review_decision_id = (next == Status::Approved)
             .then(|| review_decision_id(&piece.piece_id, &piece.revision));
         Ok(true)
+    }
+
+    fn reviewed_target(
+        &self,
+        piece: &Piece,
+        next: Status,
+        expected: Option<&str>,
+    ) -> Result<Option<String>, StudioError> {
+        if next != Status::Approved {
+            return Ok(None);
+        }
+        let target = self.review_target(piece)?;
+        if target.as_deref() != expected {
+            return Err(StudioError::AccountApprovalRequired);
+        }
+        Ok(target)
     }
 
     pub async fn publish(
@@ -751,6 +844,7 @@ impl Studio {
             let payload = payload_for(&piece);
             let cost_estimate = cost_for(&piece);
             return Ok(Reserved::DryRun(PublishResponse {
+                approval_target: None,
                 piece,
                 status: "dry_run".to_owned(),
                 request_id: None,
@@ -763,8 +857,8 @@ impl Studio {
             }));
         }
         self.require_approval(&lock, &piece)?;
-        let key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision);
-        let existing = lock.load_intent(&key)?;
+        let (key, existing) = self.publish_intent(&lock, &piece)?;
+        self.require_account_approval(&piece, existing.as_ref())?;
         self.require_cost_confirmation(&piece, existing.as_ref(), request.accepted_cost_microusd)?;
         let (intent, created) = match existing {
             Some(existing) => (existing, false),
@@ -776,6 +870,30 @@ impl Studio {
             intent,
             created,
         })
+    }
+
+    /// Select the durable owner before deciding whether a new attempt is allowed.
+    fn publish_intent(
+        &self,
+        lock: &Lock<'_>,
+        piece: &Piece,
+    ) -> Result<(String, Option<DispatchIntent>), StudioError> {
+        let legacy_key = intent_key(OPERATION_PUBLISH, &piece.piece_id, &piece.revision, None);
+        if let Some(legacy) = lock
+            .load_intent(&legacy_key)?
+            .filter(|i| !i.status.allows_new_attempt())
+        {
+            // An unbound historical effect cannot be made safe by a new target key.
+            return Ok((legacy_key, Some(legacy)));
+        }
+        let key = intent_key(
+            OPERATION_PUBLISH,
+            &piece.piece_id,
+            &piece.revision,
+            piece.approval_target.as_deref(),
+        );
+        let intent = lock.load_intent(&key)?;
+        Ok((key, intent))
     }
 
     fn require_cost_confirmation(
@@ -808,10 +926,12 @@ impl Studio {
                 OPERATION_PUBLISH,
                 &piece.piece_id,
                 &piece.revision,
+                piece.approval_target.as_deref(),
             ),
             operation: OPERATION_PUBLISH.to_owned(),
             piece_id: piece.piece_id.clone(),
             revision: piece.revision.clone(),
+            approval_target: piece.approval_target.clone(),
             payload: payload_for(piece),
             status: IntentStatus::Contained,
             created_at: now.clone(),
@@ -943,6 +1063,7 @@ impl Studio {
     ) -> Result<PostRequest, StudioError> {
         Ok(PostRequest {
             request_id: intent.request_id.clone(),
+            approval_target: intent.approval_target.clone(),
             text: intent.payload.content.clone(),
             image: self.post_image(lock, piece)?,
             slides: self.post_slides(lock, piece)?,
@@ -961,22 +1082,34 @@ impl Studio {
         self.require_approval(&lock, &piece)?;
         let mut intent = lock.load_intent(key)?.ok_or(StudioError::Internal)?;
         if !intent.status.allows_new_attempt() {
-            if intent.status == IntentStatus::Posting {
-                intent.status = IntentStatus::Unknown;
-                return self
-                    .finish_locked(&lock, key, &piece.piece_id, intent, false)
-                    .map(|response| Claim::Finished(Box::new(response)));
-            }
-            return Ok(Claim::Finished(Box::new(response_from(
-                piece, &intent, false,
-            ))));
+            return self.recover_or_report(&lock, key, piece, intent);
         }
+        self.require_account_approval(&piece, Some(&intent))?;
         let request = self.post_request(&lock, &piece, &intent)?;
         self.start_attempt(&lock, key, &mut piece, &mut intent)?;
         Ok(Claim::Send {
             intent: Box::new(intent),
             request,
         })
+    }
+
+    /// Recover interrupted effects without replay, or report the immutable historical receipt.
+    fn recover_or_report(
+        &self,
+        lock: &Lock<'_>,
+        key: &str,
+        piece: Piece,
+        mut intent: DispatchIntent,
+    ) -> Result<Claim, StudioError> {
+        if intent.status == IntentStatus::Posting {
+            intent.status = IntentStatus::Unknown;
+            return self
+                .finish_locked(lock, key, &piece.piece_id, intent, false)
+                .map(|response| Claim::Finished(Box::new(response)));
+        }
+        Ok(Claim::Finished(Box::new(response_from(
+            piece, &intent, false,
+        ))))
     }
 
     /// One platform attempt: `posting` written first, the lock released for the call, the
@@ -1044,6 +1177,7 @@ impl Studio {
                 request_id: Some(intent.request_id.clone()),
                 outcome: Some(intent.status.as_str().to_owned()),
                 post_id: intent.post_id.clone(),
+                approval_target: intent.approval_target.clone(),
                 usage: None,
             },
         )?;
@@ -1085,6 +1219,7 @@ impl Studio {
             piece,
             Extra {
                 request_id: Some(intent.request_id.clone()),
+                approval_target: intent.approval_target.clone(),
                 ..Extra::default()
             },
         )
@@ -1121,6 +1256,11 @@ impl Studio {
             channel: piece.channel,
             revision: piece.revision.clone(),
             status: piece.status,
+            approval_target: if extra.request_id.is_some() {
+                extra.approval_target
+            } else {
+                piece.approval_target.clone()
+            },
             usage: extra.usage,
             request_id: extra.request_id,
             outcome: extra.outcome,
@@ -1154,6 +1294,7 @@ enum Reserved {
 /// The optional fields of an event.
 #[derive(Default)]
 struct Extra {
+    approval_target: Option<String>,
     usage: Option<Usage>,
     request_id: Option<String>,
     outcome: Option<String>,
@@ -1175,6 +1316,7 @@ fn status_of(failure: PostFailure) -> IntentStatus {
 
 fn response_from(piece: Piece, intent: &DispatchIntent, created: bool) -> PublishResponse {
     PublishResponse {
+        approval_target: intent.approval_target.clone(),
         piece,
         status: intent.status.as_str().to_owned(),
         request_id: Some(intent.request_id.clone()),

@@ -97,12 +97,8 @@ async fn draft(server: &TestServer, platform: &str, image: bool) -> Value {
     assert_eq!(rendered.status, 200, "{}", rendered.raw);
     rendered.body
 }
-#[expect(
-    clippy::unwrap_used,
-    reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
-)]
 async fn approve_piece(server: &TestServer, p: &Value) {
-    let result=send_json(server,reqwest::Method::PATCH,&format!("/v1/pieces/{}",p["piece_id"].as_str().unwrap()),json!({"expected_revision":p["revision"],"status":"approved","expected_assets":p.get("assets").map(|a|json!({"image_sha256":a["image_sha256"],"carousel_sha256":a["carousel_sha256"]}))})).await;
+    let result = approve(server, p).await;
     assert_eq!(result.status, 200, "{}", result.raw);
 }
 #[expect(
@@ -175,7 +171,8 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
         let refreshed = post_empty(&server, &refresh).await;
         assert_eq!(refreshed.status, 200, "{platform}: {}", refreshed.raw);
         assert_eq!(refreshed.body["status"], "signed_in");
-        let renewal_calls = if platform == "threads" { 2 } else { 1 };
+        let identity_reads = usize::from(platform != "bluesky");
+        let renewal_calls = 1 + identity_reads + usize::from(platform == "threads");
         assert_eq!(fake.calls().len(), calls + renewal_calls);
         assert_eq!(fake.calls()[calls].path, path);
         if platform == "threads" {
@@ -184,6 +181,16 @@ async fn connection_refresh_and_idempotent_sign_out_cross_real_http_for_each_pla
                 fake.calls()[calls + 1]
                     .query
                     .contains("input_token=threads-long-2")
+            );
+        }
+        if platform != "bluesky" {
+            assert_eq!(
+                fake.calls().last().unwrap().path,
+                if platform == "x" {
+                    "/2/users/me"
+                } else {
+                    "/v1.0/me"
+                }
             );
         }
         assert_eq!(get(&server, &connection).await.body, refreshed.body);
@@ -416,6 +423,717 @@ async fn each_platform_text_journey_obeys_grant_approval_and_durable_repeat_guar
 }
 
 #[tokio::test]
+async fn posted_and_unknown_intents_stay_with_their_target_after_fresh_approval() {
+    for initial_status in [200, 500] {
+        let fake = fake::Fake::bluesky().await;
+        let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+        login(&server, "bluesky").await;
+        let p = draft(&server, "bluesky", false).await;
+        approve_piece(&server, &p).await;
+        if initial_status == 500 {
+            fake.reply(
+                "/xrpc/com.atproto.repo.createRecord",
+                500,
+                json!({"error":"lost outcome"}),
+            );
+        }
+        let a = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"]}),
+        )
+        .await;
+        assert_eq!(
+            a.body["status"],
+            if initial_status == 500 {
+                "unknown"
+            } else {
+                "posted"
+            }
+        );
+        send_json(
+            &server,
+            reqwest::Method::DELETE,
+            "/v1/bluesky/connection",
+            Value::Null,
+        )
+        .await;
+        fake.reply("/xrpc/com.atproto.server.createSession", 200,
+            json!({"accessJwt":fake::jwt(1793455200),"refreshJwt":"synthetic-second-session","did":"did:plc:second","handle":"second.invalid"}));
+        fake.reply(
+            "/xrpc/com.atproto.repo.createRecord",
+            200,
+            json!({"uri":"at://did:plc:second/app.bsky.feed.post/secondrecord","cid":fake::CID}),
+        );
+        login(&server, "bluesky").await;
+        approve_piece(&server, &p).await;
+        let b = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"]}),
+        )
+        .await;
+        let targets: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .map(|c| c.json()["repo"].clone())
+            .collect();
+        assert_eq!(
+            targets,
+            vec![json!("did:plc:testrepo"), json!("did:plc:second")],
+            "{}",
+            b.raw
+        );
+        assert_eq!(b.body["status"], "posted");
+        assert_ne!(a.body["request_id"], b.body["request_id"]);
+        assert_ne!(a.body["approval_target"], b.body["approval_target"]);
+        assert_eq!(
+            std::fs::read_dir(server.dir.path().join("outbox"))
+                .unwrap()
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test]
+async fn identity_mismatched_refresh_signs_out_without_rebinding_approval() {
+    let fake = fake::Fake::bluesky().await;
+    let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+    login(&server, "bluesky").await;
+    fake.reply("/xrpc/com.atproto.server.refreshSession", 200,
+        json!({"accessJwt":fake::jwt(1793541600),"refreshJwt":"synthetic-other","did":"did:plc:other","handle":"other.invalid"}));
+    assert_eq!(
+        post_empty(&server, "/v1/bluesky/refresh").await.code(),
+        "sign_in_rejected"
+    );
+    assert_eq!(
+        get(&server, "/v1/bluesky/connection").await.body["status"],
+        "signed_out"
+    );
+}
+
+#[tokio::test]
+async fn approval_must_name_the_account_the_reviewer_saw() {
+    let fake = fake::Fake::bluesky().await;
+    let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+    login(&server, "bluesky").await;
+    let p = draft(&server, "bluesky", false).await;
+    let path = format!("/v1/pieces/{}", p["piece_id"].as_str().unwrap());
+    let unnamed = send_json(
+        &server,
+        reqwest::Method::PATCH,
+        &path,
+        json!({"expected_revision":p["revision"],"status":"approved"}),
+    )
+    .await;
+    assert_eq!(
+        unnamed.code(),
+        "account_approval_required",
+        "{}",
+        unnamed.raw
+    );
+    let observed = get(&server, &path).await.body["current_target"].clone();
+    send_json(
+        &server,
+        reqwest::Method::DELETE,
+        "/v1/bluesky/connection",
+        Value::Null,
+    )
+    .await;
+    second_bluesky(&fake);
+    login(&server, "bluesky").await;
+    let stale = send_json(
+        &server,
+        reqwest::Method::PATCH,
+        &path,
+        json!({"expected_revision":p["revision"],"expected_target":observed,"status":"approved"}),
+    )
+    .await;
+    assert_eq!(stale.code(), "account_approval_required");
+    assert_eq!(get(&server, &path).await.body["status"], "pending_review");
+    approve_piece(&server, &p).await;
+}
+
+fn second_bluesky(fake: &fake::Fake) {
+    fake.reply("/xrpc/com.atproto.server.createSession", 200,
+        json!({"accessJwt":fake::jwt(1793455300),"refreshJwt":"synthetic-second-session","did":"did:plc:second","handle":"second.invalid"}));
+}
+
+#[tokio::test]
+async fn a_claimed_media_attempt_keeps_its_target_during_reconnect_and_fresh_review()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fake = fake::Fake::bluesky().await;
+    let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+    login(&server, "bluesky").await;
+    let p = draft(&server, "bluesky", true).await;
+    approve_piece(&server, &p).await;
+    let before = get(&server, &format!("/v1/pieces/{}", id_of(&p)))
+        .await
+        .body["approval_target"]
+        .clone();
+    let hold = fake.hold("/xrpc/com.atproto.repo.uploadBlob");
+    let count = fake.calls().len();
+    let url = server.url(&publish_path(&p));
+    let token = server.token.clone();
+    let revision = p["revision"].clone();
+    let publishing = tokio::spawn(async move {
+        client()
+            .post(url)
+            .header("x-syncloom-token", token)
+            .json(&json!({"expected_revision":revision}))
+            .send()
+            .await
+    });
+    fake.wait_calls(count + 1).await;
+    send_json(
+        &server,
+        reqwest::Method::DELETE,
+        "/v1/bluesky/connection",
+        Value::Null,
+    )
+    .await;
+    second_bluesky(&fake);
+    login(&server, "bluesky").await;
+    approve_piece(&server, &p).await;
+    let reviewed = get(&server, &format!("/v1/pieces/{}", id_of(&p))).await;
+    assert_ne!(reviewed.body["approval_target"], before);
+    hold.notify_one();
+    let result: Value = publishing.await??.json().await?;
+    assert_eq!(result["status"], "posted");
+    assert_eq!(
+        result["approval_target"], before,
+        "receipt describes A, not concurrent B review"
+    );
+    let posts: Vec<_> = fake
+        .calls()
+        .into_iter()
+        .filter(|c| c.path.ends_with("createRecord"))
+        .collect();
+    assert_eq!(posts.len(), 1);
+    assert_eq!(posts[0].json()["repo"], "did:plc:testrepo");
+    assert_eq!(
+        posts[0].authorization,
+        format!("Bearer {}", fake::jwt(1793455200))
+    );
+    let events: Vec<Value> =
+        std::fs::read_to_string(server.dir.path().join("provenance/events.jsonl"))?
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?;
+    assert_eq!(
+        events.last().ok_or("missing outcome")?["approval_target"],
+        before
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn legacy_unbound_approval_requires_review_and_uncertain_history_cannot_be_bypassed()
+-> Result<(), Box<dyn std::error::Error>> {
+    for historical in [None, Some("unknown"), Some("posting"), Some("posted")] {
+        let fake = fake::Fake::bluesky().await;
+        let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+        login(&server, "bluesky").await;
+        let p = draft(&server, "bluesky", false).await;
+        approve_piece(&server, &p).await;
+        if historical.is_some() {
+            assert_eq!(
+                post(
+                    &server,
+                    &publish_path(&p),
+                    json!({"expected_revision":p["revision"]})
+                )
+                .await
+                .body["status"],
+                "posted"
+            );
+            let entry = std::fs::read_dir(server.dir.path().join("outbox"))?
+                .next()
+                .ok_or("missing intent")??;
+            let mut old: Value = serde_json::from_slice(&std::fs::read(entry.path())?)?;
+            old.as_object_mut()
+                .ok_or("invalid intent")?
+                .remove("approval_target");
+            old["status"] = json!(historical);
+            let key =
+                syncloom_core::outbox::intent_key("publish", &id_of(&p), &revision_of(&p), None);
+            std::fs::remove_file(entry.path())?;
+            std::fs::write(
+                server.dir.path().join("outbox").join(format!("{key}.json")),
+                serde_json::to_vec(&old)?,
+            )?;
+        }
+        let piece_path = server
+            .dir
+            .path()
+            .join("pieces")
+            .join(format!("{}.json", id_of(&p)));
+        let mut old: Value = serde_json::from_slice(&std::fs::read(&piece_path)?)?;
+        old.as_object_mut()
+            .ok_or("invalid piece")?
+            .remove("approval_target");
+        std::fs::write(&piece_path, serde_json::to_vec(&old)?)?;
+        let history = std::fs::read(server.dir.path().join("provenance/events.jsonl"))?;
+        send_json(
+            &server,
+            reqwest::Method::DELETE,
+            "/v1/bluesky/connection",
+            Value::Null,
+        )
+        .await;
+        second_bluesky(&fake);
+        login(&server, "bluesky").await;
+        let count = fake.calls().len();
+        let page = get(&server, &format!("/review/{}", id_of(&p))).await;
+        assert!(page.raw.contains("Review: Needs fresh approval"));
+        assert!(page.raw.contains("Historical approval on <time"));
+        assert!(!page.raw.contains("badge-approved\">Review: Approved"));
+        assert_eq!(
+            std::fs::read(server.dir.path().join("provenance/events.jsonl"))?,
+            history
+        );
+        let refused = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"]}),
+        )
+        .await;
+        if let Some(status) = historical {
+            assert_eq!(
+                refused.body["status"],
+                if status == "posting" {
+                    "unknown"
+                } else {
+                    status
+                }
+            );
+        } else {
+            assert_eq!(refused.code(), "account_approval_required");
+        }
+        assert_eq!(fake.calls().len(), count);
+        approve_piece(&server, &p).await;
+        if let Some(status) = historical {
+            let repeated = post(
+                &server,
+                &publish_path(&p),
+                json!({"expected_revision":p["revision"]}),
+            )
+            .await;
+            assert_eq!(
+                repeated.body["status"],
+                if status == "posting" {
+                    "unknown"
+                } else {
+                    status
+                }
+            );
+            assert!(
+                repeated.body.get("approval_target").is_none(),
+                "never fabricate legacy receipt identity"
+            );
+            assert_eq!(fake.calls().len(), count);
+            assert_eq!(
+                std::fs::read_dir(server.dir.path().join("outbox"))?.count(),
+                1
+            );
+        }
+        assert!(
+            std::fs::read(server.dir.path().join("provenance/events.jsonl"))?.starts_with(&history)
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn x_account_switch_requires_fresh_approval() {
+    social_account_switch("x").await;
+}
+#[tokio::test]
+async fn threads_account_switch_requires_fresh_approval() {
+    social_account_switch("threads").await;
+}
+async fn social_account_switch(platform: &str) {
+    {
+        let fake = if platform == "x" {
+            fake::Fake::x().await
+        } else {
+            fake::Fake::threads().await
+        };
+        let (server, _, _, _) = setup(&fake, platform, true).await;
+        fake.principal("x-access-1", "111");
+        fake.principal("threads-long-1", "303");
+        login(&server, platform).await;
+        let p = draft(&server, platform, false).await;
+        approve_piece(&server, &p).await;
+        send_json(
+            &server,
+            reqwest::Method::DELETE,
+            &format!("/v1/{platform}/connection"),
+            Value::Null,
+        )
+        .await;
+        if platform == "x" {
+            fake.reply("/2/oauth2/token", 200, json!({"access_token":"synthetic-x-second","refresh_token":"synthetic-refresh","expires_in":7200,"token_type":"bearer","scope":"tweet.read tweet.write users.read media.write offline.access"}));
+            fake.reply("/2/users/me", 200, json!({"data":{"id":"222"}}));
+            fake.principal("synthetic-x-second", "222");
+        } else {
+            fake.reply(
+                "/oauth/access_token",
+                200,
+                json!({"access_token":"synthetic-short","user_id":606}),
+            );
+            fake.reply(
+                "/access_token",
+                200,
+                json!({"access_token":"synthetic-threads-second","expires_in":5184000}),
+            );
+            fake.principal("synthetic-threads-second", "606");
+            fake.reply("/v1.0/me", 200, json!({"id":"606"}));
+            fake.reply("/v1.0/606/threads", 200, json!({"id":"404"}));
+            fake.reply("/v1.0/606/threads_publish", 200, json!({"id":"505"}));
+        }
+        login(&server, platform).await;
+        let published = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"],"accepted_cost_microusd":15000}),
+        )
+        .await;
+        let posts: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path == "/2/tweets" || c.path.ends_with("/threads_publish"))
+            .map(|c| (c.path, c.target_account))
+            .collect();
+        assert_eq!(
+            published.code(),
+            "account_approval_required",
+            "{platform}: stale approval sent to {posts:?}; {}",
+            published.raw
+        );
+        assert!(posts.is_empty());
+        approve_piece(&server, &p).await;
+        let fresh = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"],"accepted_cost_microusd":15000}),
+        )
+        .await;
+        assert_eq!(fresh.body["status"], "posted");
+        let targets: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path == "/2/tweets" || c.path.ends_with("/threads_publish"))
+            .map(|c| c.target_account)
+            .collect();
+        assert_eq!(
+            targets,
+            vec![Some(if platform == "x" { "222" } else { "606" }.into())]
+        );
+    }
+}
+
+// Native forms must echo the displayed account and inspect the same durable intent as publish.
+#[tokio::test]
+async fn frontend_account_approval_and_target_scoped_receipts_survive_reconnect()
+-> Result<(), Box<dyn std::error::Error>> {
+    for posted_a in [false, true] {
+        let fake = fake::Fake::bluesky().await;
+        let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+        login(&server, "bluesky").await;
+        let p = draft(&server, "bluesky", false).await;
+        let id = p["piece_id"].as_str().ok_or("piece id")?;
+        let revision = p["revision"].as_str().ok_or("revision")?;
+        let path = format!("/review/{id}");
+        let a = get(&server, &format!("/v1/pieces/{id}")).await;
+        let target_a = a.body["current_target"].as_str().ok_or("A target")?;
+        let page = get(&server, &path).await;
+        assert!(
+            page.raw
+                .contains(&format!("name=\"expected_target\" value=\"{target_a}\"")),
+            "displayed account must be submitted"
+        );
+        let approve_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+            ("expected_target", target_a),
+        ];
+        let approved = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&approve_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(approved.status, 200);
+        assert!(approved.raw.contains("Approved on <time"));
+        assert!(approved.raw.contains("badge-approved\">Review: Approved"));
+        assert!(!approved.raw.contains("Historical approval"));
+        assert!(!approved.raw.contains(&format!("action=\"{path}/approve\"")));
+        let publish_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+        ];
+        let mut first_request = None;
+        if posted_a {
+            let sent = answer(
+                client()
+                    .post(server.url(&format!("{path}/publish")))
+                    .header("origin", server.url(""))
+                    .form(&publish_fields)
+                    .send()
+                    .await?,
+            )
+            .await;
+            assert!(sent.raw.contains("<h2>Posted</h2>"));
+            first_request = Some(
+                post(
+                    &server,
+                    &publish_path(&p),
+                    json!({"expected_revision":revision}),
+                )
+                .await
+                .body["request_id"]
+                    .clone(),
+            );
+        }
+        send_json(
+            &server,
+            reqwest::Method::DELETE,
+            "/v1/bluesky/connection",
+            Value::Null,
+        )
+        .await;
+        fake.reply("/xrpc/com.atproto.server.createSession", 200, json!({"accessJwt":fake::jwt(1793455200),"refreshJwt":"synthetic-second-session","did":"did:plc:second","handle":"second.invalid"}));
+        fake.reply(
+            "/xrpc/com.atproto.repo.createRecord",
+            200,
+            json!({"uri":"at://did:plc:second/app.bsky.feed.post/secondrecord","cid":fake::CID}),
+        );
+        login(&server, "bluesky").await;
+        let stale = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&approve_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(stale.status, 409);
+        assert!(stale.raw.contains("account_approval_required"));
+        let b = get(&server, &format!("/v1/pieces/{id}")).await;
+        let target_b = b.body["current_target"].as_str().ok_or("B target")?;
+        assert_ne!(target_a, target_b);
+        assert_eq!(b.body["approval_target"], target_a);
+        let page = get(&server, &path).await;
+        assert!(
+            page.raw
+                .contains("badge-pending\">Review: Needs fresh approval")
+        );
+        assert!(!page.raw.contains("badge-approved\">Review: Approved"));
+        assert!(page.raw.contains("Historical approval on <time"));
+        assert!(!page.raw.contains("<p>Approved on <time"));
+        let explanation = page
+            .raw
+            .find("A fresh approval is needed for the connected account.")
+            .ok_or("missing plain account explanation")?;
+        let details = page
+            .raw
+            .find("<details class=\"account-details\">")
+            .ok_or("missing technical account details")?;
+        assert!(
+            explanation < details,
+            "plain explanation precedes closed technical details"
+        );
+        assert!(page.raw.contains(target_b));
+        assert!(
+            page.raw
+                .contains("A new approval will apply to this connected account fingerprint.")
+        );
+        assert!(
+            !page
+                .raw
+                .contains("Approval is for this exact account fingerprint.")
+        );
+        assert!(page.raw.contains("Approve this version"));
+        assert!(
+            page.raw
+                .contains("class=\"publish\" type=\"submit\" disabled>Publish")
+        );
+        let before = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .count();
+        if !posted_a {
+            let denied = answer(
+                client()
+                    .post(server.url(&format!("{path}/publish")))
+                    .header("origin", server.url(""))
+                    .form(&publish_fields)
+                    .send()
+                    .await?,
+            )
+            .await;
+            assert_eq!(denied.status, 409);
+        }
+        assert_eq!(
+            fake.calls()
+                .into_iter()
+                .filter(|c| c.path.ends_with("createRecord"))
+                .count(),
+            before
+        );
+        let fresh_fields = [
+            ("csrf", server.token.as_str()),
+            ("expected_revision", revision),
+            ("expected_target", target_b),
+        ];
+        let fresh = answer(
+            client()
+                .post(server.url(&format!("{path}/approve")))
+                .header("origin", server.url(""))
+                .form(&fresh_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(fresh.status, 200);
+        assert!(fresh.raw.contains("2026-10-30</time>"));
+        assert!(fresh.raw.contains("badge-approved\">Review: Approved"));
+        assert!(fresh.raw.contains("<p>Approved on <time"));
+        assert!(!fresh.raw.contains("Historical approval"));
+        assert!(!fresh.raw.contains(&format!("action=\"{path}/approve\"")));
+        if let Some(old) = first_request {
+            assert!(
+                !fresh.raw.contains(old.as_str().ok_or("A request")?),
+                "new target must not inherit A receipt"
+            );
+        }
+        let sent = answer(
+            client()
+                .post(server.url(&format!("{path}/publish")))
+                .header("origin", server.url(""))
+                .form(&publish_fields)
+                .send()
+                .await?,
+        )
+        .await;
+        assert_eq!(sent.status, 200);
+        assert!(sent.raw.contains("<h2>Posted</h2>"));
+        let repeated = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":revision}),
+        )
+        .await;
+        let request = repeated.body["request_id"].as_str().ok_or("B request")?;
+        assert!(sent.raw.contains(request));
+        assert!(sent.raw.contains("disabled>Publish"));
+        let targets: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .map(|c| c.json()["repo"].clone())
+            .collect();
+        let mut expected = Vec::new();
+        if posted_a {
+            expected.push(json!("did:plc:testrepo"));
+        }
+        expected.push(json!("did:plc:second"));
+        assert_eq!(targets, expected);
+        post(
+            &server,
+            &format!("/v1/pieces/{id}/export"),
+            json!({"expected_revision":revision,"target":"reddit"}),
+        )
+        .await;
+        let exported = get(&server, &path).await;
+        assert!(exported.raw.contains(request));
+        assert!(exported.raw.contains("<h2>Posted</h2>"));
+        assert!(exported.raw.contains("disabled>Publish"));
+    }
+    Ok(())
+}
+
+// The only counterfactual is the authenticated DID; content and revision stay fixed.
+#[tokio::test]
+async fn bluesky_account_switch_requires_fresh_approval_before_any_post() {
+    for switched in [false, true] {
+        let fake = fake::Fake::bluesky().await;
+        let (server, _, _, _) = setup(&fake, "bluesky", true).await;
+        login(&server, "bluesky").await;
+        let p = draft(&server, "bluesky", false).await;
+        approve_piece(&server, &p).await;
+        if switched {
+            let removed = send_json(
+                &server,
+                reqwest::Method::DELETE,
+                "/v1/bluesky/connection",
+                Value::Null,
+            )
+            .await;
+            assert_eq!(removed.body["status"], "signed_out");
+            fake.reply("/xrpc/com.atproto.server.createSession", 200,
+                json!({"accessJwt":fake::jwt(1793455200),"refreshJwt":"synthetic-second-session","did":"did:plc:second","handle":"second.invalid"}));
+            fake.reply("/xrpc/com.atproto.repo.createRecord", 200,
+                json!({"uri":"at://did:plc:second/app.bsky.feed.post/secondrecord","cid":fake::CID}));
+            let signed = post(
+                &server,
+                "/v1/bluesky/sign-in",
+                json!({"identifier":"second.invalid","app_password":"synthetic-second-password"}),
+            )
+            .await;
+            assert_eq!(signed.body["status"], "signed_in");
+        }
+        let published = post(
+            &server,
+            &publish_path(&p),
+            json!({"expected_revision":p["revision"]}),
+        )
+        .await;
+        let posts: Vec<_> = fake
+            .calls()
+            .into_iter()
+            .filter(|c| c.path.ends_with("createRecord"))
+            .map(|c| c.json()["repo"].clone())
+            .collect();
+        if switched {
+            assert_eq!(
+                published.code(),
+                "account_approval_required",
+                "old account approval must refuse; actual targets={posts:?}; response={}",
+                published.raw
+            );
+            assert!(posts.is_empty());
+            approve_piece(&server, &p).await;
+            let fresh = post(
+                &server,
+                &publish_path(&p),
+                json!({"expected_revision":p["revision"]}),
+            )
+            .await;
+            assert_eq!(fresh.body["status"], "posted");
+            let targets: Vec<_> = fake
+                .calls()
+                .into_iter()
+                .filter(|c| c.path.ends_with("createRecord"))
+                .map(|c| c.json()["repo"].clone())
+                .collect();
+            assert_eq!(targets, vec![json!("did:plc:second")]);
+        } else {
+            assert_eq!(published.body["status"], "posted");
+            assert_eq!(posts, vec![json!("did:plc:testrepo")]);
+        }
+    }
+}
+
+#[tokio::test]
 async fn x_cost_is_visible_before_delivery_requires_exact_confirmation_and_survives_outcome() {
     let fake = fake::Fake::x().await;
     let (server, _, _, _) = setup(&fake, "x", true).await;
@@ -590,6 +1308,8 @@ async fn threads_visual_review_disables_unavailable_image_publishing_visibly() {
         &format!("/review/{}", p["piece_id"].as_str().unwrap()),
     )
     .await;
+    assert_eq!(page.status, 200);
+    assert!(page.raw.contains("Connect the intended account"));
     assert!(page.raw.contains("Image delivery is unavailable"));
     assert!(
         page.raw
@@ -858,7 +1578,9 @@ async fn saved_x_grant_without_tweet_write_cannot_publish() {
                     r#"{"access_token":"reduced-access","refresh_token":"reduced-refresh"}"#,
                 ),
                 expires_at: Some("2026-12-29T18:00:00Z".into()),
-                member_id: String::new(),
+                member_id: "111".into(),
+                identity_authority: None,
+                page_id: None,
                 scope: "tweet.read".into(),
                 scope_verified: true,
                 obtained_at: "2026-10-30T18:00:00Z".into(),
@@ -1276,7 +1998,9 @@ async fn x_text_posting_does_not_require_media_or_offline_scope() {
                     r#"{"access_token":"text-only-access","refresh_token":"text-only-refresh"}"#,
                 ),
                 expires_at: Some("2026-12-29T18:00:00Z".into()),
-                member_id: String::new(),
+                member_id: "111".into(),
+                identity_authority: None,
+                page_id: None,
                 scope: "tweet.read tweet.write users.read".into(),
                 scope_verified: true,
                 obtained_at: "2026-10-30T18:00:00Z".into(),

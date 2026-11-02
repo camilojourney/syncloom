@@ -23,14 +23,14 @@ cargo run -p syncloom-server            # binds 127.0.0.1:8790, override with SY
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-Open **http://127.0.0.1:8790/** in the laptop browser to draft for selected channels, read your full saved text in light or dark mode, edit a draft, render phone-sized PNG/PDF previews, approve the exact revision and hashes, and explicitly publish through the existing outbox. Edits open on a separate screen so unsaved text cannot be mistaken for an approved draft. [Browser studio and HTTP session protection](docs/studio.md).
+Open **http://127.0.0.1:8790/** in the laptop browser to draft for selected channels, read your full saved text in light or dark mode, edit a draft, render phone-sized PNG/PDF previews, approve the exact revision, hashes and connected account, and explicitly publish through the existing outbox. Edits open on a separate screen so unsaved text cannot be mistaken for an approved draft. [Browser studio and HTTP session protection](docs/studio.md).
 
 Command line, same core, same errors:
 
 ```sh
 cargo run -p syncloom-cli -- thought --text "<the thought>" --channel linkedin_text
 cargo run -p syncloom-cli -- show <piece_id>
-cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <revision>
+cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <revision> --expected-target <current_target>
 cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision> --dry-run
 cargo run -p syncloom-cli -- publish <piece_id> --expected-revision <revision>   # contained, or posted when SYNCLOOM_DELIVERY grants the platform
 cargo run -p syncloom-cli -- linkedin sign-in     # prints the authorization URL, waits for the browser, stores the token in the Keychain
@@ -100,6 +100,8 @@ cargo run -p syncloom-cli -- view <piece_id> --kind image > /tmp/piece.png
 cargo run -p syncloom-cli -- view <piece_id> --kind carousel > /tmp/piece.pdf
 cargo run -p syncloom-cli -- approve <piece_id> --expected-revision <rendered_revision> --image-sha256 <image_sha256> --carousel-sha256 <carousel_sha256>
 ```
+
+For remote delivery, `show` / `GET /v1/pieces/{piece_id}` supplies `current_target`, an opaque non-secret canonical account fingerprint. Approval echoes it as CLI `--expected-target` / API `expected_target`. Reconnecting another account requires fresh approval, even for unchanged content. Legacy or offline approvals remain historical and unbound, not posting authority. Posted and uncertain outcomes stay attached to their original targets; a fresh approval for another resolved target has a distinct intent. Legacy unbound terminal intents still block blind replay. No credentials are copied into approvals or receipts.
 
 The API exposes `POST /v1/pieces/{piece_id}/render` and `GET /v1/pieces/{piece_id}/assets/image|carousel`. Approval verifies both SHA-256 hashes at the rendered revision. Meta pieces additionally require the ordered `slides_sha256` JPEG hashes (CLI: repeated `--slide-sha256`); see [Meta integration](docs/meta.md). Text/template changes and every rerender clear approval. LinkedIn visual publish stays contained, even with a delivery grant; its uploads wait for the first live text post. Mastodon, Bluesky and X can deliver the approved first-slide PNG with alt text when explicitly granted; Threads supports text only; PDF carousels remain local export files.
 

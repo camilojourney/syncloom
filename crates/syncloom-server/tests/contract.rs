@@ -12,7 +12,7 @@ use support::scripted::{Reply, Scripted, text};
 use support::*;
 
 /// The documented error table, typed from the studio-api spec (not from the implementation).
-const ERROR_TABLE: [(u16, &str); 37] = [
+const ERROR_TABLE: [(u16, &str); 38] = [
     (403, "origin_not_allowed"),
     (403, "session_required"),
     (400, "invalid_request"),
@@ -23,6 +23,7 @@ const ERROR_TABLE: [(u16, &str); 37] = [
     (409, "invalid_status_transition"),
     (409, "revision_conflict"),
     (409, "approval_required"),
+    (409, "account_approval_required"),
     (409, "sign_in_in_progress"),
     (409, "sign_in_not_started"),
     (403, "sign_in_denied"),
@@ -119,6 +120,28 @@ async fn produce(code: &str) -> Answer {
         "platform_not_configured" => {
             let server = start(Scripted::new(text("x"))).await;
             with_id(client().get(server.url("/v1/x/connection"))).await
+        }
+        "account_approval_required" => {
+            let fake =
+                fake_linkedin::start(AuthMode::Consent, TokenMode::ok(), PostMode::NoId).await;
+            let tokens = MemoryStore::with("linkedin", stored_token("2026-12-29T18:00:00Z"));
+            let server = start_linkedin(
+                Scripted::new(text("Build with evidence.")),
+                fast(),
+                &fake,
+                tokens,
+                true,
+                true,
+            )
+            .await;
+            let created = create(&server, THOUGHT).await;
+            let piece = &created.body["pieces"][0];
+            with_id(
+                client()
+                    .patch(server.url(&format!("/v1/pieces/{}", id_of(piece))))
+                    .json(&json!({"status":"approved","expected_revision":revision_of(piece)})),
+            )
+            .await
         }
         "cost_confirmation_required" => {
             use syncloom_core::social::{SocialConfig, SocialPlatforms};

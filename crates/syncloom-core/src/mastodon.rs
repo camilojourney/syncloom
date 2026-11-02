@@ -12,7 +12,7 @@ use std::{sync::Arc, time::Duration};
 
 pub const INSTANCE_ENV: &str = "SYNCLOOM_MASTODON_INSTANCE";
 pub const REDIRECT_ENV: &str = "SYNCLOOM_MASTODON_REDIRECT_URL";
-pub const SCOPES: &str = "write:statuses write:media";
+pub const SCOPES: &str = "read:accounts write:statuses write:media";
 const DEFAULT_REDIRECT: &str = "http://127.0.0.1:8792/mastodon/callback";
 #[derive(Clone, Debug)]
 pub struct MastodonConfig {
@@ -134,24 +134,7 @@ impl Mastodon {
             .take()
             .ok_or(StudioError::SignInNotStarted)?;
         let (code, _, generation) = self.session.wait().await?;
-        let exchange = async {
-            let response = self
-                .client
-                .post(format!("{}/oauth/token", self.instance()?))
-                .form(&[
-                    ("grant_type", "authorization_code"),
-                    ("client_id", app.client_id.as_str()),
-                    ("client_secret", app.client_secret.expose()),
-                    ("redirect_uri", self.config.redirect.as_str()),
-                    ("code", &code),
-                ])
-                .send()
-                .await
-                .map_err(|_| StudioError::SignInRejected)?;
-            read_json::<Issued>(response)
-                .await
-                .ok_or(StudioError::SignInRejected)
-        };
+        let exchange = self.exchange(&app, &code);
         let issued = tokio::time::timeout(self.session.deadline(), exchange)
             .await
             .map_err(|_| StudioError::SignInTimedOut)??;
@@ -161,16 +144,54 @@ impl Mastodon {
         if !crate::credentials::posting_scope(crate::Channel::Mastodon, &issued.scope, false) {
             return Err(StudioError::PostingPermissionMissing);
         }
+        let identity = self.resolve_member(&issued).await?;
         let token = Token {
             access_token: issued.access_token,
             expires_at: None,
-            member_id: String::new(),
+            identity_authority: None,
+            page_id: None,
+            member_id: identity,
             scope: issued.scope,
             scope_verified: true,
             obtained_at: self.session.now_rfc3339(),
         };
         self.session.save_token(generation, &token)?;
         self.connection()
+    }
+
+    async fn exchange(&self, app: &App, code: &str) -> Result<Issued, StudioError> {
+        let response = self
+            .client
+            .post(format!("{}/oauth/token", self.instance()?))
+            .form(&[
+                ("grant_type", "authorization_code"),
+                ("client_id", app.client_id.as_str()),
+                ("client_secret", app.client_secret.expose()),
+                ("redirect_uri", self.config.redirect.as_str()),
+                ("code", code),
+            ])
+            .send()
+            .await
+            .map_err(|_| StudioError::SignInRejected)?;
+        read_json::<Issued>(response)
+            .await
+            .ok_or(StudioError::SignInRejected)
+    }
+
+    async fn resolve_member(&self, issued: &Issued) -> Result<String, StudioError> {
+        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
+            self.client
+                .get(format!(
+                    "{}/api/v1/accounts/verify_credentials",
+                    self.instance()?
+                ))
+                .bearer_auth(issued.access_token.expose()),
+        )
+        .await?;
+        if !valid_id(&identity.id) {
+            return Err(StudioError::SignInRejected);
+        }
+        Ok(identity.id)
     }
     pub fn connection(&self) -> Result<Connection, StudioError> {
         self.connection_for(false)
@@ -278,6 +299,11 @@ impl Mastodon {
 }
 
 impl Platform for Mastodon {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.session.usable_token()?;
+        let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
+        crate::platform::account_target("mastodon", base, &token.member_id)
+    }
     fn publish(&self, mut request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             let base = self.instance().map_err(|_| PostFailure::ConsentRequired)?;
@@ -285,6 +311,11 @@ impl Platform for Mastodon {
             let token = self
                 .session
                 .usable_for_post(crate::Channel::Mastodon, image)?;
+            request.require_target(crate::platform::account_target(
+                "mastodon",
+                base,
+                &token.member_id,
+            ))?;
             let instance: Instance =
                 request_json(self.client.get(format!("{base}/api/v2/instance"))).await?;
             instance.configuration.check_text(&request.text)?;

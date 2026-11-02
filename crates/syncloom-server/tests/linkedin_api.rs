@@ -90,6 +90,67 @@ async fn sign_in_answers_the_url_then_the_connection_and_the_connection_can_be_r
     assert_eq!(fake.posts().len(), 0);
 }
 
+#[tokio::test]
+async fn linkedin_account_switch_requires_fresh_approval() {
+    let fake = fake_linkedin::start(
+        AuthMode::Consent,
+        TokenMode::ok(),
+        PostMode::Posted(fake_linkedin::DEFAULT_POST_ID.into()),
+    )
+    .await;
+    let server = start_linkedin(
+        Scripted::new(text("Build with evidence.")),
+        fast(),
+        &fake,
+        MemoryStore::new(),
+        true,
+        true,
+    )
+    .await;
+    let start = post_empty(&server, "/v1/linkedin/sign-in").await;
+    browser(start.body["authorization_url"].as_str().unwrap()).await;
+    assert_eq!(get(&server, "/v1/linkedin/sign-in").await.status, 200);
+    let created = create(&server, THOUGHT).await;
+    let p = &created.body["pieces"][0];
+    assert_eq!(approve(&server, p).await.status, 200);
+    send_json(
+        &server,
+        reqwest::Method::DELETE,
+        "/v1/linkedin/connection",
+        Value::Null,
+    )
+    .await;
+    fake.set_member("SYNTHETICSECOND");
+    let start = post_empty(&server, "/v1/linkedin/sign-in").await;
+    browser(start.body["authorization_url"].as_str().unwrap()).await;
+    assert_eq!(get(&server, "/v1/linkedin/sign-in").await.status, 200);
+    let path = format!("/v1/pieces/{}/publish", p["piece_id"].as_str().unwrap());
+    let result = post(&server, &path, json!({"expected_revision":p["revision"]})).await;
+    let targets: Vec<_> = fake
+        .posts()
+        .iter()
+        .map(|p| p.body["author"].clone())
+        .collect();
+    assert_eq!(
+        result.code(),
+        "account_approval_required",
+        "actual authors={targets:?}; {}",
+        result.raw
+    );
+    assert!(targets.is_empty());
+    assert_eq!(approve(&server, p).await.status, 200);
+    assert_eq!(
+        post(&server, &path, json!({"expected_revision":p["revision"]}))
+            .await
+            .body["status"],
+        "posted"
+    );
+    assert_eq!(
+        fake.posts()[0].body["author"],
+        "urn:li:person:SYNTHETICSECOND"
+    );
+}
+
 // linkedin-integration: Not configured, Already waiting, Nothing pending, Denied, Wrong state,
 // Token refused, No callback; studio-api: Operations and their codes
 #[tokio::test]
@@ -231,6 +292,7 @@ async fn a_granted_publish_answers_posted_with_the_platform_id_and_repeats_witho
     assert_eq!(
         keys,
         [
+            "approval_target",
             "attempts",
             "created",
             "payload",

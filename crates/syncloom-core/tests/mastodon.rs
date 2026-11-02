@@ -43,8 +43,9 @@ async fn consent(fake: &FakeMastodon, store: Arc<MemoryStore>) -> Arc<Mastodon> 
     assert_eq!(connection.expires_at, None);
     m
 }
-fn request() -> PostRequest {
+fn request(base: &str) -> PostRequest {
     PostRequest {
+        approval_target: syncloom_core::platform::account_target("mastodon", base, "111").ok(),
         request_id: "dispatch-fixture".into(),
         text: "Build with evidence.".into(),
         image: None,
@@ -64,7 +65,7 @@ async fn per_instance_registration_consent_token_and_signout_are_private_and_iso
             .into_owned()
             .collect();
     assert_eq!(form["client_name"], "Syncloom");
-    assert_eq!(form["scopes"], "write:statuses write:media");
+    assert_eq!(form["scopes"], "read:accounts write:statuses write:media");
     assert!(form["redirect_uris"].starts_with("http://127.0.0.1:"));
     assert_eq!(fake.calls("token").len(), 1);
     let token = store.get(&m.account()).unwrap();
@@ -82,12 +83,32 @@ async fn per_instance_registration_consent_token_and_signout_are_private_and_iso
         ConnectionStatus::SignedOut
     );
     assert_eq!(
-        second.publish(request()).await,
+        second.publish(request(fake.base())).await,
         Err(PostFailure::ConsentRequired)
     );
     assert!(other.calls("statuses").is_empty());
     m.sign_out().unwrap();
     assert!(store.get(&m.account()).is_none());
+}
+
+#[tokio::test]
+async fn a_reconnected_account_cannot_use_a_request_bound_to_the_previous_account() {
+    let fake = fake_mastodon::start(Default::default()).await;
+    let tokens = MemoryStore::new();
+    let m = consent(&fake, tokens.clone()).await;
+    let old = request(fake.base());
+    m.sign_out().unwrap();
+    fake.set_account("222");
+    let second = consent(&fake, tokens).await;
+    assert_eq!(second.publish(old).await, Err(PostFailure::ConsentRequired));
+    assert!(fake.calls("statuses").is_empty());
+    let mut fresh = request(fake.base());
+    fresh.approval_target = second.posting_target().ok();
+    assert!(second.publish(fresh).await.is_ok());
+    assert_eq!(
+        fake.calls("statuses")[0].target_account.as_deref(),
+        Some("222")
+    );
 }
 
 #[tokio::test]
@@ -140,7 +161,7 @@ async fn image_alt_text_media_polling_and_status_idempotency_use_the_official_sh
     })
     .await;
     let m = consent(&fake, MemoryStore::new()).await;
-    let mut request = request();
+    let mut request = request(fake.base());
     request.image = Some(platform::PostImage {
         bytes: b"fixture-png".to_vec(),
         alt_text: "Build with evidence.".into(),
@@ -186,7 +207,7 @@ async fn limits_and_media_failures_prevent_status_creation() {
     ] {
         let fake = fake_mastodon::start(config).await;
         let m = consent(&fake, MemoryStore::new()).await;
-        let mut r = request();
+        let mut r = request(fake.base());
         r.image = Some(platform::PostImage {
             bytes: vec![1, 2, 3],
             alt_text: "Alt".into(),
@@ -211,7 +232,7 @@ async fn status_outcomes_are_truthful_without_hidden_retries() {
         })
         .await;
         let m = consent(&fake, MemoryStore::new()).await;
-        assert_eq!(m.publish(request()).await, Err(expected));
+        assert_eq!(m.publish(request(fake.base())).await, Err(expected));
         assert_eq!(fake.calls("statuses").len(), 1);
     }
     let fake = fake_mastodon::start(Config {
@@ -220,7 +241,10 @@ async fn status_outcomes_are_truthful_without_hidden_retries() {
     })
     .await;
     let m = consent(&fake, MemoryStore::new()).await;
-    assert_eq!(m.publish(request()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        m.publish(request(fake.base())).await,
+        Err(PostFailure::Unknown)
+    );
 }
 
 #[tokio::test]
@@ -232,7 +256,7 @@ async fn exact_instance_text_and_image_limits_are_accepted() {
     })
     .await;
     let m = consent(&fake, MemoryStore::new()).await;
-    let mut r = request();
+    let mut r = request(fake.base());
     r.image = Some(platform::PostImage {
         bytes: vec![1, 2, 3],
         alt_text: "Alt".into(),
@@ -263,7 +287,7 @@ async fn malformed_limits_media_id_and_status_url_fail_closed() {
     ] {
         let fake = fake_mastodon::start(config).await;
         let m = consent(&fake, MemoryStore::new()).await;
-        let mut r = request();
+        let mut r = request(fake.base());
         r.image = Some(platform::PostImage {
             bytes: vec![1, 2, 3],
             alt_text: "Alt".into(),
@@ -333,6 +357,7 @@ async fn uncertain_status_is_never_retried_by_the_outbox() {
         .review(
             &p.piece_id,
             ReviewRequest {
+                expected_target: s.review_target(&p).unwrap(),
                 expected_revision: p.revision,
                 status: Some(Status::Approved),
                 text: None,
@@ -382,6 +407,7 @@ async fn concurrent_mastodon_publishes_make_only_one_uncertain_status_request() 
         .review(
             &p.piece_id,
             ReviewRequest {
+                expected_target: s.review_target(&p).unwrap(),
                 expected_revision: p.revision,
                 status: Some(Status::Approved),
                 text: None,
@@ -426,7 +452,7 @@ async fn pending_media_has_a_finite_poll_budget_and_never_creates_a_status() {
     })
     .await;
     let m = consent(&fake, MemoryStore::new()).await;
-    let mut r = request();
+    let mut r = request(fake.base());
     r.image = Some(platform::PostImage {
         bytes: vec![1, 2, 3],
         alt_text: "Alt".into(),
@@ -460,7 +486,7 @@ async fn saved_mastodon_scope_without_write_statuses_is_not_publish_ready() {
     let connection = serde_json::to_value(m.connection().unwrap()).unwrap();
     let before_status = fake.calls("/api/v1/statuses").len();
     let before_instance = fake.calls("/api/v2/instance").len();
-    let published = m.publish(request()).await;
+    let published = m.publish(request(&fake.base())).await;
     assert_eq!(connection["status"], "cannot_post", "{connection}");
     assert_eq!(connection["reason"], "posting_permission_missing");
     assert_eq!(connection["action"], "sign_in");
@@ -481,9 +507,9 @@ async fn mastodon_text_posting_requires_write_statuses_not_write_media() {
         serde_json::to_value(m.connection().unwrap()).unwrap()["status"],
         "signed_in"
     );
-    let posted = m.publish(request()).await.unwrap();
+    let posted = m.publish(request(&fake.base())).await.unwrap();
     assert!(!posted.post_id.is_empty());
-    let mut image = request();
+    let mut image = request(&fake.base());
     image.image = Some(platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "Chart".into(),

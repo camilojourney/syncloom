@@ -60,6 +60,10 @@ struct Delivery {
     target: MetaTarget,
 }
 impl Platform for Delivery {
+    fn posting_target(&self) -> Result<String, crate::PostFailure> {
+        let token = self.meta.session.usable_token()?;
+        self.meta.posting_target(self.target, &token)
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(self.meta.publish(self.target, request))
     }

@@ -10,6 +10,7 @@ fn social_connection_help_and_publish_confirmation_are_discoverable() {
         vec!["connect", "--help"],
         vec!["connect", "bluesky", "sign-in", "--help"],
         vec!["publish", "--help"],
+        vec!["approve", "--help"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_syncloom"))
             .args(&args)
@@ -17,7 +18,9 @@ fn social_connection_help_and_publish_confirmation_are_discoverable() {
             .unwrap();
         assert!(output.status.success());
         let help = String::from_utf8(output.stdout).unwrap();
-        if args[0] == "publish" {
+        if args[0] == "approve" {
+            assert!(help.contains("--expected-target"));
+        } else if args[0] == "publish" {
             assert!(help.contains("--accepted-cost-microusd"));
         } else if args.len() == 2 {
             assert!(

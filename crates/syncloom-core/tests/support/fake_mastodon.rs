@@ -55,11 +55,13 @@ impl Default for Config {
 }
 #[derive(Clone, Debug)]
 pub struct Call {
+    pub target_account: Option<String>,
     pub path: &'static str,
     pub headers: HeaderMap,
     pub body: Vec<u8>,
 }
 struct Inner {
+    account: Mutex<String>,
     config: Config,
     calls: Mutex<Vec<Call>>,
     base: String,
@@ -75,6 +77,15 @@ impl Drop for FakeMastodon {
     }
 }
 impl FakeMastodon {
+    pub fn set_account(&self, id: &str) {
+        assert!(
+            self.inner
+                .account
+                .lock()
+                .map(|mut value| *value = id.into())
+                .is_ok()
+        );
+    }
     pub fn base(&self) -> &str {
         &self.inner.base
     }
@@ -98,7 +109,19 @@ impl FakeMastodon {
     reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
 )]
 fn record(i: &Inner, path: &'static str, h: HeaderMap, b: Vec<u8>) {
+    let target_account = h
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix(&format!("Bearer {TOKEN}")))
+        .map(|suffix| {
+            if suffix.is_empty() {
+                "111".into()
+            } else {
+                suffix.trim_start_matches('-').into()
+            }
+        });
     i.calls.lock().unwrap().push(Call {
+        target_account,
         path,
         headers: h,
         body: b,
@@ -144,7 +167,29 @@ async fn token(State(i): State<Arc<Inner>>, h: HeaderMap, b: Bytes) -> Response 
             .unwrap()
             .into_response();
     }
-    axum::Json(json!({"access_token":TOKEN,"token_type":"Bearer","scope":"write:statuses write:media","created_at":1793383200})).into_response()
+    let id = i.account.lock().unwrap().clone();
+    let access = if id == "111" {
+        TOKEN.into()
+    } else {
+        format!("{TOKEN}-{id}")
+    };
+    axum::Json(json!({"access_token":access,"token_type":"Bearer","scope":"read:accounts write:statuses write:media","created_at":1793383200})).into_response()
+}
+async fn identity(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
+    record(&i, "identity", h.clone(), vec![]);
+    let id = h
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix(&format!("Bearer {TOKEN}")))
+        .map(|suffix| {
+            if suffix.is_empty() {
+                "111"
+            } else {
+                suffix.trim_start_matches('-')
+            }
+        })
+        .unwrap_or("");
+    axum::Json(json!({"id":id,"username":"synthetic"})).into_response()
 }
 async fn instance(State(i): State<Arc<Inner>>, h: HeaderMap) -> Response {
     record(&i, "instance", h, vec![]);
@@ -216,6 +261,7 @@ pub async fn start(config: Config) -> FakeMastodon {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let inner = Arc::new(Inner {
+        account: Mutex::new("111".into()),
         config,
         calls: Mutex::new(vec![]),
         base,
@@ -223,6 +269,7 @@ pub async fn start(config: Config) -> FakeMastodon {
     });
     let expected = listener.local_addr().unwrap().to_string();
     let app = Router::new()
+        .route("/api/v1/accounts/verify_credentials", get(identity))
         .route("/api/v1/apps", post(apps))
         .route("/oauth/authorize", get(authorize))
         .route("/oauth/token", post(token))

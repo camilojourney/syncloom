@@ -16,7 +16,10 @@ async fn server_errors_are_uncertain_even_when_the_body_claims_retryable_auth_or
     let q = social(&fake, MemoryStore::new(), clock());
     threads_login(&q).await;
     fake.reply("/v1.0/303/threads", 500, json!({"error":{"code":4}}));
-    assert_eq!(q.threads.publish(text()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        q.threads.publish(text(q.threads.as_ref())).await,
+        Err(PostFailure::Unknown)
+    );
     let fake = Fake::bluesky().await;
     let q = social(&fake, MemoryStore::new(), clock());
     q.bluesky
@@ -28,7 +31,10 @@ async fn server_errors_are_uncertain_even_when_the_body_claims_retryable_auth_or
         500,
         json!({"error":"ExpiredToken"}),
     );
-    assert_eq!(q.bluesky.publish(text()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        q.bluesky.publish(text(q.bluesky.as_ref())).await,
+        Err(PostFailure::Unknown)
+    );
 }
 
 #[tokio::test]
@@ -98,6 +104,8 @@ async fn saved_reduced_x_grant_refresh_does_not_become_publish_ready() {
                 ),
                 expires_at: Some("2026-12-29T18:00:00Z".into()),
                 member_id: String::new(),
+                identity_authority: None,
+                page_id: None,
                 scope: "tweet.read".into(),
                 scope_verified: true,
                 obtained_at: "2026-10-31T02:00:00Z".into(),
@@ -139,7 +147,10 @@ async fn threads_permalink_failure_after_publication_is_unknown_not_retryable() 
             status,
             json!({"error":{"code":if status==401 {190}else{4}}}),
         );
-        assert_eq!(q.threads.publish(text()).await, Err(PostFailure::Unknown));
+        assert_eq!(
+            q.threads.publish(text(q.threads.as_ref())).await,
+            Err(PostFailure::Unknown)
+        );
         assert_eq!(
             fake.calls()
                 .iter()
@@ -169,7 +180,10 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
             status,
             json!({"error":"rejected"}),
         );
-        assert_eq!(q.bluesky.publish(text()).await, Err(expected));
+        assert_eq!(
+            q.bluesky.publish(text(q.bluesky.as_ref())).await,
+            Err(expected)
+        );
         assert_eq!(fake.calls().len(), 2);
         let fake = Fake::threads().await;
         let q = social(&fake, MemoryStore::new(), clock());
@@ -179,7 +193,10 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
             status,
             json!({"error":{"code":if status==401 {190}else if status==429 {32}else{999}}}),
         );
-        assert_eq!(q.threads.publish(text()).await, Err(expected));
+        assert_eq!(
+            q.threads.publish(text(q.threads.as_ref())).await,
+            Err(expected)
+        );
         assert_eq!(fake.calls().len(), 4);
     }
     let fake = Fake::bluesky().await;
@@ -193,7 +210,10 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
         200,
         json!({"uri":"at://did:plc:other/app.bsky.feed.post/key","cid":fake::CID}),
     );
-    assert_eq!(q.bluesky.publish(text()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        q.bluesky.publish(text(q.bluesky.as_ref())).await,
+        Err(PostFailure::Unknown)
+    );
     let fake = Fake::threads().await;
     let q = social(&fake, MemoryStore::new(), clock());
     threads_login(&q).await;
@@ -202,7 +222,10 @@ async fn bluesky_and_threads_report_all_http_failures_once_and_reject_malformed_
         200,
         json!({"id":"505","permalink":"https://evil.invalid/post"}),
     );
-    assert_eq!(q.threads.publish(text()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        q.threads.publish(text(q.threads.as_ref())).await,
+        Err(PostFailure::Unknown)
+    );
 }
 
 #[tokio::test]
@@ -233,7 +256,7 @@ async fn failed_refresh_keeps_both_jwts_and_expired_access_never_sends_a_post() 
     *c.0.lock().unwrap() += time::Duration::days(3);
     let calls = fake.calls().len();
     assert_eq!(
-        q.bluesky.publish(text()).await,
+        q.bluesky.publish(text(q.bluesky.as_ref())).await,
         Err(PostFailure::ConsentRequired)
     );
     assert_eq!(fake.calls().len(), calls);
@@ -258,7 +281,10 @@ async fn failed_refresh_keeps_both_jwts_and_expired_access_never_sends_a_post() 
     );
     *c.0.lock().unwrap() += time::Duration::hours(2);
     let count = fake.calls().len();
-    assert_eq!(q.x.publish(text()).await, Err(PostFailure::ConsentRequired));
+    assert_eq!(
+        q.x.publish(text(q.x.as_ref())).await,
+        Err(PostFailure::ConsentRequired)
+    );
     assert_eq!(fake.calls().len(), count);
 }
 
@@ -281,14 +307,14 @@ async fn text_image_limits_and_unfinished_media_never_create_a_post() {
             "alt".into(),
         ),
     ] {
-        let mut request = text();
+        let mut request = text(q.x.as_ref());
         request.image = Some(syncloom_core::platform::PostImage {
             bytes,
             alt_text: alt,
         });
         assert_eq!(q.x.publish(request).await, Err(PostFailure::Refused));
     }
-    let mut request = text();
+    let mut request = text(q.x.as_ref());
     request.text = "x".repeat(281);
     assert_eq!(q.x.publish(request).await, Err(PostFailure::Refused));
     assert_eq!(fake.calls().len(), calls);
@@ -297,7 +323,7 @@ async fn text_image_limits_and_unfinished_media_never_create_a_post() {
         200,
         json!({"data":{"id":"101","processing_info":{"state":"pending"}}}),
     );
-    let mut request = text();
+    let mut request = text(q.x.as_ref());
     request.image = Some(syncloom_core::platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "alt".into(),
@@ -308,7 +334,7 @@ async fn text_image_limits_and_unfinished_media_never_create_a_post() {
     let q = social(&fake, MemoryStore::new(), clock());
     threads_login(&q).await;
     let calls = fake.calls().len();
-    let mut request = text();
+    let mut request = text(q.threads.as_ref());
     request.image = Some(syncloom_core::platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "alt".into(),
@@ -316,7 +342,10 @@ async fn text_image_limits_and_unfinished_media_never_create_a_post() {
     assert_eq!(q.threads.publish(request).await, Err(PostFailure::Refused));
     assert_eq!(fake.calls().len(), calls);
     fake.reply("/v1.0/404", 200, json!({"id":"404","status":"IN_PROGRESS"}));
-    assert_eq!(q.threads.publish(text()).await, Err(PostFailure::Unknown));
+    assert_eq!(
+        q.threads.publish(text(q.threads.as_ref())).await,
+        Err(PostFailure::Unknown)
+    );
     assert!(
         !fake
             .calls()
@@ -372,7 +401,7 @@ async fn rejected_credential_store_never_claims_signed_in() {
         Err(StudioError::Internal)
     );
     assert_eq!(
-        q.bluesky.publish(text()).await,
+        q.bluesky.publish(text(q.bluesky.as_ref())).await,
         Err(PostFailure::ConsentRequired)
     );
 }

@@ -7,10 +7,37 @@ use std::{future::Future, pin::Pin};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PostRequest {
     pub request_id: String,
+    /// Non-secret canonical target approved by the founder, never a credential-slot key.
+    pub approval_target: Option<String>,
     pub text: String,
     pub image: Option<PostImage>,
     /// Ordered approved JPEG slides. Only carousel-capable adapters consume these.
     pub slides: Vec<PostImage>,
+}
+
+impl PostRequest {
+    /// Check the exact credential snapshot before any media or posting side effect.
+    pub fn require_target(&self, target: Result<String, PostFailure>) -> Result<(), PostFailure> {
+        let target = target?;
+        if self.approval_target.as_ref() != Some(&target) {
+            return Err(PostFailure::ConsentRequired);
+        }
+        Ok(())
+    }
+}
+
+/// Stable opaque identity; the provider adapter supplies observed canonical IDs and authority.
+pub fn account_target(
+    provider: &str,
+    authority: &str,
+    subject: &str,
+) -> Result<String, PostFailure> {
+    if provider.is_empty() || subject.is_empty() {
+        return Err(PostFailure::ConsentRequired);
+    }
+    Ok(crate::piece::sha256_json(&serde_json::json!({
+        "provider":provider, "authority":authority, "subject":subject
+    })))
 }
 
 /// Verified image bytes, never a URL or caller-selected path.
@@ -90,5 +117,9 @@ pub type PostFuture<'a> = Pin<Box<dyn Future<Output = Result<Posted, PostFailure
 /// A platform adapter. One status-creation request per call; media preparation may precede it.
 /// Dropping the future abandons it; the outbox treats the outcome as uncertain.
 pub trait Platform: Send + Sync {
+    /// Current resolved target. Unknown identity never grants posting authority.
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        Err(PostFailure::ConsentRequired)
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_>;
 }

@@ -75,6 +75,8 @@ pub fn stored() -> Token {
     Token {
         access_token: Secret::new(fake_meta::TOKEN),
         expires_at: None,
+        identity_authority: None,
+        page_id: Some("101".into()),
         member_id: "202".into(),
         scope: fake_meta::SCOPES.join(" "),
         scope_verified: true,

@@ -115,6 +115,7 @@ pub struct PostRecorded {
 
 #[derive(Clone)]
 struct Shared {
+    member: Arc<Mutex<String>>,
     auth: Arc<Mutex<AuthMode>>,
     token: Arc<Mutex<TokenMode>>,
     post: Arc<Mutex<PostMode>>,
@@ -156,6 +157,15 @@ impl FakeLinkedin {
     )]
     pub fn set_post(&self, mode: PostMode) {
         *self.shared.post.lock().unwrap() = mode;
+    }
+    pub fn set_member(&self, member: &str) {
+        assert!(
+            self.shared
+                .member
+                .lock()
+                .map(|mut value| *value = member.into())
+                .is_ok()
+        );
     }
     /// Let a held `POST /rest/posts` answer.
     pub fn release(&self) {
@@ -199,6 +209,7 @@ pub async fn start(auth: AuthMode, token: TokenMode, post_mode: PostMode) -> Fak
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shared = Shared {
+        member: Arc::new(Mutex::new(MEMBER_ID.into())),
         auth: Arc::new(Mutex::new(auth)),
         token: Arc::new(Mutex::new(token)),
         post: Arc::new(Mutex::new(post_mode)),
@@ -293,7 +304,7 @@ async fn userinfo(State(shared): State<Shared>, headers: HeaderMap) -> Response 
         return error_body(401);
     }
     axum::Json(serde_json::json!({
-        "sub": MEMBER_ID,
+        "sub": shared.member.lock().unwrap().clone(),
         "name": "Fake Member",
         "locale": {"country": "US", "language": "en"}
     }))

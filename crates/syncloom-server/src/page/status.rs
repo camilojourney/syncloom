@@ -35,7 +35,7 @@ fn presentation(value: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn badge(role: &str, label: &str) -> String {
+pub(super) fn badge(role: &str, label: &str) -> String {
     format!(
         r#"<span class="status badge-{role}">{}</span>"#,
         escape(label)

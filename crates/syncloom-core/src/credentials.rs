@@ -39,6 +39,12 @@ pub struct Token {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
     pub member_id: String,
+    /// App namespace captured with an app-scoped subject at authenticated resolution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_authority: Option<String>,
+    /// Meta's provider-confirmed Page, not the configured selection or Keychain slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_id: Option<String>,
     pub scope: String,
     /// Legacy Meta/Threads scopes were requested constants, not grant evidence.
     #[serde(default)]
@@ -133,6 +139,14 @@ impl Token {
             return Err(GrantError::Missing);
         }
         Ok(())
+    }
+    pub(crate) fn app_target(&self, provider: &str) -> Result<String, crate::PostFailure> {
+        let authority = self
+            .identity_authority
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .ok_or(crate::PostFailure::ConsentRequired)?;
+        crate::platform::account_target(provider, authority, &self.member_id)
     }
     /// Expired at or before `now` (both RFC 3339 UTC with whole seconds, so strings compare).
     pub fn is_expired_at(&self, now: &str) -> bool {

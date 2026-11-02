@@ -178,12 +178,31 @@ impl Threads {
         }
         // Rotation has already succeeded. Never reuse the old token's grant as proof
         // for the new credential, including when the subsequent verification fails.
+        let identity: crate::oauth::Subject = crate::oauth::exchange_json(
+            self.context
+                .client
+                .get(format!(
+                    "{}/v1.0/me",
+                    self.context.config.threads_api.as_str()
+                ))
+                .query(&[("fields", "id")])
+                .bearer_auth(long.access_token.expose()),
+        )
+        .await?;
+        self.context
+            .credentials
+            .confirm_identity(Some(&member), &identity.id)?;
+        if !crate::social::numeric_id(&identity.id) {
+            return Err(StudioError::SignInRejected);
+        }
         self.context.credentials.commit_token(
             generation,
             &crate::Token {
                 access_token: long.access_token,
                 expires_at: Some(expires_at),
                 member_id: member,
+                identity_authority: self.context.config.threads_client.clone(),
+                page_id: None,
                 scope,
                 scope_verified,
                 obtained_at: self.context.credentials.clock.now_rfc3339(),
@@ -246,6 +265,10 @@ impl crate::oauth_context::OAuthLifecycle for Threads {
     }
 }
 impl Platform for Threads {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.context.credentials.usable()?;
+        token.app_target("threads")
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::Threads, &request, 0)?;
@@ -253,6 +276,7 @@ impl Platform for Threads {
                 .context
                 .credentials
                 .usable_for_post(crate::Channel::Threads, false)?;
+            request.require_target(token.app_target("threads"))?;
             if !crate::social::numeric_id(&token.member_id) {
                 return Err(PostFailure::ConsentRequired);
             }

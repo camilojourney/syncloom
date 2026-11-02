@@ -18,6 +18,12 @@ use std::{
 };
 use tokio::sync::oneshot;
 
+/// Common authenticated subject shape; each adapter owns its authority and ID validation.
+#[derive(Deserialize)]
+pub(crate) struct Subject {
+    pub id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RedirectUrl {
     url: String,
@@ -209,6 +215,9 @@ impl Session {
     }
     pub fn save_token(&self, generation: u64, token: &Token) -> Result<(), StudioError> {
         self.credentials.commit_token(generation, token)
+    }
+    pub fn usable_token(&self) -> Result<Token, crate::PostFailure> {
+        self.credentials.usable()
     }
     pub fn usable_for_post(
         &self,

@@ -42,6 +42,7 @@ fn approve(s: &Studio, p: &Piece) -> Piece {
     s.review(
         &p.piece_id,
         ReviewRequest {
+            expected_target: None,
             expected_revision: p.revision.clone(),
             status: Some(Status::Approved),
             text: None,
@@ -181,7 +182,7 @@ async fn symlink_export_root_and_bundle_are_refused_without_touching_the_target(
     assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
     std::fs::remove_file(dir.path().join("exports")).unwrap();
     std::fs::create_dir(dir.path().join("exports")).unwrap();
-    let key = outbox::intent_key("export:reddit", &p.piece_id, &p.revision);
+    let key = outbox::intent_key("export:reddit", &p.piece_id, &p.revision, None);
     std::os::unix::fs::symlink(outside.path(), dir.path().join("exports").join(&key)).unwrap();
     assert!(s.export(&p.piece_id, request(&p, "reddit")).is_err());
     assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
@@ -191,7 +192,7 @@ async fn symlink_export_root_and_bundle_are_refused_without_touching_the_target(
 async fn partial_bundle_failure_records_no_success_and_a_retry_can_complete() {
     let (dir, s, p) = fixture().await;
     let p = approve(&s, &p);
-    let key = outbox::intent_key("export:reddit", &p.piece_id, &p.revision);
+    let key = outbox::intent_key("export:reddit", &p.piece_id, &p.revision, None);
     let bundle = dir.path().join("exports").join(key);
     std::fs::create_dir(&bundle).unwrap();
     std::fs::create_dir(bundle.join("text.txt")).unwrap();

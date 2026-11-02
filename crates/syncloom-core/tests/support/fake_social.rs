@@ -17,6 +17,7 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Call {
+    pub target_account: Option<String>,
     pub method: String,
     pub path: String,
     pub query: String,
@@ -41,6 +42,7 @@ impl Call {
 #[derive(Default)]
 struct Data {
     calls: Vec<Call>,
+    principals: HashMap<String, String>,
     replies: HashMap<String, VecDeque<(u16, Value)>>,
     holds: HashMap<String, Arc<tokio::sync::Notify>>,
     changed: Arc<tokio::sync::Notify>,
@@ -76,6 +78,17 @@ impl Fake {
     }
     pub fn base(&self) -> &str {
         &self.base
+    }
+    pub fn principal(&self, access: &str, id: &str) {
+        assert!(
+            self.data
+                .lock()
+                .map(|mut data| {
+                    data.principals
+                        .insert(format!("Bearer {access}"), id.into());
+                })
+                .is_ok()
+        );
     }
     #[expect(
         clippy::unwrap_used,
@@ -147,6 +160,7 @@ impl Fake {
     }
     pub async fn x() -> Self {
         Self::start(vec![
+            ("/2/users/me",json!({"data":{"id":"111"}})),
             ("/2/oauth2/token",json!({"access_token":"x-access-1","refresh_token":"x-refresh-1","expires_in":7200,"token_type":"bearer","scope":"tweet.read tweet.write users.read media.write offline.access"})),
             ("/2/media/upload/initialize",json!({"data":{"id":"101"}})),
             ("/2/media/upload/101/append",json!({})),
@@ -173,6 +187,7 @@ impl Fake {
                 "/v1.0/debug_token",
                 json!({"data":{"is_valid":true,"user_id":"303","scopes":["threads_basic","threads_content_publish"]}}),
             ),
+            ("/v1.0/me", json!({"id":"303"})),
             ("/v1.0/303/threads", json!({"id":"404"})),
             ("/v1.0/404", json!({"id":"404","status":"FINISHED"})),
             ("/v1.0/303/threads_publish", json!({"id":"505"})),
@@ -199,6 +214,7 @@ pub fn jwt(exp: i64) -> String {
 async fn handle(State(data): State<Arc<Mutex<Data>>>, request: Request) -> Response {
     let path = request.uri().path().to_owned();
     let call = Call {
+        target_account: None,
         method: request.method().to_string(),
         path: path.clone(),
         query: request.uri().query().unwrap_or("").into(),
@@ -225,7 +241,9 @@ async fn handle(State(data): State<Arc<Mutex<Data>>>, request: Request) -> Respo
     };
     let (status, body) = {
         let mut data = data.lock().unwrap();
+        let target_account = data.principals.get(&call.authorization).cloned();
         data.calls.push(Call {
+            target_account,
             body: bytes.to_vec(),
             ..call
         });

@@ -105,11 +105,11 @@ fn the_piece_id_keeps_the_old_shape() {
 #[test]
 fn the_request_id_is_dispatch_plus_32_hex_of_the_intent_key() {
     assert_eq!(
-        request_id(outbox::OPERATION_PUBLISH, PIECE, REVISION),
+        request_id(outbox::OPERATION_PUBLISH, PIECE, REVISION, None),
         "dispatch-904f4c443cf556d7f34c6c307a86dfe3"
     );
     assert_eq!(
-        outbox::intent_key(outbox::OPERATION_PUBLISH, PIECE, REVISION).len(),
+        outbox::intent_key(outbox::OPERATION_PUBLISH, PIECE, REVISION, None).len(),
         64
     );
 }
@@ -157,6 +157,7 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "invalid_status_transition",
         "revision_conflict",
         "approval_required",
+        "account_approval_required",
         "provider_not_configured",
         "provider_error",
         "provider_timeout",

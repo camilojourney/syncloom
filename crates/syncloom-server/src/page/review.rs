@@ -7,22 +7,26 @@ pub(crate) async fn review(
 ) -> Result<Html<String>, Failure> {
     let Path(id) = path.map_err(|_| StudioError::PieceNotFound)?;
     let snapshot = state.studio.inspect_publish(&id)?;
-    Ok(piece_page(
-        &state,
-        &snapshot.piece,
-        snapshot.publish_intent.as_ref(),
-        snapshot.approved_at.as_deref(),
-    ))
+    Ok(piece_page(&state, &snapshot))
 }
 
 pub(super) fn piece_page(
     state: &AppState,
-    piece: &Piece,
-    record: Option<&DispatchIntent>,
-    approved_at: Option<&str>,
+    snapshot: &syncloom_core::studio::ReviewSnapshot,
 ) -> Html<String> {
+    let piece = &snapshot.piece;
+    let record = snapshot.publish_intent.as_ref();
+    let current_target = snapshot.current_target.as_deref();
+    let account_required = state
+        .studio
+        .account_approval_required(piece, current_target);
     let id = escape(&piece.piece_id);
     let channel = piece.channel.display_name();
+    let review_badge = if piece.status == Status::Approved && account_required {
+        status::badge("pending", "Review: Needs fresh approval")
+    } else {
+        status::review(piece.status)
+    };
     let publish_badge = record
         .map(|r| status::delivery(r.status.as_str(), "Publishing"))
         .unwrap_or_default();
@@ -42,15 +46,15 @@ pub(super) fn piece_page(
         "Review piece",
         &format!(
             r#"<a class="back" href="/">All thoughts &amp; pieces</a><div class="review-heading"><div><h1>Review your piece.</h1><p class="channel-name">{channel}</p></div><div class="status-row">{}{publish_badge}</div></div>{receipt_html}<div class="review-layout"><div class="review-content"><section class="card local-preview-card" aria-labelledby="preview-title"><div class="section-heading"><h2 id="preview-title">{channel} preview</h2><a href="/review/{id}/edit">Edit draft</a></div><p class="hint preview-disclaimer">Approximate local preview. It may look different on the platform.</p><p class="preview-prose draft-text">{}</p>{}<details class="revision"><summary>Exact saved version</summary><p class="hint">Exact saved revision. Approval covers this version, not unsaved edits.</p><code class="hash">{}</code></details></section><section class="source-section"><h2>The source thought</h2><p class="source prose">{}</p>{}</section>{}</div><aside class="review-controls" aria-label="Review and publish"><section class="card approval"><h2>Your decision</h2>{}<hr>{}{last_operation}</section><details class="visual-config"><summary>Visual previews</summary><p class="hint">Optional: make slides from your text. Making new previews means you'll need to check and approve them again.</p><a class="button secondary" href="/review/{id}/render">Render previews</a></details></aside></div>"#,
-            status::review(piece.status),
+            review_badge,
             escape(&piece.text),
             counts::summary(piece),
             escape(&piece.revision),
             escape(&piece.source.raw_input),
             routing(piece),
             previews::assets(piece),
-            approval_controls(state, piece, approved_at),
-            publish_controls(state, piece, blocked)
+            approval_controls(state, snapshot, account_required),
+            publish_controls(state, piece, blocked, account_required)
         ),
     )
 }
@@ -77,26 +81,48 @@ fn routing(piece: &Piece) -> String {
     )
 }
 
-fn approval_controls(state: &AppState, piece: &Piece, approved_at: Option<&str>) -> String {
-    if piece.status == Status::Approved {
-        let date = approved_at
+fn approval_controls(
+    state: &AppState,
+    snapshot: &syncloom_core::studio::ReviewSnapshot,
+    account_required: bool,
+) -> String {
+    let piece = &snapshot.piece;
+    let account = snapshot.current_target.as_deref().map(|target| format!(
+        "<details class=\"account-details\"><summary>Connected account</summary><p class=\"hint\">A new approval will apply to this connected account fingerprint.</p><code class=\"hash\">{}</code></details>", escape(target)
+    )).unwrap_or_default();
+    let approved = if piece.status == Status::Approved {
+        let label = if account_required {
+            "Historical approval"
+        } else {
+            "Approved"
+        };
+        let date = snapshot
+            .approved_at
+            .as_deref()
             .map(|at| {
                 format!(
-                    "Approved on <time datetime=\"{}\">{}</time>.",
+                    "{label} on <time datetime=\"{}\">{}</time>.",
                     escape(at),
                     escape(at.split('T').next().unwrap_or(at))
                 )
             })
-            .unwrap_or_else(|| "Approved. Approval date is not recorded.".into());
-        return format!("<p>{date} Publishing is a separate action.</p>");
+            .unwrap_or_else(|| format!("{label}. Approval date is not recorded."));
+        format!("<p>{date} Publishing is a separate action.</p>")
+    } else {
+        String::new()
+    };
+    if piece.status == Status::Approved && !account_required {
+        return format!("{approved}{account}");
     }
     if piece.status == Status::Rejected {
         return "<p>This piece is rejected. Edit it to start a new review.</p>".into();
     }
     let needs_previews = piece.visual.is_some() && piece.assets.is_none();
     format!(
-        r#"<p>{}</p><form method="post" action="/review/{}/approve">{}{}<button type="submit"{}>Approve this version</button></form>"#,
-        if needs_previews {
+        r#"{approved}<p>{}</p>{account}<form method="post" action="/review/{}/approve">{}{}{}<button type="submit"{}>Approve this version</button></form>"#,
+        if account_required && piece.status == Status::Approved {
+            "A fresh approval is needed for the connected account. The saved approval is for a different account or has no account recorded."
+        } else if needs_previews {
             "Make the current previews before approving."
         } else {
             "Read the saved text and any previews before approving this version."
@@ -104,6 +130,11 @@ fn approval_controls(state: &AppState, piece: &Piece, approved_at: Option<&str>)
         escape(&piece.piece_id),
         revision_fields(state, piece),
         asset_fields(piece),
+        snapshot
+            .current_target
+            .as_deref()
+            .map(|target| hidden("expected_target", target))
+            .unwrap_or_default(),
         if needs_previews { " disabled" } else { "" }
     )
 }
@@ -131,13 +162,19 @@ fn asset_fields(piece: &Piece) -> String {
 }
 
 /// Core intent policy, review approval and consent jointly control the visible action.
-fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
+fn publish_controls(
+    state: &AppState,
+    piece: &Piece,
+    blocked: bool,
+    account_required: bool,
+) -> String {
     let id = escape(&piece.piece_id);
     let unavailable_image = piece.channel == Channel::Threads && piece.visual.is_some();
     let accepted_cost = state.cost_consents.accepted(piece);
     let cannot_post = cannot_post_note(state, piece);
     let disabled = if piece.status != Status::Approved
         || blocked
+        || account_required
         || unavailable_image
         || cannot_post.is_some()
         || (piece.channel == Channel::X && accepted_cost.is_none())
@@ -148,16 +185,21 @@ fn publish_controls(state: &AppState, piece: &Piece, blocked: bool) -> String {
     };
     let recovery = if blocked {
         "This version can't be sent again here. Check what happened above before doing anything else."
+    } else if account_required {
+        "Connect the intended account, then approve this version for that account before publishing."
     } else if piece.status != Status::Approved {
         "Approve this saved version before publishing."
-    } else if unavailable_image {
-        "Threads supports text only here. Image delivery is unavailable."
     } else {
         "Approval does not connect your account or allow publishing. Your account must be set up and publishing allowed separately."
     };
+    let image_notice = if unavailable_image {
+        "<p class=\"hint\">Threads supports text only here. Image delivery is unavailable.</p>"
+    } else {
+        ""
+    };
     let cannot_post = cannot_post.unwrap_or_default();
     format!(
-        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{cannot_post}{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
+        r#"<h3>Publish separately</h3><p class="hint">{recovery}</p>{image_notice}{cannot_post}{}<form method="post" action="/review/{id}/publish">{}<button class="publish" type="submit"{disabled}>Publish</button></form><p class="hint">If publishing isn't available, this stays saved on this laptop and isn't sent.</p>"#,
         cost_confirmation(state, piece, accepted_cost.is_some()),
         revision_fields(state, piece)
     )

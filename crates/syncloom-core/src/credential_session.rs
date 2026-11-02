@@ -107,6 +107,18 @@ impl CredentialSession {
         self.writes.delete(self.store.as_ref(), &self.account)?;
         self.connection(false)
     }
+    /// Observed identity drift invalidates the connection, unlike an ordinary exchange failure.
+    pub fn confirm_identity(
+        &self,
+        expected: Option<&str>,
+        observed: &str,
+    ) -> Result<(), StudioError> {
+        if expected.is_some_and(|expected| expected != observed) {
+            self.clear()?;
+            return Err(StudioError::SignInRejected);
+        }
+        Ok(())
+    }
     pub fn commit_token(&self, generation: u64, token: &Token) -> Result<(), StudioError> {
         self.writes
             .save(generation, self.store.as_ref(), &self.account, token)
@@ -122,6 +134,8 @@ impl CredentialSession {
         let token = Token {
             access_token,
             expires_at: Some(expires_at),
+            identity_authority: None,
+            page_id: None,
             member_id,
             scope,
             scope_verified: true,

@@ -38,6 +38,9 @@ enum Command {
         piece_id: String,
         #[arg(long)]
         expected_revision: String,
+        /// Account fingerprint from show. Required for connected delivery approval.
+        #[arg(long)]
+        expected_target: Option<String>,
         #[arg(long, requires = "carousel_sha256")]
         image_sha256: Option<String>,
         #[arg(long, requires = "image_sha256")]
@@ -154,10 +157,11 @@ enum CommandOutput {
 async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, StudioError> {
     let result = match command {
         Command::Thought { text, channel } => thought(studio, text, channel).await,
-        Command::Show { piece_id } => studio.show(&piece_id).map(to_json),
+        Command::Show { piece_id } => studio.review_context(&piece_id).map(to_json),
         Command::Approve {
             piece_id,
             expected_revision,
+            expected_target,
             image_sha256,
             carousel_sha256,
             slides_sha256,
@@ -165,6 +169,7 @@ async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, St
             studio,
             &piece_id,
             expected_revision,
+            expected_target,
             image_sha256,
             carousel_sha256,
             slides_sha256,
@@ -225,6 +230,7 @@ fn approve(
     studio: &Studio,
     piece_id: &str,
     expected_revision: String,
+    expected_target: Option<String>,
     image: Option<String>,
     carousel: Option<String>,
     slides_sha256: Vec<String>,
@@ -245,6 +251,7 @@ fn approve(
                 text: None,
                 expected_revision,
                 expected_assets,
+                expected_target,
             },
         )
         .map(to_json)
