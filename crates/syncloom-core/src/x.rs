@@ -122,11 +122,7 @@ impl X {
     ) -> Result<(), StudioError> {
         #[derive(Deserialize)]
         struct Identity {
-            data: User,
-        }
-        #[derive(Deserialize)]
-        struct User {
-            id: String,
+            data: crate::oauth::Subject,
         }
         let identity: Identity = crate::oauth::exchange_json(
             self.context
@@ -135,10 +131,9 @@ impl X {
                 .bearer_auth(issued.access_token.expose()),
         )
         .await?;
-        if old.is_some_and(|old| old.member_id != identity.data.id) {
-            self.context.credentials.clear()?;
-            return Err(StudioError::SignInRejected);
-        }
+        self.context
+            .credentials
+            .confirm_identity(old.map(|old| old.member_id.as_str()), &identity.data.id)?;
         if !crate::social::numeric_id(&identity.data.id) {
             return Err(StudioError::SignInRejected);
         }
