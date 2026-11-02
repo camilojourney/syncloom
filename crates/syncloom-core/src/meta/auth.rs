@@ -1,7 +1,6 @@
 use super::{GRAPH_VERSION, Meta, config::numeric_id};
 use crate::{Connection, Secret, SignInStart, StudioError, Token};
 use serde::Deserialize;
-use std::collections::HashSet;
 impl Meta {
     #[expect(
         clippy::expect_used,
@@ -54,27 +53,7 @@ impl Meta {
             .get("me/permissions", &long.access_token, &[])
             .await
             .map_err(|_| StudioError::SignInRejected)?;
-        let granted: HashSet<_> = permissions
-            .data
-            .iter()
-            .filter(|p| p.status == "granted")
-            .map(|p| p.permission.as_str())
-            .collect();
-        let granted_scope = permissions
-            .data
-            .iter()
-            .filter(|p| p.status == "granted")
-            .map(|p| p.permission.as_str())
-            .collect::<Vec<_>>()
-            .join(" ");
-        if !granted.contains("pages_show_list") {
-            return Err(StudioError::SignInRejected);
-        }
-        if !crate::credentials::posting_scope(crate::Channel::FacebookPage, &granted_scope, false)
-            && !crate::credentials::posting_scope(crate::Channel::Instagram, &granted_scope, true)
-        {
-            return Err(StudioError::PostingPermissionMissing);
-        }
+        let granted_scope = permissions.posting_scope()?;
         let page = self.selected_page(&long.access_token, page_id).await?;
         page.into_token(self.session.now_rfc3339(), granted_scope)
     }
@@ -152,6 +131,25 @@ struct Issued {
 #[derive(Deserialize)]
 struct Permissions {
     data: Vec<Permission>,
+}
+impl Permissions {
+    fn posting_scope(self) -> Result<String, StudioError> {
+        let granted = self
+            .data
+            .into_iter()
+            .filter(|p| p.status == "granted")
+            .map(|p| p.permission);
+        let scope = crate::credentials::join_granted_scopes(granted).map_err(|e| e.error())?;
+        if !crate::credentials::has_scope(&scope, "pages_show_list") {
+            return Err(StudioError::SignInRejected);
+        }
+        if !crate::credentials::posting_scope(crate::Channel::FacebookPage, &scope, false)
+            && !crate::credentials::posting_scope(crate::Channel::Instagram, &scope, true)
+        {
+            return Err(StudioError::PostingPermissionMissing);
+        }
+        Ok(scope)
+    }
 }
 #[derive(Deserialize)]
 struct Permission {

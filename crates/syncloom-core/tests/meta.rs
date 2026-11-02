@@ -544,6 +544,32 @@ async fn meta_effective_grants_authorize_each_target_independently() {
 }
 
 #[tokio::test]
+async fn meta_granted_permissions_are_exact_scope_tokens() {
+    for malformed in ["pages_manage_posts extra", "pages_manage_posts,extra", ""] {
+        let fake = fake_meta::start(fake_meta::Config {
+            granted_permissions: Some(vec!["pages_show_list".into(), malformed.into()]),
+            ..Default::default()
+        })
+        .await;
+        let tokens = MemoryStore::new();
+        let meta = adapter(&fake, tokens.clone(), Arc::new(Media::default()));
+        let start = meta.sign_in_begin().unwrap();
+        reqwest::get(start.authorization_url).await.unwrap();
+        assert_eq!(
+            meta.sign_in_wait().await,
+            Err(syncloom_core::StudioError::PostingPermissionUnverified)
+        );
+        assert!(tokens.get("meta:101").is_none());
+        assert!(
+            !fake
+                .all()
+                .iter()
+                .any(|call| call.path.ends_with("/me/accounts"))
+        );
+    }
+}
+
+#[tokio::test]
 async fn legacy_meta_requested_scope_without_evidence_is_unverified_for_both_targets() {
     use syncloom_core::{ConnectionStatus, Token};
     let fake = fake_meta::start(Default::default()).await;

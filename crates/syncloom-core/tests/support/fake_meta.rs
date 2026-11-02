@@ -174,7 +174,11 @@ async fn graph_get(
             json!({"access_token":if long {"fake-user-long"} else {"fake-user-short"},"expires_in":5184000})
         }
         "me/permissions" => {
-            json!({"data":SCOPES.iter().enumerate().map(|(n,p)|json!({"permission":p,"status":if (c.missing_permission && n==0) || c.granted_permissions.as_ref().is_some_and(|granted| !granted.iter().any(|scope| scope == p)) {"declined"}else{"granted"}})).collect::<Vec<_>>()})
+            let permissions = c
+                .granted_permissions
+                .clone()
+                .unwrap_or_else(|| SCOPES.iter().map(|scope| (*scope).to_owned()).collect());
+            json!({"data":permissions.iter().enumerate().map(|(n,p)|json!({"permission":p,"status":if c.missing_permission && n==0 {"declined"}else{"granted"}})).collect::<Vec<_>>()})
         }
         "me/accounts" => {
             assert_eq!(h["authorization"], "Bearer fake-user-long");

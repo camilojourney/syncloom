@@ -4,7 +4,7 @@ References: security, integrations, data, ui; Code 5.4.2.
 
 ## Context
 
-See proposal.md. Current parent c0584e8; original launch base 3a059a0. Reproduced paths are server LinkedIn consent and saved-token publishing; adapters share CredentialSession and Token. Inspection read Connection, TokenStore, OAuthLifecycle, platform-specific exchange/publish paths, social_delivery, social_boundaries and platform-credentials/Threads/LinkedIn/Meta scenarios. Spec-map inspection found no companions, so native source/test searches remain authoritative; mapping completeness is unknown.
+See proposal.md. Original parent c0584e8; integrated parent 77e3c42; original launch base 3a059a0. Reproduced paths are server LinkedIn consent and saved-token publishing; adapters share CredentialSession and Token. Inspection read Connection, TokenStore, OAuthLifecycle, platform-specific exchange/publish paths, social_delivery, social_boundaries and platform-credentials/Threads/LinkedIn/Meta scenarios. Spec-map inspection found no companions, so native source/test searches remain authoritative; mapping completeness is unknown.
 
 ## Goals / Non-Goals
 
@@ -12,11 +12,7 @@ Keep one credential policy owner and per-action readiness. Do not change identit
 
 ## Decisions
 
-Move the inherited standalone posting_grant registry into existing Token/credential ownership; reject UI scope parsing because it duplicates authorization policy. Expose action-aware connection results from the same owner used at dispatch.
-
-Keep additive scope_verified evidence for adapters whose legacy scopes were fabricated; reject interpreting old requested strings as grants. X refresh credentials are optional for fresh text posting; a malformed supplied refresh token remains rejected. Missing evidence is unverified, not known denial.
-
-Use the officially documented Threads v1.0 debug_token response after exchange/rotation with existing app credentials; reject both blanket platform rejection and token-only success. Failed token exchange preserves the prior credential, but successful narrowed/unverified rotation durably replaces stale authorization evidence before returning its precise refusal. Direct source excerpts and the prospective acceptance freeze are retained in task recovery evidence; a final project decision record and Main challenge remain required.
+Candidate: existing credential-owned action policy, additive scope_verified provenance and documented Threads debug verification; successful rotations retain their actual evidence. The proposed [posting-permissions/0001 decision](../../../docs/decisions/posting-permissions/0001-effective-grants.md) owns rationale, alternatives, custody limits, independent challenge and Main acceptance. Direct source excerpts and failed/passing execution receipts remain in authorized task recovery data.
 
 ## Reuse inventory
 
@@ -32,7 +28,7 @@ New evidence fields deserialize absent for legacy bundles. LinkedIn/X/Mastodon o
 
 ## Risks / Trade-offs
 
-- Additional critical read-only Threads request can fail: preserve existing token, fail explicitly, no retry.
+- Additional critical read-only Threads request can fail: preserve credentials on fresh exchange refusal, but retain the actual unverified credential after successful rotation; fail explicitly, no retry.
 - Capability/identity concurrency: coordinate one snapshot with account-approval before integration.
 - Per-action and hierarchical scope semantics: retain positive controls and report unverified provider facts rather than invent policy.
 - No real-platform validation: do not claim official app/review acceptance.

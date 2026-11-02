@@ -15,7 +15,7 @@ A platform connection SHALL report stored credential readiness for the selected 
 - **WHEN** an unexpired stored credential lacks the selected action's effective posting permission
 - **THEN** the connection is `cannot_post` with reason `posting_permission_missing`, message `connected, cannot post: posting permission missing.`, and action `sign_in`
 - **AND** absent evidence is instead reported as `posting_permission_unverified`, never a known denial
-- **AND** browser review disables Publish, names the reason and offers the existing sign-in operation
+- **AND** browser review disables Publish and names the reason; the connection action identifies the existing sign-in operation
 
 ### Requirement: Explicit renewable-session refresh
 Renewable integrations SHALL refresh only on explicit request, durably recording successful rotations and preserving existing credentials when token exchange fails.
