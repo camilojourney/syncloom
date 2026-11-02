@@ -122,19 +122,49 @@ impl Threads {
         let long = crate::threads_publish::request(request)
             .await
             .map_err(|_| StudioError::SignInRejected)?;
-        self.save(long, member, generation)?;
+        self.save(long, member, generation).await?;
         self.connection()
     }
-    fn save(&self, long: Long, member: String, generation: u64) -> Result<(), StudioError> {
+    async fn save(&self, long: Long, member: String, generation: u64) -> Result<(), StudioError> {
         if long.access_token.expose().is_empty() {
             return Err(StudioError::SignInRejected);
         }
-        self.context.credentials.commit(
+        #[derive(Deserialize)]
+        struct Identity {
+            id: String,
+        }
+        let identity: Identity = crate::oauth::exchange_json(
+            self.context
+                .client
+                .get(format!(
+                    "{}/v1.0/me",
+                    self.context.config.threads_api.as_str()
+                ))
+                .query(&[("fields", "id")])
+                .bearer_auth(long.access_token.expose()),
+        )
+        .await?;
+        if identity.id != member {
+            self.context.credentials.clear()?;
+            return Err(StudioError::SignInRejected);
+        }
+        if !crate::social::numeric_id(&identity.id) {
+            return Err(StudioError::SignInRejected);
+        }
+        self.context.credentials.commit_token(
             generation,
-            long.access_token,
-            crate::social::expiry(self.context.credentials.clock.as_ref(), long.expires_in)?,
-            member,
-            "threads_basic,threads_content_publish".into(),
+            &crate::Token {
+                access_token: long.access_token,
+                expires_at: Some(crate::social::expiry(
+                    self.context.credentials.clock.as_ref(),
+                    long.expires_in,
+                )?),
+                member_id: member,
+                identity_authority: self.context.config.threads_client.clone(),
+                page_id: None,
+                scope: "threads_basic,threads_content_publish".into(),
+                obtained_at: self.context.credentials.clock.now_rfc3339(),
+            },
         )
     }
     #[expect(
@@ -180,20 +210,25 @@ impl crate::oauth_context::OAuthLifecycle for Threads {
                 ("access_token", token.access_token.expose()),
             ]))
     }
-    fn save_refreshed(
+    async fn save_refreshed(
         &self,
         long: Long,
         old: &crate::Token,
         generation: u64,
     ) -> Result<(), StudioError> {
-        self.save(long, old.member_id.clone(), generation)
+        self.save(long, old.member_id.clone(), generation).await
     }
 }
 impl Platform for Threads {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.context.credentials.usable()?;
+        token.app_target("threads")
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(async move {
             crate::social::check_request(crate::Channel::Threads, &request, 0)?;
             let token = self.context.credentials.usable()?;
+            request.require_target(token.app_target("threads"))?;
             if !crate::social::numeric_id(&token.member_id) {
                 return Err(PostFailure::ConsentRequired);
             }

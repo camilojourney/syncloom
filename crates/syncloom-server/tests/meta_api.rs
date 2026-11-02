@@ -96,7 +96,12 @@ fn hashes(p: &serde_json::Value) -> serde_json::Value {
     reason = "Test fixture setup and assertions must fail immediately on unexpected state rather than continue with invalid evidence."
 )]
 async fn approve_meta(server: &TestServer, p: &serde_json::Value) -> Answer {
-    let mut body = json!({"status":"approved","expected_revision":p["revision"]});
+    let context = get(
+        server,
+        &format!("/v1/pieces/{}", p["piece_id"].as_str().unwrap()),
+    )
+    .await;
+    let mut body = json!({"status":"approved","expected_revision":p["revision"],"expected_target":context.body["current_target"]});
     if !p["assets"].is_null() {
         body["expected_assets"] = hashes(p);
     }
@@ -119,6 +124,95 @@ async fn publish_meta(server: &TestServer, p: &serde_json::Value) -> Answer {
         json!({"expected_revision":p["revision"]}),
     )
     .await
+}
+
+#[tokio::test]
+async fn facebook_account_switch_requires_fresh_approval() {
+    assert!(meta_account_switch("facebook_page").await.is_ok());
+}
+#[tokio::test]
+async fn instagram_account_switch_requires_fresh_approval() {
+    assert!(meta_account_switch("instagram").await.is_ok());
+}
+async fn meta_account_switch(channel: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let fake = fake_meta::start(Default::default()).await;
+    let (server, _, _) = start_meta(&fake, true).await;
+    sign_in(&server).await;
+    let p = draft(&server, channel, 99).await;
+    let p = if channel == "instagram" {
+        rendered(&server, &p, 1).await
+    } else {
+        p
+    };
+    assert_eq!(approve_meta(&server, &p).await.status, 200);
+    send_json(
+        &server,
+        reqwest::Method::DELETE,
+        "/v1/meta/connection",
+        serde_json::Value::Null,
+    )
+    .await;
+    fake.configure(fake_meta::Config {
+        second_page: channel == "facebook_page",
+        second_instagram: channel == "instagram",
+        ..Default::default()
+    });
+    let mut cfg = config(&fake);
+    if channel == "facebook_page" {
+        cfg.page_id = Some("111".into());
+    }
+    let media = Arc::new(Media::default());
+    let adapter = Arc::new(syncloom_core::meta::Meta::new(
+        cfg,
+        memory_store::MemoryStore::new(),
+        clock(),
+        std::time::Duration::from_secs(3),
+        media.clone(),
+    ));
+    let store = Store::open(server.dir.path())?;
+    let second = start_studio(Scripted::new(text("unused")), Settings::default(), |_| {
+        Studio::new(
+            store,
+            Scripted::new(text("unused")),
+            fixed_clock(),
+            Settings::default(),
+        )
+        .with_meta(adapter.clone())
+        .with_delivery("facebook", adapter.target(MetaTarget::Facebook))
+        .with_delivery("instagram", adapter.target(MetaTarget::Instagram))
+    })
+    .await;
+    sign_in(&second).await;
+    let result = publish_meta(&second, &p).await;
+    let targets: Vec<_> = fake
+        .all()
+        .into_iter()
+        .filter(|c| c.method == "POST")
+        .map(|c| c.path)
+        .collect();
+    assert_eq!(
+        result.code(),
+        "account_approval_required",
+        "{channel}: actual targets={targets:?}; {}",
+        result.raw
+    );
+    assert!(targets.is_empty());
+    assert!(
+        media
+            .images
+            .lock()
+            .map(|images| images.is_empty())
+            .unwrap_or(false)
+    );
+    assert_eq!(approve_meta(&second, &p).await.status, 200);
+    assert_eq!(publish_meta(&second, &p).await.body["status"], "posted");
+    let target = if channel == "instagram" {
+        "212/media_publish"
+    } else {
+        "111/feed"
+    };
+    assert_eq!(fake.calls(target).len(), 1);
+    Ok(())
 }
 
 #[tokio::test]

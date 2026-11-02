@@ -19,7 +19,7 @@ pub(crate) trait OAuthLifecycle: Sync {
     fn oauth(&self) -> &OAuthContext;
     fn pending(&self) -> bool;
     fn refresh_request(&self, token: &Token) -> Result<reqwest::RequestBuilder, StudioError>;
-    fn save_refreshed(
+    async fn save_refreshed(
         &self,
         issued: Self::Issued,
         old: &Token,
@@ -29,35 +29,14 @@ pub(crate) trait OAuthLifecycle: Sync {
         self.oauth().credentials.connection(self.pending())
     }
     async fn refresh(&self) -> Result<Connection, StudioError> {
-        self.oauth()
-            .refresh(
-                Self::REFRESH_RULE,
-                |token| self.refresh_request(token),
-                |issued, old, generation| {
-                    self.save_refreshed(issued, old, generation)?;
-                    self.connection()
-                },
-            )
-            .await
+        let renewal = self.oauth().credentials.renewal(Self::REFRESH_RULE).await?;
+        let issued = crate::oauth::exchange_json(self.refresh_request(&renewal.token)?).await?;
+        self.save_refreshed(issued, &renewal.token, renewal.generation)
+            .await?;
+        self.connection()
     }
 }
 impl OAuthContext {
-    pub async fn refresh<T, Request, Commit>(
-        &self,
-        rule: RefreshRule,
-        request: Request,
-        commit: Commit,
-    ) -> Result<Connection, StudioError>
-    where
-        T: serde::de::DeserializeOwned,
-        Request: FnOnce(&Token) -> Result<reqwest::RequestBuilder, StudioError>,
-        Commit: FnOnce(T, &Token, u64) -> Result<Connection, StudioError>,
-    {
-        let renewal = self.credentials.renewal(rule).await?;
-        let issued = crate::oauth::exchange_json(request(&renewal.token)?).await?;
-        commit(issued, &renewal.token, renewal.generation)
-    }
-
     #[expect(
         clippy::expect_used,
         reason = "Callers supply validated authorization bases and fixed platform paths."

@@ -169,6 +169,8 @@ impl Linkedin {
         let token = Token {
             access_token: Secret::new(issued.access_token),
             expires_at: Some(rfc3339(now + Duration::from_secs(issued.expires_in))),
+            identity_authority: self.config.client_id.clone(),
+            page_id: None,
             member_id,
             scope: issued.scope,
             obtained_at: rfc3339(now),
@@ -230,6 +232,7 @@ impl Linkedin {
     /// Exactly one `POST /rest/posts`. The caller (the studio) applies the deadline.
     async fn post(&self, request: PostRequest) -> Result<Posted, PostFailure> {
         let token = self.session.usable_token()?;
+        request.require_target(token.app_target("linkedin"))?;
         let response = self
             .client
             .post(format!("{}/rest/posts", self.config.api_base.as_str()))
@@ -245,6 +248,10 @@ impl Linkedin {
 }
 
 impl Platform for Linkedin {
+    fn posting_target(&self) -> Result<String, PostFailure> {
+        let token = self.session.usable_token()?;
+        token.app_target("linkedin")
+    }
     fn publish(&self, request: PostRequest) -> PostFuture<'_> {
         Box::pin(self.post(request))
     }

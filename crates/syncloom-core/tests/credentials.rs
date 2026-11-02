@@ -70,6 +70,8 @@ fn a_token_round_trips_through_the_keychain_and_is_deleted_without_a_trace() {
     let renewed = Token {
         access_token: Secret::new("second-token"),
         expires_at: Some("2027-01-01T00:00:00Z".to_owned()),
+        identity_authority: None,
+        page_id: None,
         member_id: "M2".to_owned(),
         scope: "w_member_social".to_owned(),
         obtained_at: FIXED_AT.to_owned(),

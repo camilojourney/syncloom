@@ -104,7 +104,7 @@ async fn each_request_logs_one_content_free_line() {
         .filter_map(|line| serde_json::from_str(line).ok())
         .filter(|line: &serde_json::Value| line["message"] == "request_finished")
         .collect();
-    assert_eq!(lines.len(), 11, "one line per request:\n{raw}");
+    assert_eq!(lines.len(), 12, "one line per request:\n{raw}");
     for line in &lines {
         for field in ["request_id", "route", "status", "total_ms", "outcome"] {
             assert!(line.get(field).is_some(), "missing {field} in {line}");
@@ -125,6 +125,7 @@ async fn each_request_logs_one_content_free_line() {
             "/v1/linkedin/sign-in",
             "/v1/linkedin/connection",
             "/v1/thoughts",
+            "/v1/pieces/{piece_id}",
             "/v1/pieces/{piece_id}",
             "/v1/pieces/{piece_id}",
             "/v1/pieces/{piece_id}/publish",

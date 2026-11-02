@@ -20,6 +20,7 @@ fn request(rev: &str, template: &str, slides: &[&str]) -> RenderRequest {
 }
 fn review(rev: &str) -> ReviewRequest {
     ReviewRequest {
+        expected_target: None,
         expected_revision: rev.into(),
         status: Some(Status::Approved),
         text: None,
@@ -310,14 +311,39 @@ async fn missing_timeout_crash_version_and_font_fail_truthfully() {
     let mut slow = config();
     slow.binary = executable(
         dir.path(),
-        &format!("echo $$ > '{}'; exec /bin/sleep 30", marker.display()),
+        &format!(
+            "/bin/sleep 0.3; echo $$ > '{}'; exec /bin/sleep 30",
+            marker.display()
+        ),
     );
     slow.deadline = Duration::from_millis(200);
+    // Start the deadline clock only after the child has actually run. A real 200ms
+    // timeout can reap a spawned-but-unscheduled shell before it writes its PID.
+    tokio::time::pause();
+    let rendering = {
+        let content = content.clone();
+        tokio::spawn(async move { slow.render(&content, false).await })
+    };
+    let readiness = std::time::Instant::now();
+    let pid = loop {
+        if let Ok(pid) = std::fs::read_to_string(&marker)
+            && pid.trim().parse::<u32>().is_ok()
+        {
+            break pid;
+        }
+        assert!(
+            readiness.elapsed() < Duration::from_secs(2),
+            "child did not start"
+        );
+        // Keep the clock frozen while allowing the OS child to signal readiness.
+        tokio::task::yield_now().await;
+    };
+    tokio::time::advance(Duration::from_millis(200)).await;
     assert!(matches!(
-        slow.render(&content, false).await,
+        rendering.await.unwrap(),
         Err(StudioError::RendererTimeout)
     ));
-    let pid = std::fs::read_to_string(marker).unwrap();
+    tokio::time::resume();
     assert!(
         !std::process::Command::new("/bin/kill")
             .args(["-0", pid.trim()])
@@ -430,6 +456,7 @@ async fn concurrent_edit_rejects_render_completion() {
             .review(
                 &id,
                 ReviewRequest {
+                    expected_target: None,
                     expected_revision: current.revision,
                     text: Some("Changed while rendering.".into()),
                     status: None,

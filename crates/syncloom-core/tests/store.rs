@@ -11,6 +11,7 @@ use tempfile::TempDir;
 
 fn piece(text: &str) -> Piece {
     Piece {
+        approval_target: None,
         piece_id: "thought-0123456789ab-linkedin_text".into(),
         group_id: "0123456789abcdef0123456789abcdef".into(),
         channel: Channel::LinkedinText,
@@ -40,6 +41,7 @@ fn piece(text: &str) -> Piece {
 
 fn event(kind: EventKind) -> Event {
     Event {
+        approval_target: None,
         schema_version: "1.0".into(),
         event_id: "11111111-1111-4111-8111-111111111111".into(),
         event: kind,
@@ -160,8 +162,10 @@ fn an_intent_survives_reopening_the_store() {
         "publish",
         "thought-0123456789ab-linkedin_text",
         "b0ca8c02601b2edcb612b47c88494925c5e5f9d92044e91bc510adf47dd73f92",
+        None,
     );
     let intent = DispatchIntent {
+        approval_target: None,
         request_id: "dispatch-904f4c443cf556d7f34c6c307a86dfe3".into(),
         operation: "publish".into(),
         piece_id: "thought-0123456789ab-linkedin_text".into(),

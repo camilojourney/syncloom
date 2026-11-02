@@ -71,6 +71,9 @@ pub struct DispatchIntent {
     pub operation: String,
     pub piece_id: String,
     pub revision: String,
+    /// Target of the last claimed attempt, retained even after reconnect or restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_target: Option<String>,
     pub payload: Payload,
     pub status: IntentStatus,
     pub created_at: String,
@@ -89,18 +92,20 @@ pub struct DispatchIntent {
     pub cost_estimate: Option<crate::social::CostEstimate>,
 }
 
-/// Hex SHA-256 of the compact sorted JSON of `operation`, `piece_id` and `revision`; the
-/// intent's file name. One key per piece revision and operation is what makes a repeat safe.
-pub fn intent_key(operation: &str, piece_id: &str, revision: &str) -> String {
-    sha256_json(&serde_json::json!({
-        "operation": operation,
-        "piece_id": piece_id,
-        "revision": revision,
-    }))
+/// One intent per operation, piece, revision and exact target. Unbound/manual keys
+/// retain their historical encoding so uncertain legacy attempts cannot be bypassed.
+pub fn intent_key(operation: &str, piece_id: &str, revision: &str, target: Option<&str>) -> String {
+    let mut value = serde_json::json!({
+        "operation": operation, "piece_id": piece_id, "revision": revision
+    });
+    if let Some(target) = target {
+        value["target"] = serde_json::json!(target);
+    }
+    sha256_json(&value)
 }
 
 /// `dispatch-` plus the first 32 characters of [`intent_key`].
-pub fn request_id(operation: &str, piece_id: &str, revision: &str) -> String {
-    let key = intent_key(operation, piece_id, revision);
+pub fn request_id(operation: &str, piece_id: &str, revision: &str, target: Option<&str>) -> String {
+    let key = intent_key(operation, piece_id, revision, target);
     format!("dispatch-{}", &key[..32])
 }

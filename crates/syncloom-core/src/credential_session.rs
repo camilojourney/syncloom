@@ -94,6 +94,8 @@ impl CredentialSession {
         let token = Token {
             access_token,
             expires_at: Some(expires_at),
+            identity_authority: None,
+            page_id: None,
             member_id,
             scope,
             obtained_at: self.clock.now_rfc3339(),

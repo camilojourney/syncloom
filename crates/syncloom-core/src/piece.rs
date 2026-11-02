@@ -45,6 +45,9 @@ pub struct Piece {
     pub revision: String,
     pub status: Status,
     pub review_decision_id: Option<String>,
+    /// Absent on historical or offline content-only approvals; never backfilled implicitly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_target: Option<String>,
     pub publish_status: Option<String>,
     pub fit: Fit,
     pub source: Source,
@@ -64,6 +67,7 @@ impl Piece {
     pub(crate) fn invalidate_review(&mut self) {
         self.status = Status::PendingReview;
         self.review_decision_id = None;
+        self.approval_target = None;
         self.publish_status = None;
         self.assets = None;
     }

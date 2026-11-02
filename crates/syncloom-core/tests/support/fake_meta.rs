@@ -31,6 +31,8 @@ pub struct Config {
     pub deny: bool,
     pub missing_permission: bool,
     pub wrong_page: bool,
+    pub second_page: bool,
+    pub second_instagram: bool,
     pub no_tasks: bool,
     pub no_instagram: bool,
     pub container_status: Option<String>,
@@ -177,7 +179,7 @@ async fn graph_get(
         }
         "me/accounts" => {
             assert_eq!(h["authorization"], "Bearer fake-user-long");
-            json!({"data":[{"id":if c.wrong_page {"999"}else{"101"},"access_token":TOKEN,"tasks":if c.no_tasks {vec!["ANALYZE"]} else {vec!["CREATE_CONTENT","MANAGE","MODERATE"]},"instagram_business_account":if c.no_instagram {Value::Null} else {json!({"id":"202"})}}]})
+            json!({"data":[{"id":if c.wrong_page {"999"}else if c.second_page {"111"}else{"101"},"access_token":TOKEN,"tasks":if c.no_tasks {vec!["ANALYZE"]} else {vec!["CREATE_CONTENT","MANAGE","MODERATE"]},"instagram_business_account":if c.no_instagram {Value::Null} else {json!({"id":if c.second_instagram {"212"}else{"202"}})}}]})
         }
         "303" => {
             json!({"permalink":if c.bad_permalink {"https://evil.invalid/p/303/"}else{"https://www.instagram.com/p/fake303/"}})
@@ -221,6 +223,7 @@ async fn graph_post(
     }
     let answer = match path.as_str() {
         "101/feed" => json!({"id":"101_404"}),
+        "111/feed" => json!({"id":"111_404"}),
         "101/photos" => {
             if i.config.lock().unwrap().photo_only {
                 json!({"id":"505"})
@@ -228,13 +231,13 @@ async fn graph_post(
                 json!({"id":"505","post_id":"101_404"})
             }
         }
-        "202/media" => {
+        "202/media" | "212/media" => {
             let mut ids = i.containers.lock().unwrap();
             let id = (600 + ids.len()).to_string();
             ids.push(id.clone());
             json!({"id":id})
         }
-        "202/media_publish" => {
+        "202/media_publish" | "212/media_publish" => {
             assert!(
                 i.containers
                     .lock()

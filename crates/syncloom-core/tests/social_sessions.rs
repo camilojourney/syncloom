@@ -20,8 +20,8 @@ async fn bluesky_password_session_refresh_and_image_use_only_configured_pds() {
         .await
         .unwrap();
     assert_eq!(fake.calls().len(), 1);
+    let mut request = text(q.bluesky.as_ref());
     q.bluesky.refresh().await.unwrap();
-    let mut request = text();
     request.image = Some(syncloom_core::platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "Test chart.".into(),
@@ -52,7 +52,7 @@ async fn bluesky_password_session_refresh_and_image_use_only_configured_pds() {
     assert!(!serialized.contains("canary"));
     q.bluesky.sign_out().unwrap();
     assert_eq!(
-        q.bluesky.publish(text()).await,
+        q.bluesky.publish(text(q.bluesky.as_ref())).await,
         Err(PostFailure::ConsentRequired)
     );
     assert_eq!(fake.calls().len(), 4);
@@ -81,12 +81,15 @@ async fn x_pkce_refresh_rotation_and_current_v2_image_contract() {
         p["code_challenge"]
     );
     assert!(!form.contains_key("client_secret"));
+    let mut request = text(q.x.as_ref());
     fake.reply("/2/oauth2/token",200,json!({"access_token":"x-access-2","refresh_token":"x-refresh-2","expires_in":7200,"scope":"tweet.read tweet.write users.read media.write offline.access","token_type":"bearer"}));
     q.refresh(syncloom_core::Channel::X).await.unwrap();
     q.refresh(syncloom_core::Channel::X).await.unwrap();
-    assert_eq!(fake.calls()[1].form()["refresh_token"], "x-refresh-1");
-    assert_eq!(fake.calls()[2].form()["refresh_token"], "x-refresh-2");
-    let mut request = text();
+    assert_eq!(fake.calls()[2].form()["refresh_token"], "x-refresh-1");
+    assert_eq!(fake.calls()[4].form()["refresh_token"], "x-refresh-2");
+    assert_eq!(fake.calls()[1].path, "/2/users/me");
+    assert_eq!(fake.calls()[3].authorization, "Bearer x-access-2");
+    assert_eq!(fake.calls()[5].authorization, "Bearer x-access-2");
     request.image = Some(syncloom_core::platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "Test chart.".into(),
@@ -94,17 +97,17 @@ async fn x_pkce_refresh_rotation_and_current_v2_image_contract() {
     assert_eq!(q.x.publish(request).await.unwrap().post_id, "202");
     let calls = fake.calls();
     assert_eq!(
-        calls[3].json(),
+        calls[6].json(),
         json!({"total_bytes":8,"media_type":"image/png","media_category":"tweet_image"})
     );
-    assert!(calls[4].content_type.starts_with("multipart/form-data"));
-    assert_eq!(calls[5].path, "/2/media/upload/101/finalize");
+    assert!(calls[7].content_type.starts_with("multipart/form-data"));
+    assert_eq!(calls[8].path, "/2/media/upload/101/finalize");
     assert_eq!(
-        calls[6].json(),
+        calls[9].json(),
         json!({"id":"101","metadata":{"alt_text":{"text":"Test chart."}}})
     );
-    assert_eq!(calls[7].json()["media"]["media_ids"], json!(["101"]));
-    assert_eq!(calls[7].authorization, "Bearer x-access-2");
+    assert_eq!(calls[10].json()["media"]["media_ids"], json!(["101"]));
+    assert_eq!(calls[10].authorization, "Bearer x-access-2");
 }
 
 #[tokio::test]
@@ -114,6 +117,7 @@ async fn threads_external_state_long_lived_exchange_refresh_window_and_text() {
     let store = Arc::new(MemoryStore::default());
     let q = social(&fake, store.clone(), c.clone());
     threads_login(&q).await;
+    let approved = text(q.threads.as_ref());
     assert_eq!(
         fake.calls()[0].form()["redirect_uri"],
         "https://redirect.invalid/callback"
@@ -132,14 +136,17 @@ async fn threads_external_state_long_lived_exchange_refresh_window_and_text() {
     *c.0.lock().unwrap() += time::Duration::days(1);
     q.refresh(syncloom_core::Channel::Threads).await.unwrap();
     assert!(
-        fake.calls()[2]
+        fake.calls()[3]
             .query
             .contains("access_token=threads-long-1")
     );
-    assert_eq!(q.threads.publish(text()).await.unwrap().post_id, "505");
-    assert_eq!(fake.calls()[3].form()["media_type"], "TEXT");
-    assert_eq!(fake.calls()[5].form()["creation_id"], "404");
-    assert_eq!(fake.calls()[5].authorization, "Bearer threads-long-2");
+    assert_eq!(q.threads.publish(approved).await.unwrap().post_id, "505");
+    assert_eq!(fake.calls()[2].path, "/v1.0/me");
+    assert_eq!(fake.calls()[4].path, "/v1.0/me");
+    assert_eq!(fake.calls()[4].authorization, "Bearer threads-long-2");
+    assert_eq!(fake.calls()[5].form()["media_type"], "TEXT");
+    assert_eq!(fake.calls()[7].form()["creation_id"], "404");
+    assert_eq!(fake.calls()[7].authorization, "Bearer threads-long-2");
     *c.0.lock().unwrap() += time::Duration::days(60);
     let count = fake.calls().len();
     assert_eq!(
@@ -147,10 +154,50 @@ async fn threads_external_state_long_lived_exchange_refresh_window_and_text() {
         Err(StudioError::SignInRejected)
     );
     assert_eq!(
-        q.threads.publish(text()).await,
+        q.threads.publish(text(q.threads.as_ref())).await,
         Err(PostFailure::ConsentRequired)
     );
     assert_eq!(fake.calls().len(), count);
+}
+
+#[tokio::test]
+async fn threads_app_scoped_ids_require_the_observed_app_namespace()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fake = Fake::threads().await;
+    let mut targets = Vec::new();
+    for app in ["synthetic-app-a", "synthetic-app-b"] {
+        let config = syncloom_core::social::SocialConfig::parse(|n| match n {
+            "SYNCLOOM_THREADS_API_BASE_URL" | "SYNCLOOM_THREADS_AUTH_BASE_URL" => {
+                Some(fake.base().into())
+            }
+            "SYNCLOOM_THREADS_CLIENT_ID" => Some(app.into()),
+            "SYNCLOOM_THREADS_CLIENT_SECRET" => Some("synthetic-secret".into()),
+            "SYNCLOOM_THREADS_REDIRECT_URL" => Some("https://redirect.invalid/callback".into()),
+            _ => None,
+        })?;
+        let q = syncloom_core::social::SocialPlatforms::new(
+            config,
+            MemoryStore::new(),
+            clock(),
+            Duration::from_secs(2),
+        );
+        let start = q.threads.sign_in_begin()?;
+        let url = reqwest::Url::parse(&start.authorization_url)?;
+        let state = url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .ok_or("missing state")?
+            .1
+            .into_owned();
+        q.threads
+            .complete(&format!(
+                "https://redirect.invalid/callback?code=c&state={state}"
+            ))
+            .await?;
+        targets.push(q.threads.posting_target().map_err(|e| format!("{e:?}"))?);
+    }
+    assert_ne!(targets[0], targets[1]);
+    Ok(())
 }
 
 #[tokio::test]
@@ -215,7 +262,7 @@ async fn signing_out_during_refresh_cannot_resurrect_credentials() {
     let hold = fake.hold("/2/oauth2/token");
     let active = q.clone();
     let refreshing = tokio::spawn(async move { active.refresh(syncloom_core::Channel::X).await });
-    fake.wait_calls(2).await;
+    fake.wait_calls(3).await;
     q.x.sign_out().unwrap();
     hold.notify_one();
     assert_eq!(refreshing.await.unwrap(), Err(StudioError::SignInRejected));
@@ -270,7 +317,7 @@ async fn platform_failures_and_partial_media_success_never_claim_posted_or_retry
         x_login(&q).await;
         fake.reply("/2/tweets", status, json!({"error":"secret-canary"}));
         assert_eq!(
-            tokio::time::timeout(Duration::from_millis(30), q.x.publish(text()))
+            tokio::time::timeout(Duration::from_millis(30), q.x.publish(text(q.x.as_ref())))
                 .await
                 .unwrap_or(Err(PostFailure::Unknown)),
             Err(expected)
@@ -287,7 +334,7 @@ async fn platform_failures_and_partial_media_success_never_claim_posted_or_retry
     let q = social(&fake, Arc::new(MemoryStore::default()), clock());
     x_login(&q).await;
     fake.reply("/2/media/metadata", 400, json!({"error":"refused"}));
-    let mut request = text();
+    let mut request = text(q.x.as_ref());
     request.image = Some(syncloom_core::platform::PostImage {
         bytes: b"\x89PNG\r\n\x1a\n".to_vec(),
         alt_text: "Test chart.".into(),

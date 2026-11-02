@@ -51,16 +51,19 @@ async fn bluesky_rejects_expired_or_unrefreshable_sessions_and_identity_drift() 
         .sign_in("test.invalid", Secret::new("test"))
         .await
         .unwrap();
-    let before = store
-        .load(&q.account(syncloom_core::Channel::Bluesky).unwrap())
-        .unwrap();
+    assert!(
+        store
+            .load(&q.account(syncloom_core::Channel::Bluesky).unwrap())
+            .unwrap()
+            .is_some()
+    );
     fake.reply("/xrpc/com.atproto.server.refreshSession",200,json!({"accessJwt":fake::jwt(1793541600),"refreshJwt":"new-refresh","did":"did:plc:different","handle":"other.invalid"}));
     assert_eq!(q.bluesky.refresh().await, Err(StudioError::SignInRejected));
     assert_eq!(
         store
             .load(&q.account(syncloom_core::Channel::Bluesky).unwrap())
             .unwrap(),
-        before
+        None
     );
 }
 
@@ -102,4 +105,93 @@ async fn x_rejects_invalid_issued_tokens_without_committing_credentials() {
                 .is_none()
         );
     }
+}
+
+#[tokio::test]
+async fn unresolved_or_mismatched_x_and_threads_identity_never_authorizes_posting()
+-> Result<(), Box<dyn std::error::Error>> {
+    use syncloom_core::{Channel, ConnectionStatus, Platform};
+    for channel in [Channel::X, Channel::Threads] {
+        let fake = if channel == Channel::X {
+            Fake::x().await
+        } else {
+            Fake::threads().await
+        };
+        let store = MemoryStore::new();
+        let c = clock();
+        let q = social(&fake, store.clone(), c.clone());
+        if channel == Channel::X {
+            x_login(&q).await;
+        } else {
+            threads_login(&q).await;
+        }
+        let old = store
+            .load(&q.account(channel)?)?
+            .ok_or("missing signed-in token")?;
+        assert!(!old.member_id.is_empty());
+        let path = if channel == Channel::X {
+            "/2/users/me"
+        } else {
+            "/v1.0/me"
+        };
+        fake.reply(
+            path,
+            200,
+            if channel == Channel::X {
+                json!({"data":{"id":"999"}})
+            } else {
+                json!({"id":"999"})
+            },
+        );
+        if channel == Channel::Threads {
+            c.0.lock()
+                .map_err(|_| "clock poisoned")?
+                .clone_from(&time::macros::datetime!(2026-11-01 02:00 UTC));
+        }
+        assert_eq!(q.refresh(channel).await, Err(StudioError::SignInRejected));
+        assert_eq!(q.connection(channel)?.status, ConnectionStatus::SignedOut);
+        assert!(store.load(&q.account(channel)?)?.is_none());
+        let platform: &dyn Platform = if channel == Channel::X {
+            q.x.as_ref()
+        } else {
+            q.threads.as_ref()
+        };
+        let count = fake.calls().len();
+        assert_eq!(
+            platform.publish(text(platform)).await,
+            Err(syncloom_core::PostFailure::ConsentRequired)
+        );
+        assert_eq!(fake.calls().len(), count);
+        fake.reply(path, 200, json!({}));
+        if channel == Channel::X {
+            let started = q.x.sign_in_begin()?;
+            let url = reqwest::Url::parse(&started.authorization_url)?;
+            let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+            reqwest::get(format!(
+                "{}?code=c&state={}",
+                pairs["redirect_uri"], pairs["state"]
+            ))
+            .await?;
+            assert_eq!(q.x.sign_in_wait().await, Err(StudioError::SignInRejected));
+        } else {
+            let started = q.threads.sign_in_begin()?;
+            let url = reqwest::Url::parse(&started.authorization_url)?;
+            let state = url
+                .query_pairs()
+                .find(|(k, _)| k == "state")
+                .ok_or("missing state")?
+                .1
+                .into_owned();
+            assert_eq!(
+                q.threads
+                    .complete(&format!(
+                        "https://redirect.invalid/callback?code=c&state={state}"
+                    ))
+                    .await,
+                Err(StudioError::SignInRejected)
+            );
+        }
+        assert!(store.load(&q.account(channel)?)?.is_none());
+    }
+    Ok(())
 }

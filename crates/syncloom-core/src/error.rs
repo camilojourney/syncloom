@@ -33,6 +33,7 @@ pub enum StudioError {
     MetaNotConfigured,
     PlatformNotConfigured,
     CostConfirmationRequired,
+    AccountApprovalRequired,
     Internal,
 }
 
@@ -44,7 +45,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 30] = [
+const ROWS: [Row; 31] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -155,11 +156,15 @@ const ROWS: [Row; 30] = [
         "cost_confirmation_required",
         "Preview the X cost estimate and confirm its exact micro-USD amount before publishing.",
     ),
+    row(
+        "account_approval_required",
+        "The connected account is not approved for this revision. Review and approve this account before publishing.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 30] = [
+    pub const ALL: [StudioError; 31] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -189,6 +194,7 @@ impl StudioError {
         StudioError::MetaNotConfigured,
         StudioError::PlatformNotConfigured,
         StudioError::CostConfirmationRequired,
+        StudioError::AccountApprovalRequired,
         StudioError::Internal,
     ];
 
