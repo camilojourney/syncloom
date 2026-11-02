@@ -179,6 +179,19 @@ async fn http_consent_page_text_photo_instagram_image_carousel_and_restart_repea
                 );
                 assert!(bytes.len() < 8 * 1024 * 1024);
             }
+            for index in [
+                count.to_string(),
+                "-1".into(),
+                "invalid".into(),
+                "18446744073709551616".into(),
+            ] {
+                let refused = get(
+                    &server,
+                    &format!("/v1/pieces/{}/assets/slides/{index}", id_of(&p)),
+                )
+                .await;
+                assert_eq!((refused.status, refused.code()), (409, "assets_required"));
+            }
             let mut wrong = hashes(&p);
             wrong["slides_sha256"] = json!([]);
             let denied=send_json(&server,reqwest::Method::PATCH,&format!("/v1/pieces/{}",p["piece_id"].as_str().unwrap()),json!({"expected_revision":p["revision"],"status":"approved","expected_assets":wrong})).await;
@@ -247,6 +260,35 @@ async fn http_consent_page_text_photo_instagram_image_carousel_and_restart_repea
     ] {
         assert!(!records.contains(secret));
     }
+}
+
+#[tokio::test]
+async fn meta_connection_read_and_repeated_sign_out_use_only_the_store() {
+    let fake = fake_meta::start(Default::default()).await;
+    let (server, _, _) = start_meta(&fake, false).await;
+    let empty = get(&server, "/v1/meta/connection").await;
+    assert_eq!(empty.status, 200);
+    assert_eq!(empty.body["status"], "signed_out");
+    assert!(fake.all().is_empty());
+    sign_in(&server).await;
+    let calls = fake.all().len();
+    let connected = get(&server, "/v1/meta/connection").await;
+    assert_eq!(connected.status, 200);
+    assert_eq!(connected.body["status"], "signed_in");
+    assert!(!connected.raw.contains(fake_meta::TOKEN));
+    for _ in 0..2 {
+        let deleted = send_json(
+            &server,
+            reqwest::Method::DELETE,
+            "/v1/meta/connection",
+            serde_json::Value::Null,
+        )
+        .await;
+        assert_eq!(deleted.status, 200);
+        assert_eq!(deleted.body["status"], "signed_out");
+    }
+    assert_eq!(get(&server, "/v1/meta/connection").await.body, empty.body);
+    assert_eq!(fake.all().len(), calls);
 }
 
 #[tokio::test]

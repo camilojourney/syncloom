@@ -48,8 +48,12 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
         .await
         .unwrap();
     let signed = get(&server, "/v1/mastodon/sign-in").await;
+    assert_eq!(signed.status, 200);
     assert_eq!(signed.body["status"], "signed_in");
     assert!(signed.body.get("expires_at").is_none());
+    let connection = get(&server, "/v1/mastodon/connection").await;
+    assert_eq!(connection.status, 200);
+    assert_eq!(connection.body, signed.body);
     let created = post(
         &server,
         "/v1/thoughts",
@@ -143,7 +147,21 @@ async fn full_mastodon_consent_render_approve_publish_repeat_and_export_are_fake
         serde_json::Value::Null,
     )
     .await;
+    assert_eq!(signed_out.status, 200);
     assert_eq!(signed_out.body["status"], "signed_out");
+    let again = send_json(
+        &server,
+        reqwest::Method::DELETE,
+        "/v1/mastodon/connection",
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(again.status, 200);
+    assert_eq!(again.body, signed_out.body);
+    assert_eq!(
+        get(&server, "/v1/mastodon/connection").await.body,
+        signed_out.body
+    );
 }
 
 #[tokio::test]
