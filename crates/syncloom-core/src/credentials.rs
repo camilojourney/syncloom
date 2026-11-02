@@ -119,10 +119,13 @@ impl Token {
         channel: crate::Channel,
         image: bool,
     ) -> Result<(), GrantError> {
-        if matches!(
-            channel,
-            crate::Channel::Threads | crate::Channel::FacebookPage | crate::Channel::Instagram
-        ) && !self.scope_verified
+        // Historical X strings came from the provider. An unresolved new X rotation
+        // instead stores an empty scope with false provenance, never the prior scope.
+        if !self.scope_verified
+            && (matches!(
+                channel,
+                crate::Channel::Threads | crate::Channel::FacebookPage | crate::Channel::Instagram
+            ) || (channel == crate::Channel::X && self.scope.is_empty()))
         {
             return Err(GrantError::Unverified);
         }

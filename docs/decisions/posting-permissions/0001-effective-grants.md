@@ -1,12 +1,14 @@
 # posting-permissions/0001: Effective posting grants
 
-Status: proposed
+Status: accepted for the bounded repair by Main1360; security landing remains unapproved
 Owner: Main, through firstmate
 Method: decide@1.3.1, source SKILL.md SHA256 826eec40bdc6539dfb29df5d26af92f1ca735d0dfcfdda80407a66cc4f5fa515
 Checklist: 1.0.0, SHA256 8c88c2c9c524d97552f67f30f6c4ba25589516b9dc18a51b09f7962688e5b056; [pinned source](../sources/decide-question-checklist-1.0.0.md), Fleet baa7c65c88fa04eaa2d2167e78b24ff56e575e68
 Identity: posting-permissions/0001-effective-grants
 OpenSpec: [fix-effective-posting-grants](../../../openspec/changes/fix-effective-posting-grants/design.md), [tasks](../../../openspec/changes/fix-effective-posting-grants/tasks.md)
 Evaluation: synthetic execution receipts retained in the authorized posting-grants task data; final Code Verify pending.
+
+The original proposal sections below retain their capture-time pending statements. The dated Main1357/1360 continuation appended after section8 records the later technical acceptance; missing prospective custody is not repaired or backdated.
 
 ## 1. Brief
 
@@ -92,3 +94,19 @@ Verification: Code 5.4.2 is loaded; final Verify against launch 3a059a0 and pare
 Proposed owner/date: firstmate, 2026-11-09, subject to owner confirmation. Future prediction: if landing is authorized, the combined identity/capability branch retains reduced-grant zero-write and full-grant success controls. Observation source: integration test receipts at the actual reviewed head, not a live-account experiment. Missing evidence stays unknown.
 
 Outcome-blind process review and observed post-landing outcomes are pending. This proposed record does not count as an accepted method record; Fleet's coordinating owner owns the ten-accepted-record cadence, whose cross-project count is unknown here. Missing prospective custody and challenger remain visible regardless of eventual test outcomes. Implementation progress belongs only to the linked OpenSpec tasks.
+
+## 2026-11-02 Main1357/1360 continuation
+
+Commissioning packet:3307bytes, SHA256 bcead0b8a445262ad69c8c75c4936f7f355fa06592130b3cc5dec7c9b121184d. The recommendation was immutable at ae898086e5cbe334ba0ed6f73cb3f483e1454946 before commissioning; rationale blob811b4076f154a8104207ef2266a79aa323de112b, SHA256 a49769fc113f48d3d6b847aff9fc6352507c6b4a4ecdfb64d7ebc6b24d180687. Exact packet, sealed reference, Main initial/final and primary answers remain in authorized task data, not copied private transcripts here.
+
+Challenge limits: Main used Claude Opus5.5 in its existing context, not a fresh call. Initial evidence was the packet plus its own requirement/snapshot instructions, not candidate code or recommendation; firstmate then controlled reveal. The challenge is late after implementation/research/results, with requirement-authorship and shared-context/framing limits. It is not a fresh independent review or cutoff-valid prospective comparison.
+
+Initial pick favored credential-owned evidence with adapter interpretation and suggested some Unknown write-first attempts. Primary defended the existing one pure credential predicate and the irreversible effect of even the first text write. Main1360 accepts placement and withdraws write-first: permission-Unverified retains zero writes, distinct from outbox Unknown. No generic403 downgrade or acquired-at-as-verified timestamp is authorized.
+
+Main directs only X absent/null/present provenance correction: absent refresh carries prior provider-returned scope, fresh absence is unverified, and null/empty/noncanonical or wrong-typed evidence is unverified without carry-forward. Valid rotated credential and actual evidence are retained atomically. The 15-case TCP baseline at ae89808 had five already-correct controls and ten actual failures; these are not relabeled all-RED. After correction all15 plus the original social TCP controls passed; null/absent mutation failed and was restored.
+
+RFC6749 [5.1](https://www.rfc-editor.org/rfc/rfc6749#section-5.1) and [6](https://www.rfc-editor.org/rfc/rfc6749#section-6) were directly retrieved/read under Main1360's narrow authorization. They distinguish response omission from refresh-request omission. This verifies the normative text, not X server conformance, malformed response frequency or revocation timing.
+
+Main1360 explicitly retains only the exhaustive IntentStatus::as_str9->11 mapping and clone355ce241 signature fragment under Code's existing mechanism. Exact locations/reasons and its path-matching limitation are in the [change design](../../../openspec/changes/fix-effective-posting-grants/design.md#exact-retained-findings); raw detector receipts remain disclosed. New actual X-save complexity/duplicated evidence interpretation was fixed by using Token::posting_permission rather than retained. No broader waiver or checker change is authorized.
+
+Final exact-tree dual-base Verify and task completion are recorded by the final execution handoff. At this continuation's capture those final receipts are pending; prior failures remain historical. This is technical acceptance only, not landing or live-provider proof. Identity integration, security landing and future outcomes remain owner-controlled.

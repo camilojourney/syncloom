@@ -68,25 +68,7 @@ async fn login(server: &TestServer, platform: &str) {
         assert_eq!(signed.body["status"], "signed_in", "{}", signed.raw);
         return;
     }
-    let start = post_empty(server, &format!("/v1/{platform}/sign-in")).await;
-    assert_eq!(start.status, 202, "{}", start.raw);
-    let u = reqwest::Url::parse(start.body["authorization_url"].as_str().unwrap()).unwrap();
-    let pairs: std::collections::HashMap<_, _> = u.query_pairs().into_owned().collect();
-    let callback = format!(
-        "{}?code=test-code&state={}",
-        pairs["redirect_uri"], pairs["state"]
-    );
-    let signed = if platform == "x" {
-        client().get(callback).send().await.unwrap();
-        get(server, "/v1/x/sign-in").await
-    } else {
-        post(
-            server,
-            "/v1/threads/complete",
-            json!({"callback_url":callback}),
-        )
-        .await
-    };
+    let signed = complete_oauth(server, platform).await.unwrap();
     assert_eq!(signed.body["status"], "signed_in", "{}", signed.raw);
     if platform == "threads" {
         assert_eq!(
@@ -656,21 +638,34 @@ async fn absent_grants_and_bad_session_or_origin_never_reach_any_social_platform
     }
 }
 
-async fn complete_threads(server: &TestServer) -> Result<Answer, Box<dyn std::error::Error>> {
-    let start = post_empty(server, "/v1/threads/sign-in").await;
-    assert_eq!(start.status, 202);
+async fn complete_oauth(
+    server: &TestServer,
+    platform: &str,
+) -> Result<Answer, Box<dyn std::error::Error>> {
+    let start = post_empty(server, &format!("/v1/{platform}/sign-in")).await;
+    assert_eq!(start.status, 202, "{}", start.raw);
     let url = reqwest::Url::parse(
         start.body["authorization_url"]
             .as_str()
             .ok_or("missing authorization URL")?,
     )?;
-    let state = url
-        .query_pairs()
-        .find(|(k, _)| k == "state")
-        .ok_or("missing state")?
-        .1
-        .into_owned();
-    Ok(post(server, "/v1/threads/complete", json!({"callback_url":format!("https://redirect.invalid/callback?code=test&state={state}")})).await)
+    let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+    let callback = format!(
+        "{}?code=test-code&state={}",
+        pairs.get("redirect_uri").ok_or("missing redirect")?,
+        pairs.get("state").ok_or("missing state")?
+    );
+    if platform == "x" {
+        client().get(callback).send().await?;
+        Ok(get(server, "/v1/x/sign-in").await)
+    } else {
+        Ok(post(
+            server,
+            "/v1/threads/complete",
+            json!({"callback_url":callback}),
+        )
+        .await)
+    }
 }
 
 #[tokio::test]
@@ -696,7 +691,7 @@ async fn threads_fresh_exchange_requires_actual_effective_posting_permission() {
         let fake = fake::Fake::threads().await;
         fake.reply("/v1.0/debug_token", 200, debug);
         let (server, q, _, store) = setup(&fake, "threads", true).await;
-        let completed = complete_threads(&server).await.unwrap();
+        let completed = complete_oauth(&server, "threads").await.unwrap();
         assert_eq!(completed.code(), code, "{}", completed.raw);
         assert_eq!(
             fake.calls()
@@ -893,6 +888,273 @@ async fn saved_x_grant_without_tweet_write_cannot_publish() {
     );
     assert_eq!(connection.body["reason"], "posting_permission_missing");
     assert_eq!(connection.body["action"], "sign_in");
+}
+
+async fn assert_x_scope_case(
+    scope: Option<Value>,
+    refresh: bool,
+    expected: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use syncloom_core::{Channel, TokenStore};
+    let fake = fake::Fake::x().await;
+    let (server, q, _, store) = setup(&fake, "x", true).await;
+    if refresh {
+        login(&server, "x").await;
+    }
+    let account = q.account(Channel::X)?;
+    let prior = store.load(&account)?;
+    let mut issued = json!({"access_token":"scope-new-access","refresh_token":"scope-new-refresh","expires_in":7200,"token_type":"bearer"});
+    if let Some(value) = scope.clone() {
+        issued["scope"] = value;
+    }
+    fake.reply("/2/oauth2/token", 200, issued);
+    let response = if refresh {
+        post_empty(&server, "/v1/x/refresh").await
+    } else {
+        complete_oauth(&server, "x").await?
+    };
+    let connection = get(&server, "/v1/x/connection").await;
+    let saved = store.load(&account)?;
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let before_write = fake.calls().len();
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"],"accepted_cost_microusd":15000}),
+    )
+    .await;
+    let writes = fake.calls().len() - before_write;
+    let ready = expected == "posted";
+    let connection_status = if ready {
+        "signed_in"
+    } else if refresh {
+        "cannot_post"
+    } else {
+        "signed_out"
+    };
+    let publish_status = if ready {
+        "posted"
+    } else if refresh {
+        expected
+    } else {
+        "consent_required"
+    };
+    assert_eq!(
+        (
+            response.code(),
+            connection.body["status"].as_str(),
+            published.body["status"].as_str(),
+            writes
+        ),
+        (
+            if ready { "" } else { expected },
+            Some(connection_status),
+            Some(publish_status),
+            usize::from(ready)
+        ),
+        "scope={scope:?} refresh={refresh} response={} connection={} publish={}",
+        response.raw,
+        connection.raw,
+        published.raw
+    );
+    assert_eq!(response.status, if ready { 200 } else { 403 });
+    assert_eq!(connection.status, 200);
+    assert_eq!(
+        fake.calls()
+            .iter()
+            .filter(|call| call.path == "/2/oauth2/token")
+            .count(),
+        if refresh { 2 } else { 1 }
+    );
+    if ready || refresh {
+        let token = saved.ok_or("missing actual rotated credential")?;
+        let bundle: Value = serde_json::from_str(token.access_token.expose())?;
+        assert_eq!(bundle["access_token"], "scope-new-access");
+        assert_eq!(bundle["refresh_token"], "scope-new-refresh");
+        if expected == "posting_permission_unverified" {
+            assert!(token.scope.is_empty());
+            assert!(!token.scope_verified);
+            assert_eq!(connection.body["reason"], expected);
+            assert_eq!(connection.body["action"], "sign_in");
+        } else {
+            let expected_scope = scope
+                .as_ref()
+                .and_then(Value::as_str)
+                .or_else(|| prior.as_ref().map(|token| token.scope.as_str()))
+                .ok_or("missing known scope")?;
+            assert_eq!(token.scope, expected_scope);
+            assert!(token.scope_verified);
+        }
+    } else {
+        assert!(saved.is_none());
+    }
+    if ready {
+        assert_eq!(
+            fake.calls().last().ok_or("missing post")?.authorization,
+            "Bearer scope-new-access"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn x_scope_unknown_prior_is_refused_before_another_refresh()
+-> Result<(), Box<dyn std::error::Error>> {
+    use syncloom_core::{Channel, TokenStore};
+    let fake = fake::Fake::x().await;
+    let (server, q, _, store) = setup(&fake, "x", true).await;
+    login(&server, "x").await;
+    fake.reply("/2/oauth2/token", 200, json!({"access_token":"unknown-first","refresh_token":"unknown-refresh-first","expires_in":7200,"token_type":"bearer","scope":null}));
+    let first = post_empty(&server, "/v1/x/refresh").await;
+    assert_eq!(first.code(), "posting_permission_unverified");
+    fake.reply("/2/oauth2/token", 200, json!({"access_token":"unknown-second","refresh_token":"unknown-refresh-second","expires_in":7200,"token_type":"bearer"}));
+    let second = post_empty(&server, "/v1/x/refresh").await;
+    let connection = get(&server, "/v1/x/connection").await;
+    let piece = draft(&server, "x", false).await;
+    approve_piece(&server, &piece).await;
+    let writes_before = fake.calls().len();
+    let published = post(
+        &server,
+        &publish_path(&piece),
+        json!({"expected_revision":piece["revision"],"accepted_cost_microusd":15000}),
+    )
+    .await;
+    assert_eq!(fake.calls().len(), writes_before);
+    assert_eq!(
+        (
+            second.code(),
+            connection.body["reason"].as_str(),
+            published.body["status"].as_str()
+        ),
+        (
+            "posting_permission_unverified",
+            Some("posting_permission_unverified"),
+            Some("posting_permission_unverified")
+        )
+    );
+    assert_eq!(second.status, 403);
+    let token = store
+        .load(&q.account(Channel::X)?)?
+        .ok_or("missing rotated token")?;
+    assert!(token.scope.is_empty());
+    assert!(!token.scope_verified);
+    let bundle: Value = serde_json::from_str(token.access_token.expose())?;
+    assert_eq!(bundle["access_token"], "unknown-first");
+    assert_eq!(bundle["refresh_token"], "unknown-refresh-first");
+    assert_eq!(
+        fake.calls()
+            .iter()
+            .filter(|call| call.path == "/2/oauth2/token")
+            .count(),
+        2
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn x_scope_refresh_absent() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(None, true, "posted").await
+}
+
+#[tokio::test]
+async fn x_scope_fresh_absent() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(None, false, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_fresh_null() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!(null)), false, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_fresh_empty() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!("")), false, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_fresh_malformed() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!(["tweet.write", "users.read"])),
+        false,
+        "posting_permission_unverified",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_null() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!(null)), true, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_empty() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!("")), true, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_malformed() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!(["tweet.write", "users.read"])),
+        true,
+        "posting_permission_unverified",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_number() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!(42)), true, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_object() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!({"scope":"tweet.write users.read"})),
+        true,
+        "posting_permission_unverified",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_whitespace() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!("   ")), true, "posting_permission_unverified").await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_control_separator() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!("tweet.write\nusers.read")),
+        true,
+        "posting_permission_unverified",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_comma_separator() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!("tweet.write,users.read")),
+        true,
+        "posting_permission_unverified",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_present_full() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(Some(json!("tweet.write users.read")), true, "posted").await
+}
+
+#[tokio::test]
+async fn x_scope_refresh_present_reduced() -> Result<(), Box<dyn std::error::Error>> {
+    assert_x_scope_case(
+        Some(json!("tweet.read")),
+        true,
+        "posting_permission_missing",
+    )
+    .await
 }
 
 #[tokio::test]
