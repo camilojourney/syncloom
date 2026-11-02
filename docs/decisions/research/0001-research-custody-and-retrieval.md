@@ -6,7 +6,7 @@
 **OpenSpec changes:** [preserve-research-links](../../../openspec/changes/preserve-research-links/)
 **Agreed:** yes - the assigned worker chooses this reversible archive implementation within the task's ordinary engineering authority; product choices and proposal review are not thereby approved
 **Recommended:** existing cards/index with original composition and decision/action links, not a second catalog
-**Built:** tracked in [change tasks](../../../openspec/changes/preserve-research-links/tasks.md); this is an archive/checker slice, not new platform integration code
+**Built:** tracked in [change tasks](../../../openspec/changes/preserve-research-links/tasks.md); this is an archive/linkage slice, not new platform integration code
 **Live-proven:** no platform action; local retrieval evaluation belongs to the linked change evidence
 
 Method: decide@1.3.1, Fleet source baa7c65c88fa04eaa2d2167e78b24ff56e575e68, skill SHA256 826eec40bdc6539dfb29df5d26af92f1ca735d0dfcfdda80407a66cc4f5fa515
@@ -21,27 +21,29 @@ Evaluation: [executed change evidence](../../../openspec/changes/preserve-resear
 
 Choose the existing repository research retrieval path, unchanged status quo, or a separate catalog/search layer. The task requires exact reports, provider/question association, genuine decision history and actual action evidence. It does not authorize a new campaign or independent UI design.
 
-Class: small reversible engineering choice, not a new privacy/security/product policy. Revert the local change to undo navigation/checker behavior; original sources remain untouched. Residual harm is misleading links/status, not a granted account action. Budget is the existing task, no model/provider spend.
+Class: small reversible engineering choice, not a new privacy/security/product policy. Revert the local change to undo navigation; original sources remain untouched. Residual harm is misleading links/status, not a granted account action. Budget is the existing task, no model/provider spend.
 
 Q1-Q5 dispositions and criteria were retained in the [frozen brief](../sources/research-custody-freeze.md), SHA256 `4bc08077fd70e57cc319ca426b55cfad5a04c9a7d4d30cbfe285faaeed47deb3`. The brief was saved before implementation/option assessment, after existing evidence inventory. It is **not** a reconstructed pre-research cutoff for historical studies. Its original future-time typo and contemporaneous correction are both preserved; tool-call order, not that typo, establishes ordering. Consequential prospective-capture fields are N/A for this reversible choice.
 
-Human preference: the captain wants rapid direct retrieval and decisions acted on. No retrieval-speed improvement is measured here. Relevant gaps: missing media-hosting original result and future Phrona mapping; source reachability, provider truth and cross-family agreement are not established by saved files.
+Human preference: the captain wants rapid direct retrieval and decisions acted on. No retrieval-speed improvement is measured here. Relevant gaps: media-hosting request has no report found after the scoped owner search; future Phrona mapping is pending; source reachability, provider truth and cross-family agreement are not established by saved files.
 
 ### 2. Frozen acceptance
 
-The frozen brief owns C1-C5: complete local navigation, exact bytes/honest composition, truthful method/implementation status, no duplicate service/provider action, and existing-checker coverage for domain-qualified decisions. No criterion or prediction was amended after evaluation. Baseline: checker passed while Q4/failed Q8 were omitted and Q1 was still listed pending.
+The frozen brief owns original C1-C5: complete local navigation, exact bytes/honest composition, truthful method/implementation status, no duplicate service/provider action, and existing-checker coverage for domain-qualified decisions. Baseline: checker passed while Q4/failed Q8 were omitted and Q1 was still listed pending.
+
+Dated amendment, 2026-11-02, before final evaluation: canonical-parent inspection revealed that the legacy checker/tests are invoz.v2-owned byte-identical adoptions. Firstmate explicitly rejected a local fork and required the existing Code structural owner. Preserve original C5/freeze and the failed experiment; amended C5 is exact legacy checker identity plus its existing file-hash rule, with current Code Verify checking nested method structure/citations. This changes the proposed checker mechanism, not report custody, product permission or the frozen outcome date/prediction. Reassessment: the existing cards/index option still meets C1-C4 and amended C5; status quo still fails C1; a separate service/fork fails C4; rewriting reports fails C2. No option receives a favorable retroactive score for a failed checker experiment.
 
 ### 3. Unknown-resolution plan
 
-Use original retained result receipts, hash-equal full files, existing Git implementation history and local checker/link traversal. External research N/A: local evidence settles archive placement. Missing custody/mapping goes to the owner; no reconstruction, re-Send or provider UI operation. Product unknowns need separate decisions and, where consequential, a permitted different-family challenge through firstmate.
+Use original retained result receipts, hash-equal full files, existing Git implementation history and local checker/link traversal. External research N/A: local evidence settles archive placement. Missing mapping goes to the owner; the hosting locator request closed after the owner's scoped no-match search. No reconstruction, re-Send or provider UI operation. Product unknowns need separate decisions and, where consequential, a permitted different-family challenge through firstmate.
 
 ## Decision
 
 ### 7. Choice
 
-Use the [existing index](../../research/INDEX.md) and per-study cards. Preserve omitted historical reports in their established date/topic convention; retain failed/unavailable runs explicitly. Add source URLs and composition outside immutable report bytes. Keep Phrona catalog IDs pending until the owner supplies the real mapping. Extend only the existing documentary checker for domain-qualified decision links and numbering.
+Use the [existing index](../../research/INDEX.md) and per-study cards. Preserve omitted historical reports in their established date/topic convention; retain failed/unavailable runs explicitly. Add source URLs and composition outside immutable report bytes. Keep Phrona catalog IDs pending until the owner supplies the real mapping. Retain adopted documentary checker bytes. Its flat-only structural scope remains explicit; current Code Verify owns genuinely new method-record structure. A per-file custody row is a hash check, not nested legacy-format acceptance.
 
-The broader intent remains open beyond this slice: Q4 video, Q6 platform reads and Q8 scheduling need the prospective packets and authority/challenge resolution described below. Acceptance here does not count as adoption of their substantive recommendations.
+The broader intent remains open beyond this slice: Q4 video and Q6 platform reads need the prospective packets and authority/challenge resolution described below. Q8 scheduling remains deferred under the existing accepted vision; no new scheduler decision is authorized. Acceptance here does not count as adoption of their substantive recommendations.
 
 ## Rationale
 
@@ -49,7 +51,7 @@ The broader intent remains open beyond this slice: Q4 video, Q6 platform reads a
 
 | Option | Frozen criteria assessment | Disposition |
 |---|---|---|
-| Existing cards/index plus missing original custody and linkage | C1-C4 fit the established owner; C5 requires the bounded checker fix and regression evidence | Chosen; evaluate implemented retrieval through existing entry points |
+| Existing cards/index plus missing original custody and linkage | C1-C4 fit the established owner; amended C5 uses exact adopted bytes plus current Code's structural check | Chosen; evaluate implemented retrieval through existing entry points |
 | Status quo | Fails C1: Q4 and failed Q8 absent, Q1 simultaneously pending/imported; incomplete composition not directly browsable | Rejected |
 | Separate catalog/search service or wrapper | Fails C4 and duplicates Phrona's catalog/this index; no demonstrated blocker requires it | Rejected |
 | Rewrite originals as standardized summaries | Fails C2, destroys attribution and incomplete evidence | Rejected |
@@ -58,15 +60,15 @@ Contradictions: Q1/Q5/Q6 operator summaries claim two reports despite single-pro
 
 ### 5. Independent challenge
 
-N/A for this local reversible archive placement: no new account, money, privacy, security or hard-reverse policy. No reviewer is impersonated. This does not waive challenge for consequential product choices; firstmate has the prospective Q4/Q6/Q8 packets with frozen criteria and same-evidence requirements. No challenge is claimed received here.
+N/A for this local reversible archive placement: no new account, money, privacy, security or hard-reverse policy. No reviewer is impersonated. This does not waive challenge for consequential product choices; firstmate has the prospective Q4/Q6 packets with frozen criteria and same-evidence requirements. The scheduling packet is not authorization to reopen the existing deferral. No challenge is claimed received here.
 
 ### 6. Bounded experiment
 
-Protocol in the frozen brief: use the existing checker/CLI and a malformed domain-record/link/hash regression set, repair once, no remote/model action. Baseline was a passing legacy tree. New domain tests first failed for the intended missing owner support; after the bounded owner fix all 31 selected tests passed. Full retrieval/provenance and final Verify receipts are recorded in [evidence](../../../openspec/changes/preserve-research-links/evidence.md), including failed attempts. No experiment settles provider legality or live platform eligibility.
+Protocol in the frozen brief: use the existing checker/CLI and a malformed domain-record/link/hash regression set, repair once, no remote/model action. Baseline was a passing legacy tree. A local domain-checker candidate first failed five of 31 tests, then passed, but was rejected on shared ownership grounds and restored to exact adopted bytes. That green candidate is not delivered coverage. The restored legacy checker initially rejected the unlisted nested file; the existing hash-table rule and current Code method checks are evaluated separately. Full retrieval/provenance and final Verify receipts are recorded in [evidence](../../../openspec/changes/preserve-research-links/evidence.md), including failed attempts. No experiment settles provider legality or live platform eligibility.
 
 ## Scope and boundaries
 
-This decision changes report custody/navigation and the existing record checker only. Historical product rationale stays historical. No platform registration, public host, paid read, schedule trigger, real post, retirement reversal, new UI stack/palette or third-party AI-use policy is chosen.
+This decision changes report custody/navigation only; adopted checker code/tests are unchanged. Historical product rationale stays historical. No platform registration, public host, paid read, schedule trigger, real post, retirement reversal, new UI stack/palette or third-party AI-use policy is chosen.
 
 ## Identities
 
@@ -84,6 +86,7 @@ Code 5.4.2; security/data references govern immutable storage and safe file boun
 | C4 | Credentials/OAuth code exists, but it is not scheduled dispatch. | verified | [credentials](../../../crates/syncloom-core/src/credentials.rs), [Q8 disposition](../../research/2026-10-30-q8-local-first-auth-and-scheduling/README.md#finding-disposition), [vision 7.1](../../vision.md#7-out-of-scope-for-now), 2026-11-02 source/history inspection, not new runtime execution. |
 | C5 | The retained hosting request has no original result in the current bound home. | verified | [hosting retrieval limit](../../research/2026-10-31-meta-media-hosting/README.md#how-collected), observed read-only result exit 1 on 2026-11-02; does not prove absence from older installations. |
 | C6 | A Phrona catalog mapping for these entries is available. | unverified | none: owner/Main1308 has not delivered IDs; preserve pending fields until the original mapping arrives. |
+| C7 | The owner found no matching hosting study in its scoped modern/legacy search. | reported | [hosting owner follow-up](../../research/2026-10-31-meta-media-hosting/README.md#how-collected), Main1323, 2026-11-02; no submission receipt found locally, no claim about all possible stores. |
 
 Original study evidence and substantive adoption boundaries:
 
@@ -95,8 +98,8 @@ Original study evidence and substantive adoption boundaries:
 - [Q6](../../research/2026-10-30-q6-reading-platforms-for-research/README.md): no platform-reader decision/implementation. Reported legal/AI-use/retention interpretations do not authorize intake; firstmate holds a prospective explicit-reference versus official-reader packet.
 - [Q7](../../research/2026-10-30-q7-render-images-carousels-rust/README.md): historical [0003](../0003-visual-renderer.md), local renderer delivered, no Typst/distribution proof. Content-asset research is not application frontend stack/palette evidence; syncloom-text-ui owns that work.
 - [Original Q8](../../research/2026-10-30-q8-auth-original/README.md): unsent, incomplete, no findings; never merged into r2's identity.
-- [Q8 r2](../../research/2026-10-30-q8-local-first-auth-and-scheduling/README.md): historical [0002](../0002-linkedin-integration-decisions.md), credentials delivered, scheduler deferred by vision 7.1. Prospective packet requires the owner to reopen that boundary before a scheduling design/experiment.
-- [Media hosting](../../research/2026-10-31-meta-media-hosting/README.md): request retained, actual members/reports/links unknown. Owner locator requested; no new hosting choice.
+- [Q8 r2](../../research/2026-10-30-q8-local-first-auth-and-scheduling/README.md): historical [0002](../0002-linkedin-integration-decisions.md), credentials delivered, scheduler deferred by vision 7.1. The original accepted deferral remains authoritative. Firstmate confirmed no new scheduler decision/implementation is authorized by generic research adoption; no reopening or repeated owner question is implied.
+- [Media hosting](../../research/2026-10-31-meta-media-hosting/README.md): request only, no report found after scoped owner search, no submission receipt in inventoried home records. Locator request closed; no new hosting choice or inferred provider participation.
 
 The two repository scout studies are non-Phrona and remain with [historical 0001](../0001-syncloom-v2-rebuild-decisions.md). Prepared Q-UI/Q-ACCESS and other home doubts are not evidence of runs. No historical record is marked as having used this method.
 

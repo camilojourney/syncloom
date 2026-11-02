@@ -6,11 +6,11 @@ usage: check-research-records.py [--root DIR]
 Research (docs/research/): every study folder has a row in INDEX.md and every row has a folder; the study
 card (README.md) has its sections and its Status matches the index row; every file in a study is listed in
 the card with its sha256 (a 64-hex fingerprint in a file name must equal it).
-Decisions (docs/decisions/**/NNNN-*.md, from the 0000-template.md form): a Status of Draft, Proposed, Accepted,
+Decisions (docs/decisions/NNNN-*.md, from the 0000-template.md form): a Status of Draft, Proposed, Accepted,
 Superseded or Deprecated; the header fields and sections of the template; "Evidence and gaps" links an existing
 file under docs/research/ or docs/decisions/sources/; "OpenSpec changes" links existing change directories
 whose design.md names the decision (or says "none - <reason>"); a Superseded decision links its successor;
-a decision named by an index row cites that study; numbers run without gaps per domain; source files are listed with
+a decision named by an index row cites that study; numbers run without gaps; source files are listed with
 their sha256. Relative links in these records resolve.
 Exit 0 when no problem is found, 1 otherwise. Standard library only.
 """
@@ -159,20 +159,18 @@ def evidence_roots(root):
     return [(root / "docs" / "research").resolve(), (root / "docs" / "decisions" / "sources").resolve()]
 
 
-def check_evidence(root, path, body):
-    name = path.relative_to(root / "docs" / "decisions").as_posix()
-    cited = [t for t, _ in link_targets(body, path.parent) if t.exists()]
+def check_evidence(root, name, body):
+    cited = [t for t, _ in link_targets(body, root / "docs" / "decisions") if t.exists()]
     if any(base in t.parents for t in cited for base in evidence_roots(root)):
         return []
     return [f"{name}: Evidence and gaps cites no file under docs/research/ or docs/decisions/sources/"]
 
 
-def check_changes(root, path, value):
+def check_changes(root, name, value):
     """The OpenSpec changes field links existing change directories whose design.md names this decision."""
-    name = path.relative_to(root / "docs" / "decisions").as_posix()
     if NONE_WITH_REASON.match(value):
         return []
-    targets = link_targets(value, path.parent)
+    targets = link_targets(value, root / "docs" / "decisions")
     if not targets:
         return [f"{name}: OpenSpec changes needs a link to a change or 'none - <reason>'"]
     problems = []
@@ -196,14 +194,14 @@ def check_decision(root, path):
     text = path.read_text()
     body = sections(text)
     fields = header_fields(text)
-    name = path.relative_to(root / "docs" / "decisions").as_posix()
+    name = path.name
     problems = [f"{name}: missing field '{f}'" for f in DECISION_FIELDS if not fields.get(f)]
     problems += [f"{name}: missing section '{s}'" for s in DECISION_SECTIONS if not body.get(s)]
     if fields.get("Status") not in DECISION_STATUSES:
         problems.append(f"{name}: Status must be one of {', '.join(DECISION_STATUSES)}")
     problems += check_succession(name, fields)
-    problems += check_evidence(root, path, body.get("Evidence and gaps", ""))
-    problems += check_changes(root, path, fields.get("OpenSpec changes", "none - missing"))
+    problems += check_evidence(root, name, body.get("Evidence and gaps", ""))
+    problems += check_changes(root, name, fields.get("OpenSpec changes", "none - missing"))
     return problems + check_links(root, path, text)
 
 
@@ -211,21 +209,18 @@ def check_decisions(root):
     directory = root / "docs" / "decisions"
     if not directory.is_dir():
         return ["docs/decisions/: missing"]
-    numbered = sorted(p for p in directory.rglob("*.md") if p.is_file() and DECISION_FILE.match(p.name) and not p.name.startswith("0000-"))
-    by_domain = {}
-    for path in numbered:
-        by_domain.setdefault(path.parent, []).append(int(DECISION_FILE.match(path.name).group(1)))
+    numbered = sorted(p for p in directory.iterdir() if DECISION_FILE.match(p.name) and not p.name.startswith("0000-"))
+    numbers = [int(DECISION_FILE.match(p.name).group(1)) for p in numbered]
     problems = []
-    for domain, numbers in by_domain.items():
-        if numbers != list(range(1, len(numbers) + 1)):
-            problems.append(f"{domain.relative_to(root).as_posix()}/: decision numbers must run 0001, 0002, ... without gaps; found {numbers}")
+    if numbers != list(range(1, len(numbers) + 1)):
+        problems.append(f"docs/decisions/: decision numbers must run 0001, 0002, ... without gaps; found {numbers}")
     for path in numbered:
         problems += check_decision(root, path)
     readme = directory / "README.md"
     if not readme.is_file():
         return problems + ["docs/decisions/README.md: missing"]
     text = readme.read_text()
-    is_record = lambda rel: rel == "README.md" or bool(DECISION_FILE.match(pathlib.PurePath(rel).name))
+    is_record = lambda rel: rel == "README.md" or bool(DECISION_FILE.match(rel))
     return problems + check_links(root, readme, text) + check_files_table("docs/decisions", directory, text, is_record)
 
 

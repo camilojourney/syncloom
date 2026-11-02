@@ -44,7 +44,7 @@ Challenger: `failed`, `custody-uncertain`. Missing challengers are not agreement
 
 ### Finding disposition
 
-Historical [0002](../../decisions/0002-linkedin-integration-decisions.md), Proposed, no `/decide` marker. Built at `9e83462`: [Keychain token store](../../../crates/syncloom-core/src/credentials.rs), [OAuth](../../../crates/syncloom-core/src/oauth.rs), [fake HTTP sign-in](../../../crates/syncloom-server/tests/linkedin_api.rs). Scheduling is not built. Vision 7.1 defers the scheduler; neither this report nor credentials code revives it. A scheduling packet asks the owner to preserve or change that boundary.
+Historical [0002](../../decisions/0002-linkedin-integration-decisions.md), Proposed, no `/decide` marker. Built at `9e83462`: [Keychain token store](../../../crates/syncloom-core/src/credentials.rs), [OAuth](../../../crates/syncloom-core/src/oauth.rs), [fake HTTP sign-in](../../../crates/syncloom-server/tests/linkedin_api.rs). Scheduling is not built. Vision 7.1 defers the scheduler; neither this report nor credentials code revives it. Firstmate confirmed the accepted deferral remains authoritative: no new scheduler decision, implementation or repeated owner question is authorized by generic research adoption.
 
 See [research/0001](../../decisions/research/0001-research-custody-and-retrieval.md) for this new archive choice, not retrospective acceptance of product recommendations.
 
