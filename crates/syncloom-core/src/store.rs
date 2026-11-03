@@ -19,6 +19,7 @@ use std::{
 const PIECES: &str = "pieces";
 const OUTBOX: &str = "outbox";
 const PROVENANCE: &str = "provenance";
+const CAPTURE: &str = "capture";
 const EVENTS: &str = "events.jsonl";
 const LOCK: &str = ".lock";
 
@@ -36,7 +37,7 @@ impl Store {
     /// Open or create the store directories.
     pub fn open(root: impl Into<PathBuf>) -> io::Result<Store> {
         let root = root.into();
-        for sub in [PIECES, OUTBOX, PROVENANCE, "assets", "exports"] {
+        for sub in [PIECES, OUTBOX, PROVENANCE, CAPTURE, "assets", "exports"] {
             fs::create_dir_all(root.join(sub))?;
             if fs::symlink_metadata(root.join(sub))?
                 .file_type()
@@ -124,6 +125,28 @@ impl Lock<'_> {
     }
     pub fn save_intent(&self, key: &str, intent: &DispatchIntent) -> io::Result<()> {
         write_json(&self.intent_path(key), intent)
+    }
+    pub(crate) fn load_capture(
+        &self,
+        revision: &str,
+    ) -> io::Result<Option<crate::capture::CaptureRecord>> {
+        read_json(&self.capture_path(revision)?)
+    }
+    pub(crate) fn save_capture(&self, record: &crate::capture::CaptureRecord) -> io::Result<()> {
+        write_json(&self.capture_path(&record.revision)?, record)
+    }
+    pub(crate) fn remove_capture(&self, revision: &str) -> io::Result<()> {
+        fs::remove_file(self.capture_path(revision)?)
+    }
+    fn capture_path(&self, revision: &str) -> io::Result<PathBuf> {
+        if !crate::capture::valid_revision(revision) {
+            return Err(io::Error::other("invalid capture revision"));
+        }
+        Ok(self
+            .store
+            .root
+            .join(CAPTURE)
+            .join(format!("{revision}.json")))
     }
     /// Content-addressed assets share the store lock and atomic-write policy.
     pub fn save_asset(&self, bytes: &[u8]) -> io::Result<String> {

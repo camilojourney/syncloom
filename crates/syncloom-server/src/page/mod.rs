@@ -1,5 +1,6 @@
 //! Script-free browser adapters. Studio owns content, revisions and dispatch policy.
 mod actions;
+pub(crate) mod capture;
 mod consent;
 mod counts;
 mod editor;
@@ -55,7 +56,7 @@ fn error_message(failure: Failure) -> &'static str {
             "Add a little more to your thought: at least 8 characters that aren't spaces."
         }
         Failure::Studio(StudioError::RevisionConflict | StudioError::AssetConflict) => {
-            "This piece changed since you opened it. Reopen it to review the latest version."
+            "This version no longer matches. Check saved pieces before trying again; a capture may already have created drafts."
         }
         Failure::Studio(StudioError::ApprovalRequired) => {
             "Review and approve this saved version before publishing."

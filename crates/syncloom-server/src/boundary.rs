@@ -92,7 +92,11 @@ impl Boundary {
 }
 
 pub(crate) fn is_page_path(path: &str) -> bool {
-    path == "/" || path.starts_with("/review/") || path.starts_with("/actions/")
+    path == "/"
+        || path == "/capture"
+        || path.starts_with("/capture/")
+        || path.starts_with("/review/")
+        || path.starts_with("/actions/")
 }
 
 pub(crate) async fn middleware(

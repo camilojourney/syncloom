@@ -142,6 +142,13 @@ button:disabled { background: var(--subtle); color: var(--secondary); border-col
 button.secondary, .button.secondary { background: var(--surface); border-color: var(--control-border); color: var(--ink); }
 button.secondary:hover, .button.secondary:hover { background: var(--subtle); border-color: var(--control-border); }
 .composer button { width: 100%; }
+.capture-note { margin-top: 1.25rem; }
+.capture-choice { border-top: 1px solid var(--border); padding: 0.75rem 0; }
+.capture-choice .hint { margin: 0.25rem 0 0; }
+.capture-destinations { list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.capture-destinations li + li { margin-top: 1.5rem; }
+.capture-destinations .hint { margin: 0.25rem 0 0; }
+.capture-layout button { width: 100%; }
 .composer-note { margin: 1.5rem 0 0; padding-top: 1.25rem; border-top: 1px solid var(--border); font-size: 0.875rem; color: var(--muted); }
 .section-heading, .card-meta, .receipt-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem; justify-content: space-between; }
 .section-heading { align-items: center; }
@@ -177,6 +184,7 @@ button.secondary:hover, .button.secondary:hover { background: var(--subtle); bor
 .review-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .channel-name { color: var(--secondary); margin: 0; }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 2.5rem; align-items: start; }
+.capture-layout { grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); }
 .review-content, .review-controls { min-width: 0; }
 .preview-prose, .prose, .draft-text { font-size: 1rem; line-height: var(--prose-leading); letter-spacing: var(--prose-tracking); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 65ch; }
 .preview-prose { margin: 2rem 0; min-height: 6rem; }

@@ -12,6 +12,14 @@ Start `syncloom-server` as described in the [README](../README.md), then open `h
 
 The browser's native navigation/loading indicator covers form submissions. Empty views explain where to start; errors show the fixed core/transport code and request id with a recovery link. There is no client-side script runtime. Every action is keyboard accessible and the layout works at narrow widths. The mineral-botanical palette follows the browser's light/dark preference. Prose stays 16px with slightly increased dark leading. No theme cookie or script is required. The same screens stack at narrow widths with visible keyboard focus and readable disabled actions. [Design, tokens and source provenance](design/text-studio.md).
 
+## Capture before drafting
+
+Use **Suggest destinations first** on the same workspace thought form when you want help choosing a format. The Draft for checkboxes apply to immediate drafting; the suggestion path asks you to select destinations on its next page. Supply only text you own, not third-party excerpts. It suggests formats and light edits from text length and the presence of links, without a model call, connection probe, URL retrieval or saved piece. Heuristic weights in the JSON response are inherited hints, not measured success probabilities.
+
+Choose at least one suggestion, then **Preview selection**. Read the complete source and the selected destinations. This is not yet generated copy, a saved draft, or an approval. **Change destinations** preserves the source; **Start over in workspace** begins again. **Confirm and draft** sends the selected source to the existing drafting provider and creates pending-review pieces only. Review each generated piece through the ordinary review screen. Capture cannot approve, grant, schedule or publish.
+
+`POST /v1/capture/suggest` takes exactly `text`; `/v1/capture/preview` takes `text` and `channels`; `/v1/capture/confirm` adds `expected_revision` from preview. All use the existing session/Host/Origin guards. Unknown fields, duplicate/empty selections, unsupported channels and changed revisions are refused. A completed duplicate returns the same group and piece ids without calling the provider again, including after restart. An interrupted durable claim returns `revision_conflict` instead of drafting blindly; inspect Saved pieces before starting another capture. A documented provider failure leaves no pieces and releases the claim for retry. No automatic claim repair or background recovery runs.
+
 ## HTTP session handshake
 
 The standalone CLI calls Studio directly. HTTP API clients must fetch `GET /v1/session`, read `{"token":"..."}`, and send the token once as `X-Syncloom-Token` on state-changing calls. Forms carry the same token once in their `csrf` field. The token is unpredictable, memory-only and changes with every server start; it is never a URL parameter, cookie or logged field. Do not persist it in scripts or source control.

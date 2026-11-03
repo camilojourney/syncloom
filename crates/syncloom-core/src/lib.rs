@@ -8,6 +8,7 @@
 //! [`provider::claude`], [`linkedin`], [`mastodon`], [`meta`] and the [`social`] adapters.
 mod bluesky;
 mod bluesky_transport;
+pub mod capture;
 pub mod channel;
 pub mod clock;
 pub mod config;
@@ -40,6 +41,9 @@ pub use visual::{
     AssetHashes, AssetKind, Assets, RenderRequest, RendererConfig, VisualContent, renderer_config,
 };
 
+pub use capture::{
+    CaptureConfirmRequest, CaptureConfirmResponse, Preview, Suggestion, preview, suggest,
+};
 pub use channel::{Bounds, Channel, Fit, Verdict, fit};
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use config::{
