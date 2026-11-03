@@ -99,6 +99,11 @@ Capture pages SHALL present suggestion, preview and confirm as separate steps wi
 - **AND** confirm redirects to a result linking each new review page
 - **AND** the same home thought form offers both immediate drafting and Suggest destinations first
 
+#### Scenario: Narrow return navigation
+- **WHEN** a capture page is shown at 390px in either theme, including long source text
+- **THEN** the shared header's Workspace link remains visible, keyboard reachable and returns to `/`
+- **AND** the brand, navigation and local-status text are not clipped and the page has no horizontal overflow
+
 #### Scenario: Empty selection
 - **WHEN** preview is submitted with no selected channel
 - **THEN** the page says at least one suggestion must be selected and no draft exists

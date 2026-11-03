@@ -22,3 +22,9 @@
 - [x] 4.1 Run strict OpenSpec validation and the change-shape checker. Verify both exit 0.
 - [x] 4.2 Critique and audit the capture pages with the pinned Impeccable guidance, fix material findings, and save light/dark captures at 1440 and 390. Verify the four images have recorded hashes, dimensions and no horizontal overflow.
 - [x] 4.3 Run the code skill verify script against the pre-change base with the project test command. Verify the receipt and each check result are recorded, including skips.
+
+## 5. Prelanding narrow-header correction
+
+- [x] 5.1 Reproduce Main1436's missing Workspace link on the owned server at 390px and observe the rendered assertion and stylesheet regression fail before changing CSS. Restore the existing shared-header link without duplicating navigation. Verify wide/narrow, both themes, keyboard return and no clipping, including long source.
+
+Final handoff gate after committing the correction: refresh all four exact-head captures, image manifest, original-base Code Verify and clean FF receipt. Record individual check results and omissions, and provide the two corrected narrow images for firstmate to forward to Main before landing. This delivery gate does not authorize the worker to merge.

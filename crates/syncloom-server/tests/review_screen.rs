@@ -65,6 +65,31 @@ async fn empty_studio_is_accessible_and_has_no_script_runtime() {
 }
 
 #[tokio::test]
+async fn workspace_return_route_is_present_and_not_hidden_by_its_styles() {
+    let server = start(Scripted::new(scripted::text("A draft."))).await;
+    let page = get(&server, "/").await;
+    assert_eq!(page.status, 200);
+    assert!(
+        page.raw
+            .contains(r#"<a class="workspace-link" href="/">Workspace</a>"#)
+    );
+    let css = get(&server, "/studio.css").await;
+    assert_eq!(css.status, 200);
+    // This guards the hiding declaration; rendered viewport/keyboard proof is separate.
+    for block in css.raw.split('}') {
+        if let Some((selector, declarations)) = block.rsplit_once('{')
+            && selector.trim() == ".workspace-link"
+        {
+            let compact: String = declarations.split_whitespace().collect();
+            assert!(
+                !compact.contains("display:none"),
+                "Workspace must remain visible at narrow widths: {block}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn origin_guard_precedes_every_route_and_never_invokes_the_provider() {
     let provider = Scripted::new(scripted::text("A draft."));
     let server = start(provider.clone()).await;
