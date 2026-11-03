@@ -1,6 +1,6 @@
 # syncloom.v2
 
-From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought-to-content studio: one written thought becomes platform drafts the founder reviews and approves before an explicit publish. The old Python app lives in the separate `syncloom` repository and is not part of this one. What Syncloom is and is not: [docs/vision.md](docs/vision.md). What moved from the old app and what did not: [docs/migration.md](docs/migration.md).
+From-scratch Rust rebuild of Syncloom (formerly Holus), a solo founder's thought-to-content studio: one written thought becomes platform drafts the founder reviews and approves before an explicit publish. The old Python app lives in the separate `syncloom` repository and is not part of this one. What Syncloom is and is not: [docs/vision.md](docs/vision.md). What moved from the old app and what did not: [docs/migration.md](docs/migration.md). The current stage is the owner only, on macOS. What a later separate local installation would require, without authorizing a second user: [Second-user prerequisites](docs/second-user-prerequisites.md).
 
 ## Layout
 
