@@ -27,7 +27,7 @@ pub(crate) async fn index(
     Ok(document(
         "Workspace",
         &format!(
-            r#"<div class="page-heading"><h1>Your writing, in one place.</h1><p>Start with a thought. Make it yours before it goes anywhere.</p></div><div class="home-grid"><section class="card composer" aria-labelledby="compose"><h2 id="compose">What's on your mind?</h2><form method="post" action="/actions/thought">{}<label for="thought">Your thought</label><textarea id="thought" name="text" rows="7" required minlength="8" aria-describedby="thought-hint" placeholder="Something you noticed. Something worth sharing."></textarea><p class="hint" id="thought-hint">At least 8 characters, not counting spaces. Drafting may take up to a minute; nothing publishes here.</p><fieldset><legend>Draft for</legend><div class="channel-options">{}</div></fieldset><button type="submit">Draft a piece</button></form><p class="composer-note">Every draft stays in review.<br>Publishing is always a separate decision.</p></section><section class="saved-section" aria-labelledby="saved"><div class="section-heading"><h2 id="saved">Saved pieces</h2><span class="hint">On this laptop</span></div><p class="hint">Approved doesn't mean published. Open a piece to see whether it was sent.</p><div class="pieces">{saved}</div></section></div>"#,
+            r#"<div class="page-heading"><h1>Your writing, in one place.</h1><p>Start with a thought. Make it yours before it goes anywhere.</p></div><div class="home-grid"><section class="card composer" aria-labelledby="compose"><h2 id="compose">What's on your mind?</h2><form method="post" action="/actions/thought">{}<label for="thought">Your thought</label><textarea id="thought" name="text" rows="7" required minlength="8" aria-describedby="thought-hint" placeholder="Something you noticed. Something worth sharing."></textarea><p class="hint" id="thought-hint">At least 8 characters, not counting spaces. Drafting may take up to a minute; nothing publishes here.</p><fieldset><legend>Draft for</legend><div class="channel-options">{}</div></fieldset><button type="submit">Draft a piece</button><button class="secondary capture-note" type="submit" formaction="/capture/suggest">Suggest destinations first</button></form><p class="composer-note">Every draft stays in review.<br>Publishing is always a separate decision.</p></section><section class="saved-section" aria-labelledby="saved"><div class="section-heading"><h2 id="saved">Saved pieces</h2><span class="hint">On this laptop</span></div><p class="hint">Approved doesn't mean published. Open a piece to see whether it was sent.</p><div class="pieces">{saved}</div></section></div>"#,
             csrf(&state),
             channel_options()
         ),
@@ -68,7 +68,7 @@ fn piece_card(piece: &Piece) -> String {
 }
 
 /// Repeated channels are ordered values, not a map; scalars and unknown names stay strict.
-fn parse_thought(bytes: &[u8]) -> Result<ThoughtRequest, StudioError> {
+pub(super) fn parse_thought(bytes: &[u8]) -> Result<ThoughtRequest, StudioError> {
     let mut text = None;
     let mut csrf_seen = false;
     let mut channels = Vec::new();

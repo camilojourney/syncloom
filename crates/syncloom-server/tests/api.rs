@@ -239,6 +239,14 @@ async fn error_messages_are_fixed_and_never_echo_request_content() {
 const ROUTES: &[(&str, &str)] = &[
     ("GET", "/"),
     ("GET", "/studio.css"),
+    ("GET", "/capture"),
+    ("GET", "/capture/result/missing"),
+    ("POST", "/capture/suggest"),
+    ("POST", "/capture/preview"),
+    ("POST", "/capture/confirm"),
+    ("POST", "/v1/capture/suggest"),
+    ("POST", "/v1/capture/preview"),
+    ("POST", "/v1/capture/confirm"),
     ("GET", "/review/missing"),
     ("GET", "/review/missing/edit"),
     ("GET", "/review/missing/render"),
@@ -362,7 +370,9 @@ async fn registered_paths_refuse_unsupported_methods_and_get_paths_have_bodyless
         if method == "GET" {
             let read = get(&server, path).await;
             let expected = match path {
-                "/" | "/studio.css" | "/v1/health" | "/v1/session" | "/v1/pieces" => 200,
+                "/" | "/capture" | "/studio.css" | "/v1/health" | "/v1/session" | "/v1/pieces" => {
+                    200
+                }
                 _ if path.ends_with("/sign-in") || path.ends_with("/connection") => 503,
                 _ => 404,
             };

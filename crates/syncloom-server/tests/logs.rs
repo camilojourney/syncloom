@@ -86,6 +86,21 @@ async fn each_request_logs_one_content_free_line() {
     .await;
     assert_eq!(exported.body["status"], "exported");
     assert_eq!(get(&server, "/v1/mastodon/connection").await.status, 503);
+    assert_eq!(
+        post(&server, "/v1/capture/suggest", json!({"text":THOUGHT}))
+            .await
+            .status,
+        200
+    );
+    let capture_preview = post(
+        &server,
+        "/v1/capture/preview",
+        json!({"text":THOUGHT,"channels":["linkedin_text"]}),
+    )
+    .await;
+    assert_eq!(capture_preview.status, 200);
+    let capture_confirm = post(&server, "/v1/capture/confirm", json!({"text":THOUGHT,"channels":["linkedin_text"],"expected_revision":capture_preview.body["revision"]})).await;
+    assert_eq!(capture_confirm.status, 201);
     let failed = answer(
         client()
             .get(server.url("/missing"))
@@ -104,7 +119,7 @@ async fn each_request_logs_one_content_free_line() {
         .filter_map(|line| serde_json::from_str(line).ok())
         .filter(|line: &serde_json::Value| line["message"] == "request_finished")
         .collect();
-    assert_eq!(lines.len(), 12, "one line per request:\n{raw}");
+    assert_eq!(lines.len(), 15, "one line per request:\n{raw}");
     for line in &lines {
         for field in ["request_id", "route", "status", "total_ms", "outcome"] {
             assert!(line.get(field).is_some(), "missing {field} in {line}");
@@ -131,6 +146,9 @@ async fn each_request_logs_one_content_free_line() {
             "/v1/pieces/{piece_id}/publish",
             "/v1/pieces/{piece_id}/export",
             "/v1/mastodon/connection",
+            "/v1/capture/suggest",
+            "/v1/capture/preview",
+            "/v1/capture/confirm",
             "unmatched"
         ]
     );

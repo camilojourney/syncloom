@@ -146,11 +146,21 @@ pub struct Studio {
     meta: Option<Arc<crate::meta::Meta>>,
     social: Option<Arc<crate::social::SocialPlatforms>>,
     renderer: crate::visual::RendererConfig,
+    /// Serializes confirm-to-draft so one process cannot draft the same preview twice.
+    confirm_gate: tokio::sync::Mutex<()>,
 }
 
 /// Surrounding whitespace removed and inner whitespace runs collapsed to one space.
 pub fn normalize_thought(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+pub(crate) fn checked_thought(raw: &str) -> Result<String, StudioError> {
+    let thought = normalize_thought(raw);
+    if thought.chars().filter(|c| !c.is_whitespace()).count() < MIN_THOUGHT_CHARS {
+        return Err(StudioError::ThoughtTooShort);
+    }
+    Ok(thought)
 }
 
 /// Ids the studio generated: ASCII letters, digits, `-` and `_`, bounded length. Anything
@@ -185,7 +195,7 @@ fn review_action(request: &ReviewRequest) -> Result<ReviewAction, StudioError> {
     }
 }
 
-fn parse_channels(names: &[String]) -> Result<Vec<Channel>, StudioError> {
+pub(crate) fn parse_channels(names: &[String]) -> Result<Vec<Channel>, StudioError> {
     if names.is_empty() {
         return Err(StudioError::InvalidRequest);
     }
@@ -227,7 +237,135 @@ impl Studio {
             meta: None,
             social: None,
             renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
+            confirm_gate: tokio::sync::Mutex::new(()),
         }
+    }
+
+    /// Accept a matching preview into pending drafts. A repeat returns the same pieces.
+    pub async fn confirm_capture(
+        &self,
+        request: crate::capture::CaptureConfirmRequest,
+    ) -> Result<crate::CaptureConfirmResponse, StudioError> {
+        let _guard = self.confirm_gate.lock().await;
+        let preview = request.checked_preview()?;
+        if let Some(thought) = self.claim_capture(&preview)? {
+            return Ok(crate::CaptureConfirmResponse {
+                created: false,
+                thought,
+            });
+        }
+        let thought = match self
+            .create_thought(ThoughtRequest {
+                text: request.text,
+                channels: request.channels,
+            })
+            .await
+        {
+            Ok(thought) => thought,
+            Err(
+                error @ (StudioError::ProviderError
+                | StudioError::ProviderTimeout
+                | StudioError::ProviderNotConfigured),
+            ) => {
+                // These documented failures persist nothing. Other failures keep the claim.
+                self.store.lock()?.remove_capture(&preview.revision)?;
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
+        self.store
+            .lock()?
+            .save_capture(&crate::capture::CaptureRecord {
+                revision: preview.revision,
+                channels: preview
+                    .channels
+                    .iter()
+                    .map(|channel| channel.name().to_owned())
+                    .collect(),
+                group_id: thought.group_id.clone(),
+                piece_ids: thought
+                    .pieces
+                    .iter()
+                    .map(|piece| piece.piece_id.clone())
+                    .collect(),
+            })?;
+        Ok(crate::CaptureConfirmResponse {
+            created: true,
+            thought,
+        })
+    }
+
+    fn claim_capture(
+        &self,
+        preview: &crate::capture::Preview,
+    ) -> Result<Option<ThoughtResponse>, StudioError> {
+        let lock = self.store.lock()?;
+        if let Some(record) = lock.load_capture(&preview.revision)? {
+            if record.revision != preview.revision {
+                return Err(StudioError::RevisionConflict);
+            }
+            return self.capture_pieces(&lock, record).map(Some);
+        }
+        // Reserve before provider I/O. A crash or partial save cannot authorize a second draft.
+        lock.save_capture(&crate::capture::CaptureRecord {
+            revision: preview.revision.clone(),
+            channels: preview
+                .channels
+                .iter()
+                .map(|c| c.name().to_owned())
+                .collect(),
+            group_id: String::new(),
+            piece_ids: Vec::new(),
+        })?;
+        Ok(None)
+    }
+
+    pub fn capture_result(&self, revision: &str) -> Result<Option<ThoughtResponse>, StudioError> {
+        if !crate::capture::valid_revision(revision) {
+            return Ok(None);
+        }
+        let lock = self.store.lock()?;
+        let Some(record) = lock.load_capture(revision)? else {
+            return Ok(None);
+        };
+        if record.revision != revision {
+            return Err(StudioError::RevisionConflict);
+        }
+        self.capture_pieces(&lock, record).map(Some)
+    }
+
+    fn capture_pieces(
+        &self,
+        lock: &Lock<'_>,
+        record: crate::capture::CaptureRecord,
+    ) -> Result<ThoughtResponse, StudioError> {
+        if record.piece_ids.is_empty() {
+            return Err(StudioError::RevisionConflict);
+        }
+        let mut pieces = Vec::with_capacity(record.piece_ids.len());
+        for id in &record.piece_ids {
+            let piece = match self.load(lock, id) {
+                Ok(piece) => piece,
+                Err(StudioError::PieceNotFound) => return Err(StudioError::RevisionConflict),
+                Err(error) => return Err(error),
+            };
+            let preview = crate::capture::preview(&piece.source.raw_input, &record.channels)?;
+            if piece.group_id != record.group_id || preview.revision != record.revision {
+                return Err(StudioError::RevisionConflict);
+            }
+            pieces.push(piece);
+        }
+        let mut found: Vec<&str> = pieces.iter().map(|piece| piece.channel.name()).collect();
+        let mut expected: Vec<&str> = record.channels.iter().map(String::as_str).collect();
+        found.sort_unstable();
+        expected.sort_unstable();
+        if found != expected {
+            return Err(StudioError::RevisionConflict);
+        }
+        Ok(ThoughtResponse {
+            group_id: record.group_id,
+            pieces,
+        })
     }
 
     pub fn with_social(mut self, adapters: Arc<crate::social::SocialPlatforms>) -> Self {
@@ -531,10 +669,7 @@ impl Studio {
         request: ThoughtRequest,
     ) -> Result<ThoughtResponse, StudioError> {
         let channels = parse_channels(&request.channels)?;
-        let thought = normalize_thought(&request.text);
-        if thought.chars().filter(|c| !c.is_whitespace()).count() < MIN_THOUGHT_CHARS {
-            return Err(StudioError::ThoughtTooShort);
-        }
+        let thought = checked_thought(&request.text)?;
         // All drafts first, then all writes: a provider failure persists nothing.
         let mut drafts = Vec::with_capacity(channels.len());
         for channel in &channels {
