@@ -480,9 +480,17 @@ async fn produce(code: &str) -> Answer {
     }
 }
 
+// URL transport errors are exercised by url_intake's controlled real-server suite.
+const SOURCE_ERRORS: [(u16, &str); 4] = [
+    (503, "source_not_configured"),
+    (422, "source_not_allowed"),
+    (502, "source_fetch_failed"),
+    (504, "source_timeout"),
+];
+
 // studio-api: Error envelope, Fixtures equal the server
 #[tokio::test]
-async fn every_error_fixture_equals_the_servers_response() {
+async fn preexisting_error_fixtures_equal_the_servers_response() {
     for (status, code) in ERROR_TABLE {
         let actual = produce(code).await;
         assert_eq!(actual.status, status, "{code}: {}", actual.raw);
@@ -504,10 +512,11 @@ fn the_error_fixture_directory_holds_exactly_the_documented_codes_with_their_sta
         .collect();
     let expected: BTreeSet<String> = ERROR_TABLE
         .iter()
+        .chain(SOURCE_ERRORS.iter())
         .map(|(_, code)| format!("{code}.json"))
         .collect();
     assert_eq!(files, expected);
-    for (status, code) in ERROR_TABLE {
+    for (status, code) in ERROR_TABLE.into_iter().chain(SOURCE_ERRORS) {
         let file = fixture(&format!("errors/{code}.json"));
         assert_eq!(file["status"], status, "{code}");
         assert_eq!(file["body"]["error"]["code"], code);

@@ -1,0 +1,10 @@
+{
+  "status": 504,
+  "body": {
+    "error": {
+      "code": "source_timeout",
+      "message": "The source took too long. Try again or paste your own text.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

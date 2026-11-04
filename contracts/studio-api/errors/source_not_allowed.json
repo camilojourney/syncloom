@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "source_not_allowed",
+      "message": "This URL is not permitted. Use an authorized exact host with a public HTTP or HTTPS text page, without credentials, query or fragment, or paste your own text.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -78,6 +78,7 @@ python3 -I scripts/test_check_research_records.py   # the check's own tests
 | `ANTHROPIC_API_KEY` | none | Claude key, read only from the environment, never logged |
 | `SYNCLOOM_CLAUDE_BASE_URL` | `https://api.anthropic.com` | provider URL; `https` or `http://127.0.0.1:<port>` only |
 | `SYNCLOOM_CLAUDE_MODEL` | `claude-sonnet-5-5` | the pinned Claude Sonnet model id (unverified until the live check runs) |
+| `SYNCLOOM_SOURCE_HOSTS` | none (URL retrieval disabled) | comma-separated exact authorized ASCII DNS hosts for explicit URL intake; no wildcard, IP, port, trailing dot or subdomain inference; restart after changing |
 | `SYNCLOOM_DELIVERY` | none | comma-separated platforms allowed to deliver (`linkedin,mastodon,facebook,instagram,bluesky,x,threads`); unset keeps every intent contained; an unknown name refuses startup |
 | `SYNCLOOM_KEYCHAIN_SERVICE` | `syncloom` | the Keychain service name of the token items (account `linkedin` or Page-scoped `meta:<Page id>` or endpoint/app-derived hashes for the other platforms); tests use `syncloom-test-<id>` |
 | `SYNCLOOM_MASTODON_INSTANCE` | none | explicitly allowed instance origin; HTTPS, or loopback HTTP for the fake only |
@@ -132,6 +133,10 @@ cargo run -p syncloom-cli -- connect bluesky refresh
 ```
 
 No real sign-in, post or paid request is authorized by this build.
+
+## URL thought intake
+
+On the workspace's existing composer, paste one URL and choose **Fetch URL only**. Retrieval requires `SYNCLOOM_SOURCE_HOSTS` configured with authorized exact hosts and public addresses at every redirect. It is disabled by default; no host is preapproved. Fetching only shows source text/provenance and capture suggestions. Select destinations, preview, then explicitly confirm transfer to the drafting provider. Confirmation creates pending drafts, never approval or publication. [Policy, API, recovery and proof limits](docs/studio.md#url-sources).
 
 ## Going live with LinkedIn
 

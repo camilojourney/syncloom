@@ -183,6 +183,10 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "assets_required",
         "asset_integrity",
         "asset_conflict",
+        "source_not_configured",
+        "source_not_allowed",
+        "source_fetch_failed",
+        "source_timeout",
         "internal_error",
     ]
     .into_iter()

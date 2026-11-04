@@ -30,6 +30,7 @@ pub mod provider;
 pub mod routing;
 pub mod social;
 mod social_config;
+pub mod source;
 pub mod store;
 pub mod studio;
 mod threads;
