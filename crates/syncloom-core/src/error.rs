@@ -37,6 +37,10 @@ pub enum StudioError {
     PostingPermissionUnverified,
     AccountApprovalRequired,
     IdentityUnconfirmed,
+    SourceNotConfigured,
+    SourceNotAllowed,
+    SourceFetchFailed,
+    SourceTimeout,
     Internal,
 }
 
@@ -48,7 +52,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 34] = [
+const ROWS: [Row; 38] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -175,11 +179,27 @@ const ROWS: [Row; 34] = [
         "identity_unconfirmed",
         "account identity could not be confirmed. Sign in again.",
     ),
+    row(
+        "source_not_configured",
+        "URL retrieval is disabled. Set SYNCLOOM_SOURCE_HOSTS to authorized exact hosts and restart the studio, or paste your own text instead.",
+    ),
+    row(
+        "source_not_allowed",
+        "This URL is not permitted. Use an authorized exact host with a public HTTP or HTTPS text page, without credentials, query or fragment, or paste your own text.",
+    ),
+    row(
+        "source_fetch_failed",
+        "The source could not be read within the text, size or redirect limits. Try another permitted text page or paste your own text.",
+    ),
+    row(
+        "source_timeout",
+        "The source took too long. Try again or paste your own text.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 34] = [
+    pub const ALL: [StudioError; 38] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -213,6 +233,10 @@ impl StudioError {
         StudioError::PostingPermissionUnverified,
         StudioError::AccountApprovalRequired,
         StudioError::IdentityUnconfirmed,
+        StudioError::SourceNotConfigured,
+        StudioError::SourceNotAllowed,
+        StudioError::SourceFetchFailed,
+        StudioError::SourceTimeout,
         StudioError::Internal,
     ];
 

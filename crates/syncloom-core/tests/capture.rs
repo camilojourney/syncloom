@@ -198,6 +198,7 @@ async fn confirm_creates_pending_drafts_once_and_rejects_a_stale_revision() {
     let shown = preview(SHORT, &["linkedin_text".into()]).unwrap();
     let stale = studio
         .confirm_capture(CaptureConfirmRequest {
+            source_revision: None,
             text: SHORT.into(),
             channels: vec!["linkedin_text".into()],
             expected_revision: "a".repeat(64),
@@ -208,6 +209,7 @@ async fn confirm_creates_pending_drafts_once_and_rejects_a_stale_revision() {
     assert!(support::files(&dir, "pieces").is_empty());
 
     let request = CaptureConfirmRequest {
+        source_revision: None,
         text: SHORT.into(),
         channels: vec!["linkedin_text".into()],
         expected_revision: shown.revision,
@@ -245,6 +247,7 @@ async fn confirm_creates_pending_drafts_once_and_rejects_a_stale_revision() {
     provider.set(Reply::Fail);
     let failed = studio
         .confirm_capture(CaptureConfirmRequest {
+            source_revision: None,
             text: format!("{SHORT} again"),
             channels: vec!["linkedin_text".into()],
             expected_revision: preview(&format!("{SHORT} again"), &["linkedin_text".into()])
@@ -263,6 +266,7 @@ async fn confirm_creates_pending_drafts_once_and_rejects_a_stale_revision() {
     let retry_source = format!("{SHORT} again");
     let retry = studio
         .confirm_capture(CaptureConfirmRequest {
+            source_revision: None,
             text: retry_source.clone(),
             channels: vec!["linkedin_text".into()],
             expected_revision: preview(&retry_source, &["linkedin_text".into()])
@@ -293,6 +297,7 @@ async fn incomplete_claim_refuses_another_provider_call() {
     .unwrap();
     let error = studio
         .confirm_capture(CaptureConfirmRequest {
+            source_revision: None,
             text: SHORT.into(),
             channels: vec!["linkedin_text".into()],
             expected_revision: preview.revision,

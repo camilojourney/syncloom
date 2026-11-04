@@ -148,6 +148,7 @@ pub struct Studio {
     renderer: crate::visual::RendererConfig,
     /// Serializes confirm-to-draft so one process cannot draft the same preview twice.
     confirm_gate: tokio::sync::Mutex<()>,
+    sources: crate::source::SourceClient,
 }
 
 /// Surrounding whitespace removed and inner whitespace runs collapsed to one space.
@@ -238,7 +239,63 @@ impl Studio {
             social: None,
             renderer: crate::visual::renderer_config(|name| std::env::var(name).ok()),
             confirm_gate: tokio::sync::Mutex::new(()),
+            sources: crate::source::SourceClient::default(),
         }
+    }
+
+    pub fn with_sources(mut self, sources: crate::source::SourceClient) -> Self {
+        self.sources = sources;
+        self
+    }
+
+    pub async fn fetch_source(&self, url: &str) -> Result<crate::capture::UrlCapture, StudioError> {
+        let source = self.sources.fetch(url, self.clock.as_ref()).await?;
+        let revision = crate::capture::source_revision(&source)?;
+        let suggestions = crate::capture::suggest(source.text())?;
+        self.store
+            .lock()?
+            .save_capture(&crate::capture::CaptureRecord {
+                revision: revision.clone(),
+                channels: Vec::new(),
+                group_id: String::new(),
+                piece_ids: Vec::new(),
+                source: Some(source.clone()),
+            })?;
+        Ok(crate::capture::UrlCapture {
+            source_revision: revision,
+            source,
+            suggestions,
+        })
+    }
+
+    pub fn preview_capture(
+        &self,
+        text: &str,
+        channels: &[String],
+        source_revision: Option<&str>,
+    ) -> Result<crate::Preview, StudioError> {
+        match source_revision {
+            Some(revision) => {
+                let source = self.captured_source(revision)?;
+                if source.text() != text {
+                    return Err(StudioError::RevisionConflict);
+                }
+                crate::capture::preview_source(&source, channels)
+            }
+            None => crate::capture::preview(text, channels),
+        }
+    }
+
+    pub fn captured_source(&self, revision: &str) -> Result<Source, StudioError> {
+        if !crate::capture::valid_revision(revision) {
+            return Err(StudioError::RevisionConflict);
+        }
+        let record = self
+            .store
+            .lock()?
+            .load_capture(revision)?
+            .ok_or(StudioError::RevisionConflict)?;
+        record.into_source(revision)
     }
 
     /// Accept a matching preview into pending drafts. A repeat returns the same pieces.
@@ -247,7 +304,7 @@ impl Studio {
         request: crate::capture::CaptureConfirmRequest,
     ) -> Result<crate::CaptureConfirmResponse, StudioError> {
         let _guard = self.confirm_gate.lock().await;
-        let preview = request.checked_preview()?;
+        let preview = self.confirmation_preview(&request)?;
         if let Some(thought) = self.claim_capture(&preview)? {
             return Ok(crate::CaptureConfirmResponse {
                 created: false,
@@ -255,10 +312,14 @@ impl Studio {
             });
         }
         let thought = match self
-            .create_thought(ThoughtRequest {
-                text: request.text,
-                channels: request.channels,
-            })
+            .create_from_source(
+                preview.source.clone().unwrap_or(Source {
+                    kind: "text".into(),
+                    raw_input: request.text,
+                    retrieval: None,
+                }),
+                request.channels,
+            )
             .await
         {
             Ok(thought) => thought,
@@ -283,6 +344,7 @@ impl Studio {
                     .map(|channel| channel.name().to_owned())
                     .collect(),
                 group_id: thought.group_id.clone(),
+                source: None,
                 piece_ids: thought
                     .pieces
                     .iter()
@@ -293,6 +355,24 @@ impl Studio {
             created: true,
             thought,
         })
+    }
+
+    fn confirmation_preview(
+        &self,
+        request: &crate::CaptureConfirmRequest,
+    ) -> Result<crate::Preview, StudioError> {
+        let preview = self.preview_capture(
+            &request.text,
+            &request.channels,
+            request.source_revision.as_deref(),
+        )?;
+        if !crate::capture::valid_revision(&request.expected_revision) {
+            return Err(StudioError::InvalidRequest);
+        }
+        if request.expected_revision != preview.revision {
+            return Err(StudioError::RevisionConflict);
+        }
+        Ok(preview)
     }
 
     fn claim_capture(
@@ -316,6 +396,7 @@ impl Studio {
                 .collect(),
             group_id: String::new(),
             piece_ids: Vec::new(),
+            source: None,
         })?;
         Ok(None)
     }
@@ -349,7 +430,7 @@ impl Studio {
                 Err(StudioError::PieceNotFound) => return Err(StudioError::RevisionConflict),
                 Err(error) => return Err(error),
             };
-            let preview = crate::capture::preview(&piece.source.raw_input, &record.channels)?;
+            let preview = crate::capture::preview_source(&piece.source, &record.channels)?;
             if piece.group_id != record.group_id || preview.revision != record.revision {
                 return Err(StudioError::RevisionConflict);
             }
@@ -668,8 +749,24 @@ impl Studio {
         &self,
         request: ThoughtRequest,
     ) -> Result<ThoughtResponse, StudioError> {
-        let channels = parse_channels(&request.channels)?;
-        let thought = checked_thought(&request.text)?;
+        self.create_from_source(
+            Source {
+                kind: "text".into(),
+                raw_input: request.text,
+                retrieval: None,
+            },
+            request.channels,
+        )
+        .await
+    }
+
+    async fn create_from_source(
+        &self,
+        source: Source,
+        channels: Vec<String>,
+    ) -> Result<ThoughtResponse, StudioError> {
+        let channels = parse_channels(&channels)?;
+        let thought = checked_thought(source.text())?;
         // All drafts first, then all writes: a provider failure persists nothing.
         let mut drafts = Vec::with_capacity(channels.len());
         for channel in &channels {
@@ -697,10 +794,7 @@ impl Studio {
                     assets: None,
                     fit: fit(*channel, &draft.text),
                     text: draft.text.clone(),
-                    source: Source {
-                        kind: "text".to_owned(),
-                        raw_input: request.text.clone(),
-                    },
+                    source: source.clone(),
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 }

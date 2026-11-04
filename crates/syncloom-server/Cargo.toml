@@ -10,10 +10,13 @@ description = "Syncloom's loopback HTTP API."
 [lints]
 workspace = true
 
+[features]
+# Explicit test/proof-only source routing. Production has no runtime bypass.
+test-source = ["syncloom-core/test-source"]
+
 [dependencies]
 syncloom-core.workspace = true
 axum.workspace = true
-bytes.workspace = true
 http-body-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true

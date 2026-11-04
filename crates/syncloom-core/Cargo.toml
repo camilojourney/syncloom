@@ -10,7 +10,12 @@ description = "Syncloom's rules: thought intake, drafting through a model provid
 [lints]
 workspace = true
 
+[features]
+# Test-only controlled source fixtures; never enabled in production builds.
+test-source = []
+
 [dependencies]
+html5ever = "=0.40.1"
 atrium-api.workspace = true
 unicode-segmentation.workspace = true
 axum.workspace = true

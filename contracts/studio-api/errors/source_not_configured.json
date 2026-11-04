@@ -1,0 +1,10 @@
+{
+  "status": 503,
+  "body": {
+    "error": {
+      "code": "source_not_configured",
+      "message": "URL retrieval is disabled. Set SYNCLOOM_SOURCE_HOSTS to authorized exact hosts and restart the studio, or paste your own text instead.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

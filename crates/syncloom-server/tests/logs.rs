@@ -1,5 +1,8 @@
 //! The request log (studio-api "Request log"): one line per request, no content.
 //! Its own test binary because the global tracing subscriber is set once per process.
+#[cfg(feature = "test-source")]
+#[path = "support/source.rs"]
+mod source;
 mod support;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
@@ -164,5 +167,73 @@ async fn each_request_logs_one_content_free_line() {
         "urn:li:person:",
     ] {
         assert!(!raw.contains(secret), "{secret:?} reached the log:\n{raw}");
+    }
+    #[cfg(feature = "test-source")]
+    {
+        let fixture = source::start().await;
+        let provider = Scripted::new(text("A source draft with zebrafish."));
+        let local = start_studio(provider, fast(), |s| {
+            s.with_sources(syncloom_core::source::SourceClient::fixture(fixture.address).unwrap())
+        })
+        .await;
+        let fetched = post(
+            &local,
+            "/v1/capture/url",
+            json!({"url":"http://fixture.test/article"}),
+        )
+        .await;
+        assert_eq!(fetched.status, 200, "{}", fetched.raw);
+        let mut selected = json!({"text":source::ARTICLE,"channels":["linkedin_text"],"source_revision":fetched.body["source_revision"]});
+        let preview = post(&local, "/v1/capture/preview", selected.clone()).await;
+        assert_eq!(preview.status, 200);
+        selected["expected_revision"] = preview.body["revision"].clone();
+        assert_eq!(
+            post(&local, "/v1/capture/confirm", selected).await.status,
+            201
+        );
+        let browser = answer(
+            client()
+                .post(local.url("/capture/url"))
+                .form(&[
+                    ("csrf", local.token.as_str()),
+                    ("text", "http://fixture.test/redirect"),
+                ])
+                .send()
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(browser.status, 200);
+        assert_eq!(fixture.seen.0.lock().unwrap().len(), 3);
+        let all = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        let additional: Vec<serde_json::Value> = all[raw.len()..]
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(additional.len(), 5);
+        let routes: Vec<_> = additional
+            .iter()
+            .map(|line| line["route"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            routes,
+            [
+                "/v1/session",
+                "/v1/capture/url",
+                "/v1/capture/preview",
+                "/v1/capture/confirm",
+                "/capture/url"
+            ]
+        );
+        for content in [
+            "fixture.test",
+            "zebrafish",
+            "hidden-style",
+            "evil.invalid",
+            source::ARTICLE,
+            &local.token,
+        ] {
+            assert!(!all.contains(content), "{content} reached logs");
+        }
     }
 }

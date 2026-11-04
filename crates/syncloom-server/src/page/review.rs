@@ -52,8 +52,8 @@ pub(super) fn piece_page(
             escape(&piece.text),
             counts::summary(piece),
             escape(&piece.revision),
-            escape(&piece.source.raw_input),
-            routing(piece),
+            escape(piece.source.text()),
+            format_args!("{}{}", source_provenance(&piece.source), routing(piece)),
             previews::assets(piece),
             approval_controls(state, snapshot, account_required),
             publish_controls(state, piece, blocked, account_required)

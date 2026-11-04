@@ -33,6 +33,7 @@ fn piece(text: &str) -> Piece {
         source: Source {
             kind: "text".into(),
             raw_input: "hello world".into(),
+            retrieval: None,
         },
         created_at: FIXED_AT.into(),
         updated_at: FIXED_AT.into(),

@@ -89,6 +89,7 @@ pub struct StudioConfig {
     pub meta: crate::meta::MetaConfig,
     pub social: crate::social::SocialConfig,
     pub renderer: crate::visual::RendererConfig,
+    pub sources: crate::source::SourceClient,
 }
 
 /// `SYNCLOOM_DATA_DIR` when set and not blank, else `<home>/.syncloom`.
@@ -170,6 +171,7 @@ pub fn studio_config(get: impl Fn(&str) -> Option<String>) -> Result<StudioConfi
         meta: crate::meta::MetaConfig::parse(&get)?,
         social: crate::social::SocialConfig::parse(&get)?,
         renderer: crate::visual::renderer_config(&get),
+        sources: crate::source::SourceClient::parse(get(crate::source::HOSTS_ENV).as_deref())?,
     })
 }
 
@@ -210,7 +212,8 @@ pub fn build_studio(config: StudioConfig, settings: Settings) -> io::Result<Stud
         .with_social(social.clone())
         .with_mastodon(mastodon.clone())
         .with_linkedin(linkedin.clone())
-        .with_renderer(config.renderer);
+        .with_renderer(config.renderer)
+        .with_sources(config.sources);
     if config.delivery.contains(crate::linkedin::PLATFORM) {
         studio = studio.with_delivery(crate::linkedin::PLATFORM, linkedin);
     }

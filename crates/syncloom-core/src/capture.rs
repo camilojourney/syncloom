@@ -1,4 +1,4 @@
-//! Founder-text suggestions and non-approval previews. No URL fetching or draft writing.
+//! Capture selection and non-approval previews. Retrieval and drafting have separate owners.
 use crate::{Channel, Fit, StudioError, ThoughtResponse, fit, normalize_thought};
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +22,10 @@ pub struct Preview {
     pub suggestions: Vec<Suggestion>,
     pub approval: Option<String>,
     pub publish_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::Source>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -30,19 +34,15 @@ pub struct CaptureConfirmRequest {
     pub text: String,
     pub channels: Vec<String>,
     pub expected_revision: String,
+    #[serde(default)]
+    pub source_revision: Option<String>,
 }
 
-impl CaptureConfirmRequest {
-    pub(crate) fn checked_preview(&self) -> Result<Preview, StudioError> {
-        let preview = preview(&self.text, &self.channels)?;
-        if !valid_revision(&self.expected_revision) {
-            return Err(StudioError::InvalidRequest);
-        }
-        if self.expected_revision != preview.revision {
-            return Err(StudioError::RevisionConflict);
-        }
-        Ok(preview)
-    }
+#[derive(Serialize)]
+pub struct UrlCapture {
+    pub source_revision: String,
+    pub source: crate::Source,
+    pub suggestions: Vec<Suggestion>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +59,24 @@ pub(crate) struct CaptureRecord {
     pub channels: Vec<String>,
     pub group_id: String,
     pub piece_ids: Vec<String>,
+    /// A retrieved snapshot uses this existing capture record with no selected channels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::Source>,
+}
+
+impl CaptureRecord {
+    pub(crate) fn into_source(self, revision: &str) -> Result<crate::Source, StudioError> {
+        let source = self.source.ok_or(StudioError::RevisionConflict)?;
+        if self.revision != revision
+            || !self.channels.is_empty()
+            || source_revision(&source)? != revision
+            || source.kind != "url"
+            || source.retrieval.is_none()
+        {
+            return Err(StudioError::RevisionConflict);
+        }
+        Ok(source)
+    }
 }
 
 pub fn suggest(text: &str) -> Result<Vec<Suggestion>, StudioError> {
@@ -165,7 +183,30 @@ pub fn preview(text: &str, channels: &[String]) -> Result<Preview, StudioError> 
         suggestions: shown,
         approval: None,
         publish_status: None,
+        source_revision: None,
+        source: None,
     })
+}
+
+pub(crate) fn source_revision(source: &crate::Source) -> Result<String, StudioError> {
+    let bytes = serde_json::to_vec(source).map_err(|_| StudioError::Internal)?;
+    Ok(crate::visual::digest(&bytes))
+}
+
+pub(crate) fn preview_source(
+    source: &crate::Source,
+    channels: &[String],
+) -> Result<Preview, StudioError> {
+    if source.retrieval.is_none() {
+        return preview(&source.raw_input, channels);
+    }
+    let mut preview = preview(source.text(), channels)?;
+    let revision = source_revision(source)?;
+    preview.revision =
+        crate::visual::digest(format!("url-capture-v1:{revision}:{}", preview.revision).as_bytes());
+    preview.source_revision = Some(revision);
+    preview.source = Some(source.clone());
+    Ok(preview)
 }
 
 pub fn valid_revision(revision: &str) -> bool {

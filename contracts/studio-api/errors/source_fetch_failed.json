@@ -1,0 +1,10 @@
+{
+  "status": 502,
+  "body": {
+    "error": {
+      "code": "source_fetch_failed",
+      "message": "The source could not be read within the text, size or redirect limits. Try another permitted text page or paste your own text.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

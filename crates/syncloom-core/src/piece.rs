@@ -27,12 +27,22 @@ impl Status {
     }
 }
 
-/// Where the thought came from. Slice 1 knows text only.
+/// Where the thought came from. Historical text records need no retrieval metadata.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     #[serde(rename = "type")]
     pub kind: String,
     pub raw_input: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieval: Option<crate::source::Retrieval>,
+}
+
+impl Source {
+    pub fn text(&self) -> &str {
+        self.retrieval
+            .as_ref()
+            .map_or(&self.raw_input, |r| &r.extracted_text)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
