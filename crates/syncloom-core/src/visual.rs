@@ -108,6 +108,16 @@ pub struct Assets {
     pub font_sha256: String,
 }
 
+impl Assets {
+    pub fn hashes(&self) -> AssetHashes {
+        AssetHashes {
+            image_sha256: self.image_sha256.clone(),
+            carousel_sha256: self.carousel_sha256.clone(),
+            slides_sha256: self.slides_sha256.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum AssetKind {
     Image,

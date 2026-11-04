@@ -92,7 +92,7 @@ python3 -I scripts/test_check_research_records.py   # the check's own tests
 
 ## Local images and carousels
 
-[Visual assets](docs/visual-assets.md) documents the pinned local browser/font, operations and failure codes. No browser is downloaded or bundled.
+[Visual assets](docs/visual-assets.md) documents the pinned local browser/font, operations and failure codes. No browser is downloaded or bundled. The browser, `assess-visual` CLI command and `POST /v1/pieces/{piece_id}/visual-quality` expose exact-byte local technical checks. Semantic/aesthetic quality stays explicitly not assessed, with no quality score; inspection never approves or publishes.
 
 ```sh
 cargo run -p syncloom-cli -- render <piece_id> --expected-revision <revision> --template midnight \

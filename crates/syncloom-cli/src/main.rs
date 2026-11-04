@@ -71,6 +71,18 @@ enum Command {
         #[arg(long = "slide", required = true)]
         slides: Vec<String>,
     },
+    /// Inspect exact local rendered bytes. This never judges meaning or approves content.
+    AssessVisual {
+        piece_id: String,
+        #[arg(long)]
+        expected_revision: String,
+        #[arg(long)]
+        image_sha256: String,
+        #[arg(long)]
+        carousel_sha256: String,
+        #[arg(long = "slide-sha256")]
+        slides_sha256: Vec<String>,
+    },
     /// Write verified PNG or PDF bytes to stdout (redirect to a local file).
     View {
         piece_id: String,
@@ -195,6 +207,25 @@ async fn dispatch(studio: &Studio, command: Command) -> Result<CommandOutput, St
             template,
             slides,
         } => render(studio, &piece_id, expected_revision, template, slides).await,
+        Command::AssessVisual {
+            piece_id,
+            expected_revision,
+            image_sha256,
+            carousel_sha256,
+            slides_sha256,
+        } => studio
+            .assess_visual(
+                &piece_id,
+                syncloom_core::visual_quality::AssessmentRequest {
+                    expected_revision,
+                    expected_assets: syncloom_core::AssetHashes {
+                        image_sha256,
+                        carousel_sha256,
+                        slides_sha256,
+                    },
+                },
+            )
+            .map(to_json),
         Command::View { piece_id, kind } => {
             return Ok(CommandOutput::Exit(view(studio, &piece_id, &kind)));
         }

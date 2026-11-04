@@ -34,6 +34,27 @@ Changing text, slides or template invalidates assets and approval. Every rerende
 
 Bytes live under the data directory's `assets/<sha256>`, with atomic writes through the existing store lock. Old bytes are retained locally; this slice does not implement cleanup or upload. A visual piece's publish stays `contained` even when LinkedIn delivery is granted, so it cannot silently dispatch as text.
 
+## Local technical review
+
+The review page inspects the actual current PNG and PDF before showing technical evidence beside version-bound previews. It checks full PNG decoding, 1080x1350 dimensions, PDF parsing, page count and every page's geometry. Existing storage verifies all hashes, including ordered Meta JPEGs. JPEG decoding is not assessed.
+
+This is not a semantic vision judge. Meaning, factual accuracy, readability, hierarchy, aesthetics and audience fit stay **not assessed**; `quality_score` is always null. No model runs, arbitrary penalties or automatic REDO decisions exist. A correct-size blank image can satisfy technical checks without establishing visual quality. Failed or unavailable evidence cannot become an overall passing score. Approval and publishing remain separate existing operations. Known missing, stale or damaged current assets disable actions already refused by the core; technical observations do not add an approval condition.
+
+`POST /v1/pieces/{piece_id}/visual-quality` takes exactly `expected_revision` and `expected_assets` (the existing image/carousel hash pair and ordered slide hashes, when present). It requires the existing session token and returns the named observations, `local-technical-v1` assessor, exact revision/hashes, technical status, unassessed semantic quality and limitations. Existing fixed errors include `invalid_request`, `piece_not_found`, `revision_conflict`, `assets_required`, `asset_conflict` and `asset_integrity`.
+
+The equivalent CLI command needs no provider or platform connection:
+
+```sh
+syncloom assess-visual <piece_id> --expected-revision <revision> \
+  --image-sha256 <image_sha256> --carousel-sha256 <carousel_sha256>
+```
+
+For Meta, repeat `--slide-sha256 <hash>` in manifest order. Reports are recomputed from durable current bytes under the existing store lock, not stored in a second artifact collection; restart and repeat preserve observations. Inspection records the existing content-free `assets_viewed` event without changing the piece or approval.
+
+Image/PDF/JPEG byte routes accept optional `?sha256=<expected hash>`. A stale hash returns `asset_conflict`; no historical or replacement bytes are substituted. Browser previews and open links use these version-bound URLs. Old clients without this query still view current bytes. Reload a stale page or render new previews when inspection fails.
+
+[Decision and evaluation limits](decisions/visual-quality/0001-local-assessment.md) and [change contracts](../openspec/changes/review-visual-quality/) own this bounded partial migration. Real semantic-model evaluation still needs explicit provider/model, disclosure, cases, calls and budget authorization.
+
 ## Renderer configuration
 
 No installation, download or redistribution code exists. The operator supplies an already installed executable; the checked development default is:
@@ -56,4 +77,4 @@ The renderer uses software rendering, DPR 1, sRGB and no font hinting. It embeds
 
 The tests check two- and ten-page PDF geometry, selectable text, raster rather than PDF gradient shadings, unsupported font fallback, literal markup, integrity damage, symlinks, missing assets, stale approval and edits during rendering. Every renderer failure has an HTTP fixture. Mutation checks must reject removed revision and approval guards.
 
-Template layout changes must increment `TEMPLATE_VERSION` in the [renderer](../crates/syncloom-core/src/visual.rs). Do not rebaseline a failing snapshot; investigate it. Browser upgrades require a deliberate config and snapshot review. First-run distribution, Typst and a review screen remain later decisions.
+Template layout changes must increment `TEMPLATE_VERSION` in the [renderer](../crates/syncloom-core/src/visual.rs). Do not rebaseline a failing snapshot; investigate it. Browser upgrades require a deliberate config and snapshot review. The browser studio now owns the review screen and local technical evidence. First-run distribution and Typst remain later decisions.

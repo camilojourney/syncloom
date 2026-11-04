@@ -591,15 +591,46 @@ impl Studio {
         Ok(assets)
     }
 
+    pub fn assess_visual(
+        &self,
+        piece_id: &str,
+        request: crate::visual_quality::AssessmentRequest,
+    ) -> Result<crate::visual_quality::Assessment, StudioError> {
+        let lock = self.store.lock()?;
+        let piece = self.load_at(&lock, piece_id, &request.expected_revision)?;
+        let assets = self.checked_assets(&lock, &piece)?;
+        self.verify_expected_assets(&lock, &piece, Some(&request.expected_assets))?;
+        let report = crate::visual_quality::inspect(
+            assets,
+            &lock.load_asset(&assets.image_sha256)?,
+            &lock.load_asset(&assets.carousel_sha256)?,
+        );
+        self.record(&lock, EventKind::AssetsViewed, &piece, Extra::default())?;
+        Ok(report)
+    }
+
     pub fn view_asset(
         &self,
         piece_id: &str,
         kind: crate::visual::AssetKind,
     ) -> Result<(Vec<u8>, String), StudioError> {
+        self.view_asset_version(piece_id, kind, None)
+    }
+
+    /// Expected hashes restrict current bytes; they never open historical or arbitrary files.
+    pub fn view_asset_version(
+        &self,
+        piece_id: &str,
+        kind: crate::visual::AssetKind,
+        expected: Option<&str>,
+    ) -> Result<(Vec<u8>, String), StudioError> {
         let lock = self.store.lock()?;
         let piece = self.load(&lock, piece_id)?;
         let assets = self.checked_assets(&lock, &piece)?;
         let hash = kind.hash(assets)?.to_owned();
+        if expected.is_some_and(|expected| expected != hash) {
+            return Err(StudioError::AssetConflict);
+        }
         let bytes = lock.load_asset(&hash)?;
         self.record(&lock, EventKind::AssetsViewed, &piece, Extra::default())?;
         Ok((bytes, hash))
@@ -961,7 +992,7 @@ impl Studio {
         self.require_visual_assets(lock, piece)
     }
 
-    fn approve_bytes(
+    fn verify_expected_assets(
         &self,
         lock: &Lock<'_>,
         piece: &Piece,
@@ -970,10 +1001,7 @@ impl Studio {
         if piece.visual.is_some() {
             let assets = self.checked_assets(lock, piece)?;
             let expected = expected.ok_or(StudioError::AssetsRequired)?;
-            if expected.image_sha256 != assets.image_sha256
-                || expected.carousel_sha256 != assets.carousel_sha256
-                || expected.slides_sha256 != assets.slides_sha256
-            {
+            if expected != &assets.hashes() {
                 return Err(StudioError::AssetConflict);
             }
         } else if expected.is_some() {
@@ -991,7 +1019,7 @@ impl Studio {
         expected_target: Option<&str>,
     ) -> Result<bool, StudioError> {
         if next == Status::Approved {
-            self.approve_bytes(lock, piece, expected_assets)?;
+            self.verify_expected_assets(lock, piece, expected_assets)?;
         }
         if !piece.status.can_move_to(next) {
             return Err(StudioError::InvalidStatusTransition);

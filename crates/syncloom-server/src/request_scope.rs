@@ -114,6 +114,7 @@ fn route_label(path: &str) -> &'static str {
         ["v1", "mastodon", "sign-in"] => "/v1/mastodon/sign-in",
         ["v1", "mastodon", "connection"] => "/v1/mastodon/connection",
         ["v1", "pieces", _, "render"] => "/v1/pieces/{piece_id}/render",
+        ["v1", "pieces", _, "visual-quality"] => "/v1/pieces/{piece_id}/visual-quality",
         ["v1", "pieces", _, "assets", "image"] => "/v1/pieces/{piece_id}/assets/image",
         ["v1", "pieces", _, "assets", "carousel"] => "/v1/pieces/{piece_id}/assets/carousel",
         ["v1", "bluesky" | "x" | "threads", "connection"] => "/v1/{platform}/connection",

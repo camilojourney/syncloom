@@ -36,6 +36,7 @@ pub mod studio;
 mod threads;
 mod threads_publish;
 pub mod visual;
+pub mod visual_quality;
 mod x;
 mod x_media;
 pub use visual::{

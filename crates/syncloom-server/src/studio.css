@@ -215,6 +215,13 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .receipt h2 { margin: 0; }
 .receipt p { margin: 0.75rem 0 0; max-width: 85ch; }
 .receipt .receipt-detail { overflow-wrap: anywhere; }
+.visual-quality { margin-bottom: 2rem; padding-block: 1.5rem; border-block: 1px solid var(--border); }
+.visual-quality h2 { margin-bottom: 0.75rem; }
+.visual-quality p { margin-bottom: 0.75rem; }
+.visual-quality a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+.quality-checks { list-style: none; padding: 0; margin-block: 1rem; }
+.quality-checks li { display: grid; gap: 0.25rem; margin-bottom: 1rem; }
+.quality-checks span { color: var(--secondary); }
 .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 360px)); gap: 1.5rem; margin-bottom: 1.5rem; }
 .preview-card { max-width: 360px; min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .preview-label { font-size: 0.875rem; color: var(--secondary); padding: 1rem; }

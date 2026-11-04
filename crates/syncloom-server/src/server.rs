@@ -89,6 +89,7 @@ pub async fn serve(listener: TcpListener, studio: Arc<Studio>) -> std::io::Resul
             get(mastodon_connection).delete(mastodon_sign_out),
         )
         .route("/v1/pieces/{piece_id}/render", post(render_piece))
+        .route("/v1/pieces/{piece_id}/visual-quality", post(assess_visual))
         .route(
             "/v1/pieces/{piece_id}/assets/image",
             get(asset_handler(syncloom_core::AssetKind::Image)),
@@ -239,12 +240,31 @@ async fn render_piece(
     Ok(axum::Json(piece).into_response())
 }
 
+async fn assess_visual(
+    State(state): State<Arc<AppState>>,
+    path: PiecePath,
+    Strict(request): Strict<syncloom_core::visual_quality::AssessmentRequest>,
+) -> Result<Response, Failure> {
+    Ok(axum::Json(state.studio.assess_visual(&piece_id(path)?, request)?).into_response())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AssetVersion {
+    sha256: Option<String>,
+}
+pub(crate) type AssetQuery = Result<Query<AssetVersion>, QueryRejection>;
+
 pub(crate) fn asset_response(
     state: &AppState,
     id: &str,
     kind: syncloom_core::AssetKind,
+    query: AssetQuery,
 ) -> Result<Response, Failure> {
-    let (bytes, hash) = state.studio.view_asset(id, kind)?;
+    let Query(version) = query.map_err(|_| StudioError::InvalidRequest)?;
+    let (bytes, hash) = state
+        .studio
+        .view_asset_version(id, kind, version.sha256.as_deref())?;
     Ok((
         [
             (header::CONTENT_TYPE, kind.mime().to_owned()),
@@ -263,9 +283,9 @@ type AssetResponse = std::future::Ready<Result<Response, Failure>>;
 
 fn asset_handler(
     kind: syncloom_core::AssetKind,
-) -> impl Fn(State<Arc<AppState>>, PiecePath) -> AssetResponse + Clone {
-    move |State(state), path| {
-        std::future::ready(piece_id(path).and_then(|id| asset_response(&state, &id, kind)))
+) -> impl Fn(State<Arc<AppState>>, PiecePath, AssetQuery) -> AssetResponse + Clone {
+    move |State(state), path, query| {
+        std::future::ready(piece_id(path).and_then(|id| asset_response(&state, &id, kind, query)))
     }
 }
 

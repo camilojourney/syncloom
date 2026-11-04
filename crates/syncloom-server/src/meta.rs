@@ -34,7 +34,8 @@ async fn sign_out(State(state): State<Arc<AppState>>) -> Result<Response, Failur
 async fn slide(
     State(state): State<Arc<AppState>>,
     path: Result<Path<(String, usize)>, axum::extract::rejection::PathRejection>,
+    query: crate::server::AssetQuery,
 ) -> Result<Response, Failure> {
     let Path((id, index)) = path.map_err(|_| syncloom_core::StudioError::AssetsRequired)?;
-    crate::server::asset_response(&state, &id, syncloom_core::AssetKind::Slide(index))
+    crate::server::asset_response(&state, &id, syncloom_core::AssetKind::Slide(index), query)
 }

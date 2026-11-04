@@ -22,6 +22,7 @@ OS/browser `prefers-color-scheme` selects light/dark. Status words and authored 
 - Review: exact saved prose/whitespace, channel count units, approximate local preview disclaimer, source language review-target handle exactly once, full revision disclosure, approval and separate publish action, saved current-publish receipt.
 - Edit: saved text and fit context, save/cancel; no approval of unsaved content.
 - Render: compatible existing template/slide editor and existing verified assets, not a new media workflow.
+- Visual evidence: local actual-byte technical checks beside exact hash-bound previews, with semantic/aesthetic quality explicitly not assessed and no quality score. Native disclosures retain named checks, assessor, full revision and limitations. Damaged/stale/unavailable bytes show recovery instead of substituted previews. This extends the existing review, not an approval gate or new visual system.
 - Shared errors/empty/results: fixed safe code, request identifier and recovery navigation; no raw provider error or submitted text echo.
 
 Approval never proves account readiness. A persisted Posting marker is unconfirmed, not proven active work. Core `IntentStatus::allows_new_attempt` owns retry eligibility. Unknown/Posting/Posted suppress another send. Export is a separate operation and cannot erase the current revision's publish record. Contained describes only that intent, not all networking. Missing remote id/URL is displayed as not recorded inside closed Details; no invented receipt reason or charge.
