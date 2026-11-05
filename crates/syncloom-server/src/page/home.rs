@@ -17,6 +17,7 @@ pub(crate) async fn index(
     query: Result<Query<Cursor>, QueryRejection>,
 ) -> Result<Html<String>, Failure> {
     let page = state.studio.list(cursor(query)?.after.as_deref())?;
+    let attachment = attachment_form(&state);
     let mut saved = page.pieces.iter().map(piece_card).collect::<String>();
     if saved.is_empty() {
         saved.push_str(r#"<div class="empty"><h3>No pieces yet</h3><p>Start with an observation, a lesson, or a point of view. Your drafts will live here until you decide what to share.</p></div>"#);
@@ -27,11 +28,20 @@ pub(crate) async fn index(
     Ok(document(
         "Workspace",
         &format!(
-            r#"<div class="page-heading"><h1>Your writing, in one place.</h1><p>Start with a thought. Make it yours before it goes anywhere.</p></div><div class="home-grid"><section class="card composer" aria-labelledby="compose"><h2 id="compose">What's on your mind?</h2><form method="post" action="/actions/thought">{}<label for="thought">Your thought or one URL</label><textarea id="thought" name="text" rows="7" required minlength="8" aria-describedby="thought-hint" placeholder="Something you noticed. Something worth sharing."></textarea><p class="hint" id="thought-hint">At least 8 characters, not counting spaces. Drafting may take up to a minute; nothing publishes here.</p><fieldset><legend>Draft for</legend><div class="channel-options">{}</div></fieldset><button type="submit">Draft a piece</button><button class="secondary capture-note" type="submit" formaction="/capture/suggest">Suggest destinations first</button><button class="secondary capture-note" type="submit" formaction="/capture/url">Fetch URL only</button><p class="hint">Fetch URL only retrieves a public text page from a configured exact host. No drafting until you preview and confirm. Use a URL without a query or fragment.</p></form><p class="composer-note">Every draft stays in review.<br>Publishing is always a separate decision.</p></section><section class="saved-section" aria-labelledby="saved"><div class="section-heading"><h2 id="saved">Saved pieces</h2><span class="hint">On this laptop</span></div><p class="hint">Approved doesn't mean published. Open a piece to see whether it was sent.</p><div class="pieces">{saved}</div></section></div>"#,
+            r#"<div class="page-heading"><h1>Your writing, in one place.</h1><p>Start with a thought. Make it yours before it goes anywhere.</p></div><div class="home-grid"><section class="card composer" aria-labelledby="compose"><h2 id="compose">What's on your mind?</h2>{attachment}<form method="post" action="/actions/thought">{}<label for="thought">Your thought or one URL</label><textarea id="thought" name="text" rows="7" required minlength="8" aria-describedby="thought-hint" placeholder="Something you noticed. Something worth sharing."></textarea><p class="hint" id="thought-hint">At least 8 characters, not counting spaces. Drafting may take up to a minute; nothing publishes here.</p><fieldset><legend>Draft for</legend><div class="channel-options">{}</div></fieldset><button type="submit">Draft a piece</button><button class="secondary capture-note" type="submit" formaction="/capture/suggest">Suggest destinations first</button><button class="secondary capture-note" type="submit" formaction="/capture/url">Fetch URL only</button><p class="hint">Fetch URL only retrieves a public text page from a configured exact host. No drafting until you preview and confirm. Use a URL without a query or fragment.</p></form><p class="composer-note">Every draft stays in review.<br>Publishing is always a separate decision.</p></section><section class="saved-section" aria-labelledby="saved"><div class="section-heading"><h2 id="saved">Saved pieces</h2><span class="hint">On this laptop</span></div><p class="hint">Approved doesn't mean published. Open a piece to see whether it was sent.</p><div class="pieces">{saved}</div></section></div>"#,
             csrf(&state),
             channel_options()
         ),
     ))
+}
+
+fn attachment_form(state: &AppState) -> String {
+    format!(
+        r#"<details class="file-intake"><summary>Start from a text file</summary><form method="post" action="/capture/attachment" enctype="multipart/form-data">{}<label for="attachment">Choose a local text file</label><input id="attachment" type="file" name="file" accept=".txt,.md,text/plain,text/markdown" required aria-describedby="file-hint"><p class="hint" id="file-hint">UTF-8 .txt or .md only. Up to {} bytes and {} extracted characters. Markdown stays literal; PDF and images are not supported. The complete filename is shown after local extraction.</p><button class="secondary" type="submit">Extract file only</button><p class="hint capture-note">Nothing goes to a drafting provider until you preview and confirm.</p></form></details>"#,
+        csrf(state),
+        syncloom_core::attachment::MAX_BYTES,
+        syncloom_core::attachment::MAX_TEXT_CHARS
+    )
 }
 
 fn channel_options() -> String {

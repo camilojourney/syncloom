@@ -94,11 +94,13 @@ fn route_label(path: &str) -> &'static str {
         ["actions", "thought"] => "/actions/thought",
         ["capture"] => "/capture",
         ["capture", "url"] => "/capture/url",
+        ["capture", "attachment"] => "/capture/attachment",
         ["capture", "suggest"] => "/capture/suggest",
         ["capture", "preview"] => "/capture/preview",
         ["capture", "confirm"] => "/capture/confirm",
         ["capture", "result", _] => "/capture/result/{revision}",
         ["v1", "capture", "url"] => "/v1/capture/url",
+        ["v1", "capture", "attachment"] => "/v1/capture/attachment",
         ["v1", "capture", "suggest"] => "/v1/capture/suggest",
         ["v1", "capture", "preview"] => "/v1/capture/preview",
         ["v1", "capture", "confirm"] => "/v1/capture/confirm",
@@ -145,7 +147,7 @@ pub(crate) async fn middleware(request: Request, next: Next) -> Response {
         Some(failure) => {
             scope.finish(failure.status().as_u16(), Some(failure.code()));
             response = if is_page {
-                crate::page::error(failure, &scope.0.id)
+                crate::page::error(failure, &scope.0.id, scope.0.route)
             } else {
                 failure.envelope(&scope.0.id)
             };

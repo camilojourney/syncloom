@@ -142,6 +142,11 @@ button:disabled { background: var(--surface); color: var(--muted); border-color:
 button.secondary, .button.secondary { background: var(--surface); border-color: var(--control-border); color: var(--ink); }
 button.secondary:hover, .button.secondary:hover { background: var(--subtle); border-color: var(--control-border); }
 .composer button { width: 100%; }
+.file-intake { margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+.file-intake form { padding-block: 0.75rem 1rem; }
+input[type="file"] { display: block; width: 100%; min-width: 0; color: var(--secondary); font: inherit; margin-block: 0.75rem; }
+input[type="file"]::file-selector-button { display: block; min-height: 2.75rem; margin-bottom: 0.5rem; padding: 0.6875rem 1rem; border: 1px solid var(--control-border); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
+input[type="file"]::file-selector-button:hover { background: var(--subtle); }
 .capture-note { margin-top: 1.25rem; }
 .capture-choice { border-top: 1px solid var(--border); padding: 0.75rem 0; }
 .capture-choice .hint { margin: 0.25rem 0 0; }

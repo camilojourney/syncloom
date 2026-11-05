@@ -187,6 +187,11 @@ fn the_error_table_has_the_documented_codes_with_non_empty_messages() {
         "source_not_allowed",
         "source_fetch_failed",
         "source_timeout",
+        "attachment_unsupported",
+        "attachment_invalid",
+        "attachment_too_large",
+        "attachment_timeout",
+        "attachment_busy",
         "internal_error",
     ]
     .into_iter()

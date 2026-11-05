@@ -25,7 +25,7 @@ impl From<StudioError> for Failure {
 }
 
 /// One status per core error, in the order of the `StudioError` variants (`StudioError::ALL`).
-const STUDIO_STATUSES: [StatusCode; 38] = [
+const STUDIO_STATUSES: [StatusCode; 43] = [
     StatusCode::BAD_REQUEST,           // invalid_request
     StatusCode::UNPROCESSABLE_ENTITY,  // thought_too_short
     StatusCode::UNPROCESSABLE_ENTITY,  // unsupported_channel
@@ -63,6 +63,11 @@ const STUDIO_STATUSES: [StatusCode; 38] = [
     StatusCode::UNPROCESSABLE_ENTITY,  // source_not_allowed
     StatusCode::BAD_GATEWAY,           // source_fetch_failed
     StatusCode::GATEWAY_TIMEOUT,       // source_timeout
+    StatusCode::UNPROCESSABLE_ENTITY,  // attachment_unsupported
+    StatusCode::UNPROCESSABLE_ENTITY,  // attachment_invalid
+    StatusCode::UNPROCESSABLE_ENTITY,  // attachment_too_large
+    StatusCode::REQUEST_TIMEOUT,       // attachment_timeout
+    StatusCode::SERVICE_UNAVAILABLE,   // attachment_busy
     StatusCode::INTERNAL_SERVER_ERROR, // internal_error
 ];
 

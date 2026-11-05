@@ -41,6 +41,11 @@ pub enum StudioError {
     SourceNotAllowed,
     SourceFetchFailed,
     SourceTimeout,
+    AttachmentUnsupported,
+    AttachmentInvalid,
+    AttachmentTooLarge,
+    AttachmentTimeout,
+    AttachmentBusy,
     Internal,
 }
 
@@ -52,7 +57,7 @@ struct Row {
 const fn row(code: &'static str, message: &'static str) -> Row {
     Row { code, message }
 }
-const ROWS: [Row; 38] = [
+const ROWS: [Row; 43] = [
     row(
         "invalid_request",
         "The request body is not valid for this operation.",
@@ -195,11 +200,31 @@ const ROWS: [Row; 38] = [
         "source_timeout",
         "The source took too long. Try again or paste your own text.",
     ),
+    row(
+        "attachment_unsupported",
+        "Choose a UTF-8 .txt or .md file. This file format or MIME type is not supported.",
+    ),
+    row(
+        "attachment_invalid",
+        "The file needs a safe basename and valid UTF-8 text without binary or directional control characters. Choose another text file.",
+    ),
+    row(
+        "attachment_too_large",
+        "The file exceeds 262144 bytes or 8000 extracted characters. Choose a smaller text file; nothing was truncated.",
+    ),
+    row(
+        "attachment_timeout",
+        "The upload took longer than ten seconds. Select the file again and retry.",
+    ),
+    row(
+        "attachment_busy",
+        "Two uploads are already being read. Wait for one to finish and retry.",
+    ),
     row("internal_error", "The studio hit an unexpected error."),
 ];
 
 impl StudioError {
-    pub const ALL: [StudioError; 38] = [
+    pub const ALL: [StudioError; 43] = [
         StudioError::InvalidRequest,
         StudioError::ThoughtTooShort,
         StudioError::UnsupportedChannel,
@@ -237,6 +262,11 @@ impl StudioError {
         StudioError::SourceNotAllowed,
         StudioError::SourceFetchFailed,
         StudioError::SourceTimeout,
+        StudioError::AttachmentUnsupported,
+        StudioError::AttachmentInvalid,
+        StudioError::AttachmentTooLarge,
+        StudioError::AttachmentTimeout,
+        StudioError::AttachmentBusy,
         StudioError::Internal,
     ];
 

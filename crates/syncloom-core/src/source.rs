@@ -90,6 +90,7 @@ impl SourceClient {
         crate::studio::checked_thought(&text)?;
         Ok(Source {
             kind: "url".into(),
+            attachment: None,
             raw_input: raw.into(),
             retrieval: Some(Retrieval {
                 final_url: final_url.to_string(),

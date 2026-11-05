@@ -16,6 +16,7 @@ use syncloom_core::Secret;
 pub(crate) struct Boundary {
     host: String,
     token: Secret,
+    uploads: tokio::sync::Semaphore,
 }
 
 fn single<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
@@ -30,6 +31,7 @@ impl Boundary {
     pub(crate) fn new(host: String) -> Self {
         Self {
             host,
+            uploads: tokio::sync::Semaphore::new(2),
             token: Secret::new(format!(
                 "{}{}",
                 uuid::Uuid::new_v4().simple(),
@@ -61,6 +63,31 @@ impl Boundary {
         Ok(())
     }
 
+    fn csrf(&self, tokens: &[impl AsRef<str>]) -> Result<(), Failure> {
+        if tokens.len() != 1 || !self.token.matches(tokens[0].as_ref()) {
+            return Err(Failure::SessionRequired);
+        }
+        Ok(())
+    }
+
+    async fn upload(&self, request: Request, page: bool) -> Result<Request, Failure> {
+        let _permit = self
+            .uploads
+            .try_acquire()
+            .map_err(|_| syncloom_core::StudioError::AttachmentBusy)?;
+        let (mut request, upload) = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            crate::upload::read(request, page),
+        )
+        .await
+        .map_err(|_| syncloom_core::StudioError::AttachmentTimeout)??;
+        if page {
+            self.csrf(&upload.csrf)?;
+        }
+        request.extensions_mut().insert(upload);
+        Ok(request)
+    }
+
     async fn authorize(&self, request: Request) -> Result<Request, Failure> {
         self.headers(request.headers())?;
         if matches!(
@@ -69,7 +96,17 @@ impl Boundary {
         ) {
             return Ok(request);
         }
-        if is_page_path(request.uri().path()) {
+        let page = is_page_path(request.uri().path());
+        if !page
+            && !single(request.headers(), "x-syncloom-token")
+                .is_some_and(|token| self.token.matches(token))
+        {
+            return Err(Failure::SessionRequired);
+        }
+        if *request.method() == Method::POST && crate::upload::is_path(request.uri().path()) {
+            return self.upload(request, page).await;
+        }
+        if page {
             // Read a bounded form once, then restore it for the typed form adapter.
             let (parts, body) = request.into_parts();
             let bytes = read_bounded(body).await?;
@@ -77,16 +114,10 @@ impl Boundary {
                 .filter(|(name, _)| name == "csrf")
                 .map(|(_, value)| value)
                 .collect();
-            if tokens.len() != 1 || !self.token.matches(&tokens[0]) {
-                return Err(Failure::SessionRequired);
-            }
+            self.csrf(&tokens)?;
             Ok(Request::from_parts(parts, Body::from(bytes)))
-        } else if single(request.headers(), "x-syncloom-token")
-            .is_some_and(|token| self.token.matches(token))
-        {
-            Ok(request)
         } else {
-            Err(Failure::SessionRequired)
+            Ok(request)
         }
     }
 }

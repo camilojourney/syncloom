@@ -70,8 +70,10 @@ impl CaptureRecord {
         if self.revision != revision
             || !self.channels.is_empty()
             || source_revision(&source)? != revision
-            || source.kind != "url"
-            || source.retrieval.is_none()
+            || !matches!(
+                (source.kind.as_str(), &source.retrieval, &source.attachment),
+                ("url", Some(_), None) | ("attachment", None, Some(_))
+            )
         {
             return Err(StudioError::RevisionConflict);
         }
@@ -197,13 +199,14 @@ pub(crate) fn preview_source(
     source: &crate::Source,
     channels: &[String],
 ) -> Result<Preview, StudioError> {
-    if source.retrieval.is_none() {
+    if source.retrieval.is_none() && source.attachment.is_none() {
         return preview(&source.raw_input, channels);
     }
     let mut preview = preview(source.text(), channels)?;
     let revision = source_revision(source)?;
-    preview.revision =
-        crate::visual::digest(format!("url-capture-v1:{revision}:{}", preview.revision).as_bytes());
+    preview.revision = crate::visual::digest(
+        format!("{}-capture-v1:{revision}:{}", source.kind, preview.revision).as_bytes(),
+    );
     preview.source_revision = Some(revision);
     preview.source = Some(source.clone());
     Ok(preview)

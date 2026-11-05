@@ -35,6 +35,16 @@ use syncloom_core::{
 };
 
 fn source_provenance(source: &syncloom_core::Source) -> String {
+    if let Some(file) = &source.attachment {
+        return format!(
+            r#"<details open><summary>Source provenance</summary><dl><dt>Filename</dt><dd>{}</dd><dt>Validated format</dt><dd>{}</dd><dt>Original bytes</dt><dd>{}</dd><dt>Captured at (UTC)</dt><dd>{}</dd><dt>Original-byte SHA-256</dt><dd><code class="hash">{}</code></dd></dl></details>"#,
+            escape(&file.filename),
+            escape(&file.format),
+            file.byte_count,
+            escape(&file.captured_at),
+            escape(&file.content_sha256)
+        );
+    }
     let Some(retrieval) = &source.retrieval else {
         return String::new();
     };
@@ -54,8 +64,8 @@ fn document(title: &str, content: &str) -> Html<String> {
     ))
 }
 
-pub(crate) fn error(failure: Failure, request_id: &str) -> Response {
-    let (message, recovery) = error_copy(failure);
+pub(crate) fn error(failure: Failure, request_id: &str, route: &str) -> Response {
+    let (message, recovery) = error_copy(failure, route);
     (failure.status(), document("Something needs attention", &format!(
         r#"<section class="error card"><h1>Something needs attention.</h1><p>{}</p><details class="error-details"><summary>Details</summary><p>{}</p><p class="error-code"><code>{}</code></p><p class="hint">Request <code class="hash">{}</code></p></details><a class="button" href="/">Back to studio</a><p class="hint">{recovery}</p></section>"#,
         message, escape(failure.message()), failure.code(), escape(request_id)
@@ -63,9 +73,34 @@ pub(crate) fn error(failure: Failure, request_id: &str) -> Response {
 }
 
 /// Browser copy is separate from stable API error codes and diagnostic messages.
-fn error_copy(failure: Failure) -> (&'static str, &'static str) {
+fn error_copy(failure: Failure, route: &str) -> (&'static str, &'static str) {
     use Failure::Studio as Domain;
     use StudioError::*;
+    if route == "/capture/attachment" {
+        return (
+            failure.message(),
+            "No new draft was created by this upload. Return to the workspace and choose a supported UTF-8 text file.",
+        );
+    }
+    if route.starts_with("/capture/")
+        && matches!(
+            failure,
+            Domain(RevisionConflict)
+                | Domain(InvalidRequest)
+                | Domain(ThoughtTooShort)
+                | Failure::SessionRequired
+        )
+    {
+        let message = if failure == Domain(RevisionConflict) {
+            "That capture preview no longer matches its source or selected destinations."
+        } else {
+            failure.message()
+        };
+        return (
+            message,
+            "This request created no new draft. A previous confirmation may already have created drafts; check Saved pieces before retrying or return to the workspace.",
+        );
+    }
     if [
         Domain(SourceNotConfigured),
         Domain(SourceNotAllowed),

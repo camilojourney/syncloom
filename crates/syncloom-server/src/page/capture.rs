@@ -14,7 +14,7 @@ pub(crate) async fn suggest(
     route: MatchedPath,
     form: Raw,
 ) -> Result<Html<String>, Failure> {
-    let (body, _) = fields(form, false)?;
+    let (body, _) = fields(form, false, &state)?;
     // Only the explicit registered fetch action opens a URL, never pasted-link detection.
     if route.as_str() == "/capture/url" {
         if body.source_revision.is_some() {
@@ -32,6 +32,22 @@ pub(crate) async fn suggest(
     }
 }
 
+pub(crate) async fn attachment(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(upload): axum::Extension<crate::upload::Upload>,
+) -> Result<Html<String>, Failure> {
+    let captured =
+        state
+            .studio
+            .capture_attachment(&upload.filename, upload.mime.as_deref(), &upload.bytes)?;
+    suggestions_page(
+        &state,
+        captured.source.text(),
+        Some(&captured.source_revision),
+        None,
+    )
+}
+
 fn source_fields(text: &str, revision: Option<&str>) -> String {
     format!(
         "{}{}",
@@ -42,10 +58,20 @@ fn source_fields(text: &str, revision: Option<&str>) -> String {
     )
 }
 
-fn source(text: &str, retrieved: Option<&syncloom_core::Source>) -> String {
+fn source(
+    text: &str,
+    retrieved: Option<&syncloom_core::Source>,
+    provider_text: Option<&str>,
+) -> String {
     if let Some(source) = retrieved {
+        let heading = if source.attachment.is_some() {
+            "Extracted file text"
+        } else {
+            "Retrieved source text"
+        };
+        let transfer = provider_text.filter(|_| source.attachment.is_some()).map(|text| format!(r#"<h3>Text sent to the drafting provider</h3><p class="hint">Confirmation sends this normalized text, not the file bytes or filename. Whitespace is collapsed by the existing drafting rules.</p><div class="preview-prose">{}</div>"#, escape(text))).unwrap_or_default();
         return format!(
-            r#"<section class="card"><h2>Retrieved source text</h2><div class="preview-prose">{}</div><p class="hint">Untrusted source data, not instructions. This step sends nothing to a drafting provider.</p>{}</section>"#,
+            r#"<section class="card"><h2>{heading}</h2><div class="preview-prose">{}</div><p class="hint">Untrusted source data, not instructions. This step sends nothing to a drafting provider.</p>{transfer}{}</section>"#,
             escape(text),
             source_provenance(source)
         );
@@ -66,6 +92,12 @@ fn suggestions_page(
     let retrieved = source_revision
         .map(|r| state.studio.captured_source(r))
         .transpose()?;
+    if retrieved
+        .as_ref()
+        .is_some_and(|source| source.text() != text)
+    {
+        return Err(StudioError::RevisionConflict.into());
+    }
     let choices = suggestions.iter().map(|s| format!(r#"<div class="capture-choice"><label class="channel-option"><input type="checkbox" name="channels" value="{}"><span>{}</span></label><p class="hint">Format: {}. {}</p></div>"#, s.channel.name(), s.channel.display_name(), escape(s.format_hint), escape(s.edit_notes))).collect::<String>();
     let error = error
         .map(|e| format!(r#"<p role="alert">{}</p>"#, escape(e)))
@@ -74,7 +106,7 @@ fn suggestions_page(
         "Capture suggestions",
         &format!(
             r#"<a class="back" href="/">Start over in workspace</a><div class="page-heading"><h1>Where could this fit?</h1><p>Local suggestions for your source. This step creates no drafts.</p></div><div class="review-layout capture-layout">{}<section class="card"><h2>Choose destinations</h2><p class="hint">Based on text length and links, not connected accounts. Choose only what you want.</p><form method="post" action="/capture/preview">{}{}<fieldset><legend>Suggested destinations</legend>{error}{choices}</fieldset><button type="submit">Preview selection</button></form><p class="hint capture-note">No model call, approval or publishing at this step.</p></section></div>"#,
-            source(text, retrieved.as_ref()),
+            source(text, retrieved.as_ref(), None),
             csrf(state),
             source_fields(text, source_revision)
         ),
@@ -85,7 +117,7 @@ pub(crate) async fn preview(
     State(state): State<Arc<AppState>>,
     form: Raw,
 ) -> Result<Response, Failure> {
-    let (body, _) = fields(form, false)?;
+    let (body, _) = fields(form, false, &state)?;
     if body.channels.is_empty() {
         return Ok((
             axum::http::StatusCode::BAD_REQUEST,
@@ -125,11 +157,24 @@ fn preview_page(state: &AppState, preview: &Preview) -> Html<String> {
         .iter()
         .map(destination)
         .collect::<String>();
+    let transfer = if preview
+        .source
+        .as_ref()
+        .is_some_and(|s| s.attachment.is_some())
+    {
+        "The normalized text shown above will be sent to the configured drafting provider as untrusted data."
+    } else {
+        "This exact text will be sent to the configured drafting provider as untrusted data."
+    };
     document(
         "Capture preview",
         &format!(
-            r#"<div class="page-heading"><h1>Ready to make this a draft?</h1><p>Not an approval. This is your source text, not yet a draft.</p></div><div class="review-layout capture-layout">{}<section class="card"><h2>Your selected destinations</h2><ul class="capture-destinations">{destinations}</ul><form method="post" action="/capture/confirm">{}{}{}{}<p class="hint">Confirm only source text you have permission to use. This exact text will be sent to the configured drafting provider as untrusted data. Review every generated draft afterward.</p><button type="submit">Confirm and draft</button></form><form class="capture-note" method="post" action="/capture/suggest">{}{}<button class="secondary" type="submit">Change destinations</button></form><p class="hint capture-note">No approval, scheduling or publishing. Drafting may take up to a minute.</p><details><summary>Preview details</summary><p class="hint">This identifies the exact source and selected destinations, not a saved piece.</p><code class="hash">{}</code></details></section></div>"#,
-            source(&preview.text, preview.source.as_ref()),
+            r#"<div class="page-heading"><h1>Ready to make this a draft?</h1><p>Not an approval. This is your source text, not yet a draft.</p></div><div class="review-layout capture-layout">{}<section class="card"><h2>Your selected destinations</h2><ul class="capture-destinations">{destinations}</ul><form method="post" action="/capture/confirm">{}{}{}{}<p class="hint">Confirm only source text you have permission to use. {transfer} Review every generated draft afterward.</p><button type="submit">Confirm and draft</button></form><form class="capture-note" method="post" action="/capture/suggest">{}{}<button class="secondary" type="submit">Change destinations</button></form><p class="hint capture-note">No approval, scheduling or publishing. Drafting may take up to a minute.</p><details><summary>Preview details</summary><p class="hint">This identifies the exact source and selected destinations, not a saved piece.</p><code class="hash">{}</code></details></section></div>"#,
+            source(
+                &preview.text,
+                preview.source.as_ref(),
+                Some(&preview.normalized_thought)
+            ),
             csrf(state),
             source_fields(&preview.text, preview.source_revision.as_deref()),
             channels,
@@ -145,7 +190,7 @@ pub(crate) async fn confirm(
     State(state): State<Arc<AppState>>,
     form: Raw,
 ) -> Result<Redirect, Failure> {
-    let (body, revision) = fields(form, true)?;
+    let (body, revision) = fields(form, true, &state)?;
     let revision = revision.ok_or(StudioError::InvalidRequest)?;
     state
         .studio
@@ -181,6 +226,7 @@ pub(crate) async fn result(
 fn fields(
     form: Raw,
     allow_revision: bool,
+    state: &AppState,
 ) -> Result<(crate::capture::Selection, Option<String>), StudioError> {
     let RawForm(bytes) = form.map_err(|_| StudioError::InvalidRequest)?;
     let mut revision = None;
@@ -200,12 +246,29 @@ fn fields(
         }
     }
     let body = home::parse_thought(thought.finish().as_bytes())?;
+    let text = browser_text(state, source_revision.as_deref(), body.text)?;
     Ok((
         crate::capture::Selection {
-            text: body.text,
+            text,
             channels: body.channels,
             source_revision,
         },
         revision,
     ))
+}
+
+fn browser_text(
+    state: &AppState,
+    receipt: Option<&str>,
+    text: String,
+) -> Result<String, StudioError> {
+    let Some(receipt) = receipt else {
+        return Ok(text);
+    };
+    if state.studio.captured_source(receipt)?.attachment.is_some() {
+        // Native forms serialize LF as CRLF; canonicalize representation, never source content.
+        Ok(syncloom_core::attachment::normalize_line_endings(&text))
+    } else {
+        Ok(text)
+    }
 }

@@ -35,13 +35,19 @@ pub struct Source {
     pub raw_input: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrieval: Option<crate::source::Retrieval>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachment: Option<crate::attachment::Attachment>,
 }
 
 impl Source {
     pub fn text(&self) -> &str {
-        self.retrieval
-            .as_ref()
-            .map_or(&self.raw_input, |r| &r.extracted_text)
+        if let Some(attachment) = &self.attachment {
+            &attachment.extracted_text
+        } else {
+            self.retrieval
+                .as_ref()
+                .map_or(&self.raw_input, |r| &r.extracted_text)
+        }
     }
 }
 

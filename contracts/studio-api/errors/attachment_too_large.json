@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "attachment_too_large",
+      "message": "The file exceeds 262144 bytes or 8000 extracted characters. Choose a smaller text file; nothing was truncated.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -10,6 +10,7 @@ mod request_scope;
 mod server;
 mod social_handlers;
 mod social_routes;
+mod upload;
 
 pub use config::{DEFAULT_ADDRESS, local_address};
 pub use request_scope::log_subscriber;

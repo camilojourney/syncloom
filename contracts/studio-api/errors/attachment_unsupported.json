@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "attachment_unsupported",
+      "message": "Choose a UTF-8 .txt or .md file. This file format or MIME type is not supported.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "attachment_invalid",
+      "message": "The file needs a safe basename and valid UTF-8 text without binary or directional control characters. Choose another text file.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

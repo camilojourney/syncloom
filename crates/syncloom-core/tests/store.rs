@@ -34,6 +34,7 @@ fn piece(text: &str) -> Piece {
             kind: "text".into(),
             raw_input: "hello world".into(),
             retrieval: None,
+            attachment: None,
         },
         created_at: FIXED_AT.into(),
         updated_at: FIXED_AT.into(),

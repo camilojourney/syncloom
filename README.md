@@ -134,6 +134,10 @@ cargo run -p syncloom-cli -- connect bluesky refresh
 
 No real sign-in, post or paid request is authorized by this build.
 
+## Local text-file capture
+
+Open **Start from a text file** in Workspace, select one UTF-8 `.txt` or `.md` file and choose **Extract file only**. Read the complete extracted text, select destinations, preview the actual normalized provider input, then explicitly **Confirm and draft**. Only confirmation calls the drafting provider and creates pending-review pieces. No approval or publication occurs. Limits are 262144 original bytes and 8000 extracted Unicode characters; unsupported, malformed or excessive input is refused without truncation. PDF, images, OCR, Office and archives are unsupported. [Exact policy, API and recovery](docs/studio.md#local-text-file-sources).
+
 ## URL thought intake
 
 On the workspace's existing composer, paste one URL and choose **Fetch URL only**. Retrieval requires `SYNCLOOM_SOURCE_HOSTS` configured with authorized exact hosts and public addresses at every redirect. It is disabled by default; no host is preapproved. Fetching only shows source text/provenance and capture suggestions. Select destinations, preview, then explicitly confirm transfer to the drafting provider. Confirmation creates pending drafts, never approval or publication. [Policy, API, recovery and proof limits](docs/studio.md#url-sources).

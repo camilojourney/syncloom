@@ -250,6 +250,20 @@ impl Studio {
 
     pub async fn fetch_source(&self, url: &str) -> Result<crate::capture::UrlCapture, StudioError> {
         let source = self.sources.fetch(url, self.clock.as_ref()).await?;
+        self.capture_source(source)
+    }
+
+    pub fn capture_attachment(
+        &self,
+        filename: &str,
+        mime: Option<&str>,
+        bytes: &[u8],
+    ) -> Result<crate::capture::UrlCapture, StudioError> {
+        let source = crate::attachment::extract(filename, mime, bytes, self.clock.now_rfc3339())?;
+        self.capture_source(source)
+    }
+
+    fn capture_source(&self, source: Source) -> Result<crate::capture::UrlCapture, StudioError> {
         let revision = crate::capture::source_revision(&source)?;
         let suggestions = crate::capture::suggest(source.text())?;
         self.store
@@ -317,6 +331,7 @@ impl Studio {
                     kind: "text".into(),
                     raw_input: request.text,
                     retrieval: None,
+                    attachment: None,
                 }),
                 request.channels,
             )
@@ -785,6 +800,7 @@ impl Studio {
                 kind: "text".into(),
                 raw_input: request.text,
                 retrieval: None,
+                attachment: None,
             },
             request.channels,
         )

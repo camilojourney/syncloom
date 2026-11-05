@@ -6,6 +6,7 @@
 //! `openspec/changes/` until archive. Rules are plain functions over plain values;
 //! file access lives in [`store`], the Keychain in [`credentials`], and network access in
 //! [`provider::claude`], [`linkedin`], [`mastodon`], [`meta`] and the [`social`] adapters.
+pub mod attachment;
 mod bluesky;
 mod bluesky_transport;
 pub mod capture;

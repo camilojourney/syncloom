@@ -42,6 +42,17 @@ pub(crate) async fn fetch(
     Ok(Json(state.studio.fetch_source(&body.url).await?))
 }
 
+pub(crate) async fn attachment(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(upload): axum::Extension<crate::upload::Upload>,
+) -> Result<Json<syncloom_core::capture::UrlCapture>, Failure> {
+    Ok(Json(state.studio.capture_attachment(
+        &upload.filename,
+        upload.mime.as_deref(),
+        &upload.bytes,
+    )?))
+}
+
 pub(crate) async fn preview(
     State(state): State<Arc<AppState>>,
     Strict(body): Strict<Selection>,

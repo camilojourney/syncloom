@@ -1,0 +1,10 @@
+{
+  "status": 408,
+  "body": {
+    "error": {
+      "code": "attachment_timeout",
+      "message": "The upload took longer than ten seconds. Select the file again and retry.",
+      "request_id": "fixture-request-id"
+    }
+  }
+}

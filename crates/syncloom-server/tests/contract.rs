@@ -488,6 +488,15 @@ const SOURCE_ERRORS: [(u16, &str); 4] = [
     (504, "source_timeout"),
 ];
 
+// Attachment errors are exercised by attachments against actual upload requests.
+const ATTACHMENT_ERRORS: [(u16, &str); 5] = [
+    (422, "attachment_unsupported"),
+    (422, "attachment_invalid"),
+    (422, "attachment_too_large"),
+    (408, "attachment_timeout"),
+    (503, "attachment_busy"),
+];
+
 // studio-api: Error envelope, Fixtures equal the server
 #[tokio::test]
 async fn preexisting_error_fixtures_equal_the_servers_response() {
@@ -513,10 +522,15 @@ fn the_error_fixture_directory_holds_exactly_the_documented_codes_with_their_sta
     let expected: BTreeSet<String> = ERROR_TABLE
         .iter()
         .chain(SOURCE_ERRORS.iter())
+        .chain(ATTACHMENT_ERRORS.iter())
         .map(|(_, code)| format!("{code}.json"))
         .collect();
     assert_eq!(files, expected);
-    for (status, code) in ERROR_TABLE.into_iter().chain(SOURCE_ERRORS) {
+    for (status, code) in ERROR_TABLE
+        .into_iter()
+        .chain(SOURCE_ERRORS)
+        .chain(ATTACHMENT_ERRORS)
+    {
         let file = fixture(&format!("errors/{code}.json"));
         assert_eq!(file["status"], status, "{code}");
         assert_eq!(file["body"]["error"]["code"], code);
